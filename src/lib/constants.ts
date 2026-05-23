@@ -9,6 +9,7 @@ import {
   Sprout,
   BarChart3,
   Share2,
+  UserCheck,
 } from "lucide-react";
 
 export const APP_NAME = "Hijuelas CRM";
@@ -46,6 +47,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/oportunidades",
     icon: Briefcase,
     comingSoon: "Sprint 5",
+  },
+  {
+    label: "KAM",
+    href: "/kam",
+    icon: UserCheck,
+    comingSoon: "Sprint 7",
   },
   {
     label: "Calendario",

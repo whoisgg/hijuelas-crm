@@ -1,21 +1,83 @@
-import { Calendar } from "lucide-react";
-import { StubPage } from "@/components/stub-page";
+import { Suspense } from "react";
+import { CalendarRange } from "lucide-react";
+
+import { getCalendarEvents, getSpeciesLookup } from "@/lib/actions/analytics";
+import { PageHeader } from "@/components/page-header";
+import { AppShell } from "@/components/layout/app-shell";
+import { Card } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CalendarGrid } from "@/components/calendario/calendar-grid";
+import { EmptyState } from "@/components/dashboard/empty-state";
 
 export const metadata = { title: "Calendario" };
+export const dynamic = "force-dynamic";
 
-export default function CalendarioPage() {
+type CalSearchParams = {
+  opps?: string;
+};
+
+export default async function CalendarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<CalSearchParams>;
+}) {
+  const params = await searchParams;
+  const includeOpps = params.opps === "1";
+
   return (
-    <StubPage
-      title="Calendario"
-      description="Vista de entregas semana/mes/año con toggle de oportunidades."
-      sprint="Sprint 6 — Vistas Analíticas"
-      icon={Calendar}
-      bullets={[
-        "Vistas semana / mes / año (FullCalendar)",
-        "Drag-to-reschedule de entregas",
-        "Toggle para incluir oportunidades abiertas",
-        "Filtros por stage, owner y probabilidad mínima",
-      ]}
+    <AppShell>
+      <PageHeader
+        title="Calendario de entregas"
+        description="Grilla por país × semana. Cada celda muestra los clientes con entregas. Navegá con ← → Hoy."
+        badge="Sprint 6"
+      />
+
+      <Suspense fallback={<CalendarSkeleton />}>
+        <CalendarContent includeOpps={includeOpps} />
+      </Suspense>
+    </AppShell>
+  );
+}
+
+async function CalendarContent({ includeOpps }: { includeOpps: boolean }) {
+  const [events, species] = await Promise.all([
+    getCalendarEvents({
+      includeOpportunities: includeOpps,
+      fromYear: new Date().getFullYear() - 1,
+      toYear: new Date().getFullYear() + 2,
+    }),
+    getSpeciesLookup(),
+  ]);
+
+  if (events.length === 0) {
+    return (
+      <Card className="p-10">
+        <EmptyState
+          icon={CalendarRange}
+          title="Sin entregas"
+          description="No hay entregas ni oportunidades cargadas."
+        />
+      </Card>
+    );
+  }
+
+  const speciesOptions = species.map((s) => ({ id: s.id, name: s.label }));
+
+  return (
+    <CalendarGrid
+      events={events}
+      species={speciesOptions}
+      initialIncludeOpps={includeOpps}
+      visibleWeeks={6}
     />
+  );
+}
+
+function CalendarSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-[500px] w-full" />
+    </div>
   );
 }
