@@ -6,6 +6,53 @@ import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 
 type PaymentStatus = Database["public"]["Enums"]["payment_status"];
+type PaymentType = Database["public"]["Enums"]["payment_type"];
+type CurrencyCode = Database["public"]["Enums"]["currency_code"];
+
+export async function createPayment(input: {
+  contractId: string;
+  type: PaymentType;
+  amount: number;
+  currency: CurrencyCode;
+  dueDate: string | null;
+  iva?: number;
+}) {
+  const supabase = await createClient();
+  const { error } = await supabase.from("payments").insert({
+    contract_id: input.contractId,
+    type: input.type,
+    amount: input.amount,
+    currency: input.currency,
+    due_date: input.dueDate,
+    iva: input.iva ?? 0,
+    status: "pendiente" as PaymentStatus,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/contratos/${input.contractId}`);
+  revalidatePath("/contratos/pagos");
+  return { ok: true };
+}
+
+export async function deletePayment(paymentId: string) {
+  const supabase = await createClient();
+  const { data: payment, error: getErr } = await supabase
+    .from("payments")
+    .select("contract_id")
+    .eq("id", paymentId)
+    .single();
+  if (getErr) throw new Error(getErr.message);
+
+  const { error } = await supabase
+    .from("payments")
+    .delete()
+    .eq("id", paymentId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/contratos/${payment.contract_id}`);
+  revalidatePath("/contratos/pagos");
+  return { ok: true };
+}
 
 export async function markPaymentPaid(
   paymentId: string,

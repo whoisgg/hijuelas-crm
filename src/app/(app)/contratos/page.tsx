@@ -163,9 +163,7 @@ export default async function ContratosPage({
       <PageHeader
         title="Contratos"
         description={
-          view === "country"
-            ? "Vista por país. Drill-down a clientes y contratos."
-            : "Vista de lista plana. Filtros avanzados."
+          view === "country" ? undefined : "Vista de lista plana. Filtros avanzados."
         }
         badge="Sprint 3"
       />

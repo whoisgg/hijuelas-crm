@@ -37,7 +37,7 @@ type Props = {
 
 const CONTRACT_STATUS_LABEL: Record<string, string> = {
   borrador: "Borrador",
-  por_revisar: "Por revisar",
+  por_revisar: "Borrador",
   firmado: "Firmado",
   en_proceso: "En proceso",
   finalizado: "Finalizado",

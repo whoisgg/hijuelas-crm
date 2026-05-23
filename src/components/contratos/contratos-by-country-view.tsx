@@ -3,16 +3,12 @@
 import * as React from "react";
 import Link from "next/link";
 import {
-  ChevronLeft,
   ChevronRight,
-  ChevronDown,
-  ChevronDown as ChevronDownIcon,
-  ChevronUp,
-  ChevronsUpDown,
   Search,
   Plus,
   List,
   Globe2,
+  Building2,
 } from "lucide-react";
 
 import type { Database } from "@/lib/database.types";
@@ -27,8 +23,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
+import { ContractRowActions } from "@/components/contratos/contract-row-actions";
 import { CountryFlag } from "@/components/clientes/country-flag";
-import { formatMoney, formatDate } from "@/components/contratos/format";
+import {
+  formatMoney,
+  formatMoneyCompact,
+  formatCompact,
+} from "@/components/contratos/format";
 import { FxRatesLegend } from "@/components/contratos/fx-rates-legend";
 import type { FxRates } from "@/lib/actions/fx-rates";
 
@@ -72,12 +73,13 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
   const [search, setSearch] = React.useState("");
   const [speciesId, setSpeciesId] = React.useState<string>("all");
   const [activeStatuses, setActiveStatuses] = React.useState<Set<string>>(
-    () => new Set(["activos"]),
+    // Default: todos los buckets activos. Adentro de cada org se ven igual
+    // separados por sub-grupos Activos/Por firmar/Cancelados.
+    () => new Set(["activos", "por_firmar", "cancelados"]),
   );
-  const [drilldown, setDrilldown] = React.useState<{
-    iso2: string | null;
-    clientId: string | null;
-  }>({ iso2: null, clientId: null });
+  const [drilldown, setDrilldown] = React.useState<{ iso2: string | null }>({
+    iso2: null,
+  });
 
   const toggleStatus = (key: string) => {
     setActiveStatuses((prev) => {
@@ -143,46 +145,17 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
       agg.plants += r.totalPlants;
       agg.usd += r.totalUsd;
     }
-    return Array.from(map.values()).sort((a, b) => b.contracts - a.contracts);
+    return Array.from(map.values()).sort((a, b) => b.usd - a.usd);
   }, [filtered]);
 
-  // Aggregate by client within a country
-  type ClientAgg = {
-    id: string;
-    name: string;
-    contracts: number;
-    plants: number;
-    usd: number;
-  };
-  const clientsInCountry = React.useMemo(() => {
-    if (!drilldown.iso2) return [] as ClientAgg[];
-    const map = new Map<string, ClientAgg>();
-    for (const r of filtered) {
-      if (r.client.countryIso2 !== drilldown.iso2) continue;
-      let agg = map.get(r.client.id);
-      if (!agg) {
-        agg = { id: r.client.id, name: r.client.name, contracts: 0, plants: 0, usd: 0 };
-        map.set(r.client.id, agg);
-      }
-      agg.contracts += 1;
-      agg.plants += r.totalPlants;
-      agg.usd += r.totalUsd;
-    }
-    return Array.from(map.values()).sort((a, b) => b.usd - a.usd);
+  // Rows filtered al país seleccionado (para la vista de organizaciones)
+  const rowsInCountry = React.useMemo(() => {
+    if (!drilldown.iso2) return [] as CountryContractRow[];
+    return filtered.filter((r) => r.client.countryIso2 === drilldown.iso2);
   }, [filtered, drilldown.iso2]);
-
-  // Contracts for a selected client within a country
-  const contractsForClient = React.useMemo(() => {
-    if (!drilldown.clientId) return [] as CountryContractRow[];
-    return filtered.filter((r) => r.client.id === drilldown.clientId);
-  }, [filtered, drilldown.clientId]);
 
   const selectedCountryName =
     drilldown.iso2 ? byCountry.find((c) => c.iso2 === drilldown.iso2)?.name ?? "" : "";
-  const selectedClientName =
-    drilldown.clientId
-      ? filtered.find((r) => r.client.id === drilldown.clientId)?.client.name ?? ""
-      : "";
 
   return (
     <div className="flex flex-col gap-3">
@@ -279,68 +252,44 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
       </div>
 
       {/* Breadcrumb */}
-      {drilldown.iso2 || drilldown.clientId ? (
+      {drilldown.iso2 ? (
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <button
             type="button"
-            onClick={() => setDrilldown({ iso2: null, clientId: null })}
+            onClick={() => setDrilldown({ iso2: null })}
             className="inline-flex items-center gap-1 hover:text-foreground"
           >
             <Globe2 className="h-3.5 w-3.5" />
             Países
           </button>
-          {drilldown.iso2 ? (
-            <>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <button
-                type="button"
-                onClick={() => setDrilldown({ iso2: drilldown.iso2, clientId: null })}
-                className={
-                  drilldown.clientId
-                    ? "hover:text-foreground"
-                    : "text-foreground font-medium"
-                }
-              >
-                {selectedCountryName}
-              </button>
-            </>
-          ) : null}
-          {drilldown.clientId ? (
-            <>
-              <ChevronRight className="h-3.5 w-3.5" />
-              <span className="text-foreground font-medium">{selectedClientName}</span>
-            </>
-          ) : null}
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-foreground font-medium">{selectedCountryName}</span>
         </div>
       ) : null}
 
-      {/* FX rates legend + Summary totales — siempre visible */}
-      {!drilldown.iso2 ? (
-        <>
-          <div className="flex items-center justify-end">
-            <FxRatesLegend initial={fxRates} />
-          </div>
-          <SummaryTotals countries={byCountry} />
-        </>
-      ) : null}
+      {/* FX rates legend */}
+      <div className="flex items-center justify-end">
+        <FxRatesLegend initial={fxRates} />
+      </div>
+
+      {/* Summary totales — siempre visible, se filtran con drill-down + filtros activos */}
+      <SummaryTotals
+        countries={byCountry}
+        drillCountry={
+          drilldown.iso2
+            ? byCountry.find((c) => c.iso2 === drilldown.iso2)
+            : null
+        }
+      />
 
       {/* Body */}
       {!drilldown.iso2 ? (
         <CountryGrid
           countries={byCountry}
-          onSelect={(iso2) => setDrilldown({ iso2, clientId: null })}
-        />
-      ) : !drilldown.clientId ? (
-        <ClientListForCountry
-          clients={clientsInCountry}
-          onBack={() => setDrilldown({ iso2: null, clientId: null })}
-          onSelect={(id) => setDrilldown({ iso2: drilldown.iso2, clientId: id })}
+          onSelect={(iso2) => setDrilldown({ iso2 })}
         />
       ) : (
-        <ContractsForClient
-          contracts={contractsForClient}
-          onBack={() => setDrilldown({ iso2: drilldown.iso2, clientId: null })}
-        />
+        <OrganizationsForCountry rows={rowsInCountry} />
       )}
 
       {filtered.length === 0 ? (
@@ -353,19 +302,40 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
 }
 
 // ----------------------------------------------------------------------------
-// Summary totales (sticky top de la grid)
+// Summary totales — adapta el alcance según el drill-down
 // ----------------------------------------------------------------------------
 function SummaryTotals({
   countries,
+  drillCountry,
 }: {
   countries: {
+    iso2: string;
+    name: string;
     contracts: number;
     clients: Set<string>;
     plants: number;
     usd: number;
   }[];
+  drillCountry?: {
+    iso2: string;
+    name: string;
+    contracts: number;
+    clients: Set<string>;
+    plants: number;
+    usd: number;
+  } | null;
 }) {
   const totals = React.useMemo(() => {
+    if (drillCountry) {
+      return {
+        scope: "country" as const,
+        countries: 1,
+        contracts: drillCountry.contracts,
+        clients: drillCountry.clients.size,
+        plants: drillCountry.plants,
+        usd: drillCountry.usd,
+      };
+    }
     let contracts = 0;
     let clients = 0;
     let plants = 0;
@@ -376,8 +346,20 @@ function SummaryTotals({
       plants += c.plants;
       usd += c.usd;
     }
-    return { contracts, clients, plants, usd, countries: countries.length };
-  }, [countries]);
+    return {
+      scope: "global" as const,
+      countries: countries.length,
+      contracts,
+      clients,
+      plants,
+      usd,
+    };
+  }, [countries, drillCountry]);
+
+  const plantsLabel =
+    totals.scope === "country" ? "Plantas país" : "Total plantas";
+  const usdLabel =
+    totals.scope === "country" ? "USD país" : "Total USD";
 
   return (
     <div className="rounded-lg border bg-card px-4 py-3">
@@ -385,8 +367,18 @@ function SummaryTotals({
         <SummaryStat label="Países" value={numFmt.format(totals.countries)} />
         <SummaryStat label="Contratos" value={numFmt.format(totals.contracts)} />
         <SummaryStat label="Clientes" value={numFmt.format(totals.clients)} />
-        <SummaryStat label="Total plantas" value={numFmt.format(totals.plants)} accent />
-        <SummaryStat label="Total USD" value={formatMoney(totals.usd, "USD")} accent />
+        <SummaryStat
+          label={plantsLabel}
+          value={formatCompact(totals.plants)}
+          fullValue={numFmt.format(totals.plants)}
+          accent
+        />
+        <SummaryStat
+          label={usdLabel}
+          value={formatMoneyCompact(totals.usd, "USD")}
+          fullValue={formatMoney(totals.usd, "USD")}
+          accent
+        />
       </div>
     </div>
   );
@@ -395,10 +387,13 @@ function SummaryTotals({
 function SummaryStat({
   label,
   value,
+  fullValue,
   accent,
 }: {
   label: string;
   value: string;
+  /** Valor completo (sin abreviar) para tooltip. Opcional. */
+  fullValue?: string;
   accent?: boolean;
 }) {
   return (
@@ -410,9 +405,10 @@ function SummaryStat({
         className={
           "font-mono tabular-nums " +
           (accent
-            ? "text-base font-bold text-foreground"
+            ? "text-lg font-bold text-foreground"
             : "text-base font-semibold")
         }
+        title={fullValue}
       >
         {value}
       </div>
@@ -467,11 +463,21 @@ function CountryGrid({
             </div>
             <div>
               <div className="text-muted-foreground">Plantas</div>
-              <div className="font-mono text-sm font-medium tabular-nums">{numFmt.format(c.plants)}</div>
+              <div
+                className="font-mono text-sm font-medium tabular-nums"
+                title={numFmt.format(c.plants)}
+              >
+                {formatCompact(c.plants)}
+              </div>
             </div>
             <div>
               <div className="text-muted-foreground">USD</div>
-              <div className="font-mono text-sm font-medium tabular-nums">{formatMoney(c.usd, "USD")}</div>
+              <div
+                className="font-mono text-sm font-medium tabular-nums"
+                title={formatMoney(c.usd, "USD")}
+              >
+                {formatMoneyCompact(c.usd, "USD")}
+              </div>
             </div>
           </div>
         </button>
@@ -481,276 +487,230 @@ function CountryGrid({
 }
 
 // ----------------------------------------------------------------------------
-// Client list inside a country
+// Organizations inside a country → status sub-groups → contracts
 // ----------------------------------------------------------------------------
-type ClientSortKey = "name" | "contracts" | "plants" | "usd";
 
-function ClientListForCountry({
-  clients,
-  onBack,
-  onSelect,
-}: {
-  clients: { id: string; name: string; contracts: number; plants: number; usd: number }[];
-  onBack: () => void;
-  onSelect: (clientId: string) => void;
-}) {
-  const [sort, setSort] = React.useState<{ key: ClientSortKey; dir: "asc" | "desc" } | null>(null);
-
-  const onHeaderClick = (key: ClientSortKey) => {
-    setSort((cur) => {
-      if (!cur || cur.key !== key) return { key, dir: "asc" };
-      if (cur.dir === "asc") return { key, dir: "desc" };
-      return null; // tercer click → reset
-    });
-  };
-
-  const sorted = React.useMemo(() => {
-    if (!sort) return clients;
-    const cmp = (a: typeof clients[number], b: typeof clients[number]): number => {
-      let av: string | number = "";
-      let bv: string | number = "";
-      switch (sort.key) {
-        case "name":
-          av = a.name.toLowerCase();
-          bv = b.name.toLowerCase();
-          break;
-        case "contracts":
-          av = a.contracts;
-          bv = b.contracts;
-          break;
-        case "plants":
-          av = a.plants;
-          bv = b.plants;
-          break;
-        case "usd":
-          av = a.usd;
-          bv = b.usd;
-          break;
-      }
-      if (av < bv) return sort.dir === "asc" ? -1 : 1;
-      if (av > bv) return sort.dir === "asc" ? 1 : -1;
-      return 0;
-    };
-    return [...clients].sort(cmp);
-  }, [clients, sort]);
-
-  return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ChevronLeft className="h-4 w-4" />
-          Volver a países
-        </Button>
-        <Badge variant="secondary">{clients.length} clientes</Badge>
-      </div>
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b">
-            <SortableHeader sort={sort} sortKey="name" onClick={onHeaderClick} align="left">
-              Cliente
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="contracts" onClick={onHeaderClick} align="right">
-              Contratos
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="plants" onClick={onHeaderClick} align="right">
-              Total plantas
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="usd" onClick={onHeaderClick} align="right">
-              Total USD
-            </SortableHeader>
-            <th className="w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((c) => (
-            <tr
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className="cursor-pointer border-b last:border-b-0 hover:bg-muted/50"
-            >
-              <td className="px-3 py-2 font-medium">{c.name}</td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums">
-                {numFmt.format(c.contracts)}
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums">
-                {numFmt.format(c.plants)}
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums">
-                {formatMoney(c.usd, "USD")}
-              </td>
-              <td className="px-3 text-muted-foreground">
-                <ChevronDown className="h-4 w-4 -rotate-90" />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// Generic sortable header (3-state: none → asc → desc → none)
-function SortableHeader<K extends string>({
-  sort,
-  sortKey,
-  onClick,
-  align,
-  children,
-}: {
-  sort: { key: K; dir: "asc" | "desc" } | null;
-  sortKey: K;
-  onClick: (key: K) => void;
-  align: "left" | "right";
-  children: React.ReactNode;
-}) {
-  const isActive = sort?.key === sortKey;
-  return (
-    <th
-      className={
-        "cursor-pointer select-none px-3 py-2 font-medium hover:text-foreground " +
-        (align === "right" ? "text-right" : "text-left")
-      }
-      onClick={() => onClick(sortKey)}
-    >
-      <span
-        className={
-          "inline-flex items-center gap-1 " +
-          (align === "right" ? "justify-end" : "justify-start") +
-          (isActive ? " text-foreground" : "")
-        }
-      >
-        {children}
-        {isActive ? (
-          sort?.dir === "asc" ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDownIcon className="h-3 w-3" />
-          )
-        ) : (
-          <ChevronsUpDown className="h-3 w-3 opacity-40" />
-        )}
-      </span>
-    </th>
-  );
-}
-
-// ----------------------------------------------------------------------------
-// Contracts for a selected client
-// ----------------------------------------------------------------------------
-type ContractSortKey = "number" | "organization" | "status" | "plants" | "usd" | "signed";
-
-function ContractsForClient({
-  contracts,
-  onBack,
-}: {
+type OrgStatusBucket = {
+  key: "activos" | "por_firmar" | "cancelados";
+  label: string;
   contracts: CountryContractRow[];
-  onBack: () => void;
-}) {
-  const [sort, setSort] = React.useState<{ key: ContractSortKey; dir: "asc" | "desc" } | null>(
-    null,
-  );
-  const onHeaderClick = (key: ContractSortKey) => {
-    setSort((cur) => {
-      if (!cur || cur.key !== key) return { key, dir: "asc" };
-      if (cur.dir === "asc") return { key, dir: "desc" };
-      return null;
-    });
-  };
-  const sorted = React.useMemo(() => {
-    if (!sort) return contracts;
-    const cmp = (a: CountryContractRow, b: CountryContractRow): number => {
-      let av: string | number = "";
-      let bv: string | number = "";
-      switch (sort.key) {
-        case "number":
-          av = a.number;
-          bv = b.number;
-          break;
-        case "organization":
-          av = a.organization?.name ?? "";
-          bv = b.organization?.name ?? "";
-          break;
-        case "status":
-          av = a.status;
-          bv = b.status;
-          break;
-        case "plants":
-          av = a.totalPlants;
-          bv = b.totalPlants;
-          break;
-        case "usd":
-          av = a.totalUsd;
-          bv = b.totalUsd;
-          break;
-        case "signed":
-          av = a.signed_at ?? "";
-          bv = b.signed_at ?? "";
-          break;
+  plants: number;
+  usd: number;
+};
+
+type OrgGroup = {
+  id: string;
+  name: string;
+  contractCount: number;
+  plants: number;
+  usd: number;
+  buckets: OrgStatusBucket[];
+};
+
+function statusBucketKey(
+  status: ContractStatus,
+): "activos" | "por_firmar" | "cancelados" | null {
+  for (const f of STATUS_FILTERS) {
+    if ((f.matches as readonly string[]).includes(status)) return f.key;
+  }
+  return null;
+}
+
+function OrganizationsForCountry({ rows }: { rows: CountryContractRow[] }) {
+  const orgs: OrgGroup[] = React.useMemo(() => {
+    const orgMap = new Map<string, OrgGroup>();
+    for (const r of rows) {
+      const orgId = r.organization?.id ?? "__no_org__";
+      const orgName = r.organization?.name ?? "Sin organización";
+      let org = orgMap.get(orgId);
+      if (!org) {
+        org = {
+          id: orgId,
+          name: orgName,
+          contractCount: 0,
+          plants: 0,
+          usd: 0,
+          buckets: STATUS_FILTERS.map((f) => ({
+            key: f.key,
+            label: f.label,
+            contracts: [],
+            plants: 0,
+            usd: 0,
+          })),
+        };
+        orgMap.set(orgId, org);
       }
-      if (av < bv) return sort.dir === "asc" ? -1 : 1;
-      if (av > bv) return sort.dir === "asc" ? 1 : -1;
-      return 0;
-    };
-    return [...contracts].sort(cmp);
-  }, [contracts, sort]);
+      org.contractCount += 1;
+      org.plants += r.totalPlants;
+      org.usd += r.totalUsd;
+
+      const bKey = statusBucketKey(r.status);
+      if (!bKey) continue;
+      const bucket = org.buckets.find((b) => b.key === bKey)!;
+      bucket.contracts.push(r);
+      bucket.plants += r.totalPlants;
+      bucket.usd += r.totalUsd;
+    }
+    return Array.from(orgMap.values())
+      .map((o) => ({
+        ...o,
+        buckets: o.buckets
+          .filter((b) => b.contracts.length > 0)
+          .map((b) => ({
+            ...b,
+            // Contratos dentro del bucket: USD descendente.
+            contracts: [...b.contracts].sort((x, y) => y.totalUsd - x.totalUsd),
+          })),
+      }))
+      .sort((a, b) => b.usd - a.usd);
+  }, [rows]);
+
+  if (orgs.length === 0) return null;
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card">
-      <div className="flex items-center gap-2 border-b px-3 py-2">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ChevronLeft className="h-4 w-4" />
-          Volver a clientes
-        </Button>
-        <Badge variant="secondary">{contracts.length} contratos</Badge>
-      </div>
-      <table className="w-full text-sm">
-        <thead className="text-xs text-muted-foreground">
-          <tr className="border-b">
-            <SortableHeader sort={sort} sortKey="number" onClick={onHeaderClick} align="left">
-              # Contrato
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="organization" onClick={onHeaderClick} align="left">
-              Organización
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="status" onClick={onHeaderClick} align="left">
-              Estado
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="plants" onClick={onHeaderClick} align="right">
-              Total plantas
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="usd" onClick={onHeaderClick} align="right">
-              Total USD
-            </SortableHeader>
-            <SortableHeader sort={sort} sortKey="signed" onClick={onHeaderClick} align="left">
-              Firma
-            </SortableHeader>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((c) => (
-            <tr key={c.id} className="border-b last:border-b-0 hover:bg-muted/50">
-              <td className="px-3 py-2 font-mono text-xs">
-                <Link href={`/contratos/${c.id}`} className="hover:underline">
-                  {c.number}
-                </Link>
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">
-                {c.organization?.name ?? "—"}
-              </td>
-              <td className="px-3 py-2">
-                <ContractStatusBadge status={c.status} />
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums">
-                {numFmt.format(c.totalPlants)}
-              </td>
-              <td className="px-3 py-2 text-right font-mono tabular-nums">
-                {formatMoney(c.totalUsd, "USD")}
-              </td>
-              <td className="px-3 py-2 text-muted-foreground">{formatDate(c.signed_at)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      {orgs.map((org) => (
+        <details
+          key={org.id}
+          open
+          className="group/org overflow-hidden rounded-lg border bg-card"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open/org:rotate-90" />
+            <Building2 className="h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-semibold">{org.name}</div>
+              <div className="text-[11px] text-muted-foreground">
+                {org.contractCount}{" "}
+                {org.contractCount === 1 ? "contrato" : "contratos"} ·{" "}
+                {org.buckets.length}{" "}
+                {org.buckets.length === 1 ? "estado" : "estados"}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-4 text-right">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Plantas
+                </div>
+                <div
+                  className="font-mono text-sm font-bold tabular-nums"
+                  title={numFmt.format(org.plants)}
+                >
+                  {formatCompact(org.plants)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  USD
+                </div>
+                <div
+                  className="font-mono text-sm font-bold tabular-nums"
+                  title={formatMoney(org.usd, "USD")}
+                >
+                  {formatMoneyCompact(org.usd, "USD")}
+                </div>
+              </div>
+            </div>
+          </summary>
+
+          <div className="border-t bg-background/50 px-2 py-2">
+            {org.buckets.map((bucket) => (
+              <details
+                key={`${org.id}-${bucket.key}`}
+                className="group/bucket mb-1 overflow-hidden rounded-md last:mb-0"
+              >
+                <summary className="flex cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open/bucket:rotate-90" />
+                  <span className="text-sm font-medium">{bucket.label}</span>
+                  <Badge variant="outline" className="text-[10px]">
+                    {bucket.contracts.length}{" "}
+                    {bucket.contracts.length === 1 ? "contrato" : "contratos"}
+                  </Badge>
+                  <div className="ml-auto flex shrink-0 items-center gap-4 text-right">
+                    <div
+                      className="font-mono text-xs font-semibold tabular-nums"
+                      title={numFmt.format(bucket.plants)}
+                    >
+                      {formatCompact(bucket.plants)}{" "}
+                      <span className="text-[10px] text-muted-foreground">
+                        plantas
+                      </span>
+                    </div>
+                    <div
+                      className="font-mono text-xs font-semibold tabular-nums"
+                      title={formatMoney(bucket.usd, "USD")}
+                    >
+                      {formatMoneyCompact(bucket.usd, "USD")}
+                    </div>
+                  </div>
+                </summary>
+
+                <div className="ml-7 mt-1 mr-2 mb-2 overflow-hidden rounded-md border bg-card">
+                  <table className="w-full text-xs">
+                    <thead className="text-[10px] text-muted-foreground">
+                      <tr className="border-b">
+                        <th className="px-3 py-1.5 text-left font-medium">
+                          # Contrato
+                        </th>
+                        <th className="px-3 py-1.5 text-left font-medium">
+                          Cliente
+                        </th>
+                        <th className="px-3 py-1.5 text-left font-medium">
+                          Estado
+                        </th>
+                        <th className="px-3 py-1.5 text-right font-medium">
+                          Plantas
+                        </th>
+                        <th className="px-3 py-1.5 text-right font-medium">
+                          USD
+                        </th>
+                        <th className="w-24 px-3 py-1.5 text-right font-medium">
+                          <span className="sr-only">Acciones</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bucket.contracts.map((c) => (
+                        <tr
+                          key={c.id}
+                          className="border-b last:border-b-0 hover:bg-muted/40"
+                        >
+                          <td className="px-3 py-1.5 font-mono">
+                            <Link
+                              href={`/contratos/${c.id}`}
+                              className="hover:underline"
+                            >
+                              {c.number}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {c.client.name ?? "—"}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <ContractStatusBadge status={c.status} />
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                            {numFmt.format(c.totalPlants)}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                            {formatMoney(c.totalUsd, "USD")}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            <ContractRowActions
+                              contractId={c.id}
+                              contractNumber={c.number}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            ))}
+          </div>
+        </details>
+      ))}
     </div>
   );
 }

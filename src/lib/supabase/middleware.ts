@@ -13,7 +13,7 @@ const PROTECTED_PREFIXES = [
   "/compartir",
 ];
 
-const AUTH_PATHS = ["/login"];
+const AUTH_PATHS = ["/login", "/signup", "/reset-password", "/update-password"];
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -62,12 +62,22 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isAuthPath) {
+  // Si el user está logueado y entra a /login o /signup, mandar al dashboard.
+  // /update-password sí lo dejamos porque puede estar logueado por reset link.
+  const isPublicAuthPath =
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/reset-password";
+
+  if (user && isPublicAuthPath) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/dashboard";
     redirectUrl.search = "";
     return NextResponse.redirect(redirectUrl);
   }
+
+  // isAuthPath se usa para detectar rutas de auth; lo dejamos referenciado.
+  void isAuthPath;
 
   return supabaseResponse;
 }

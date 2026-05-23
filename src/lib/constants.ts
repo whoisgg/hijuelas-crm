@@ -12,9 +12,9 @@ import {
   UserCheck,
 } from "lucide-react";
 
-export const APP_NAME = "Hijuelas CRM";
+export const APP_NAME = "Hijuelas Growth";
 export const APP_DESCRIPTION =
-  "CRM para administrar contratos de venta y oportunidades de negocio de Viveros Hijuelas.";
+  "Plataforma comercial de Viveros Hijuelas — contratos, oportunidades y growth.";
 
 export type NavItem = {
   label: string;

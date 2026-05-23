@@ -56,14 +56,13 @@ type SavedView = {
 const DEFAULT_VIEWS: SavedView[] = [
   { id: "all", name: "Todos", status: "all" },
   { id: "activos", name: "Activos", status: "en_proceso" },
-  { id: "por_firmar", name: "Por firmar", status: "por_revisar" },
+  { id: "por_firmar", name: "Por firmar", status: "borrador" },
   { id: "cancelados", name: "Cancelados", status: "cancelado" },
 ];
 
 const STATUS_OPTIONS: { value: ContractStatus | "all"; label: string }[] = [
   { value: "all", label: "Todos los estados" },
   { value: "borrador", label: "Borrador" },
-  { value: "por_revisar", label: "Por revisar" },
   { value: "firmado", label: "Firmado" },
   { value: "en_proceso", label: "En proceso" },
   { value: "finalizado", label: "Finalizado" },

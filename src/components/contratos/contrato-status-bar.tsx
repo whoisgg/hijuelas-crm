@@ -14,7 +14,6 @@ type ContractStatus = Database["public"]["Enums"]["contract_status"];
 
 const ORDER: ContractStatus[] = [
   "borrador",
-  "por_revisar",
   "firmado",
   "en_proceso",
   "finalizado",
@@ -22,7 +21,9 @@ const ORDER: ContractStatus[] = [
 
 const LABELS: Record<ContractStatus, string> = {
   borrador: "Borrador",
-  por_revisar: "Por revisar",
+  // por_revisar descontinuado — se mantiene la label por compatibilidad con
+  // datos antiguos pero no aparece en el flujo de estados.
+  por_revisar: "Borrador",
   firmado: "Firmado",
   en_proceso: "En proceso",
   finalizado: "Finalizado",
@@ -30,8 +31,8 @@ const LABELS: Record<ContractStatus, string> = {
 };
 
 const NEXT: Partial<Record<ContractStatus, ContractStatus>> = {
-  borrador: "por_revisar",
-  por_revisar: "firmado",
+  borrador: "firmado",
+  por_revisar: "firmado", // contratos legacy en por_revisar pasan directo a firmado
   firmado: "en_proceso",
   en_proceso: "finalizado",
 };

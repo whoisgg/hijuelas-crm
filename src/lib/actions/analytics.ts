@@ -135,6 +135,10 @@ export type CalendarEvent = CalendarEventRow & {
   speciesName: string | null;
   organizationName: string | null;
   ownerName: string | null;
+  /** Contract ID padre (solo cuando source_type='contract'). */
+  contract_id: string | null;
+  /** Contract status padre (firmado/borrador/etc). NULL para opportunities. */
+  contract_status: string | null;
 };
 
 export type CatalogStats = {
@@ -938,6 +942,12 @@ export async function getCalendarEvents(
   let enriched: CalendarEvent[] = events.map((e) => {
     const variety = e.variety_id ? varietyById.get(e.variety_id) : null;
     const client = e.client_id ? clientById.get(e.client_id) : null;
+    // Cast: contract_id/contract_status fueron agregados al view tras la
+    // generación de types. SELECT * los trae OK en runtime.
+    const raw = e as typeof e & {
+      contract_id?: string | null;
+      contract_status?: string | null;
+    };
     return {
       ...e,
       clientName: client?.name ?? null,
@@ -949,6 +959,8 @@ export async function getCalendarEvents(
       speciesName: variety?.speciesName ?? null,
       organizationName: e.organization_id ? orgById.get(e.organization_id) ?? null : null,
       ownerName: e.owner_id ? ownerById.get(e.owner_id) ?? null : null,
+      contract_id: raw.contract_id ?? null,
+      contract_status: raw.contract_status ?? null,
     };
   });
 

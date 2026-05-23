@@ -26,11 +26,7 @@ export default async function CalendarioPage({
 
   return (
     <AppShell>
-      <PageHeader
-        title="Calendario de entregas"
-        description="Grilla por país × semana. Cada celda muestra los clientes con entregas. Navegá con ← → Hoy."
-        badge="Sprint 6"
-      />
+      <PageHeader title="Calendario de entregas" />
 
       <Suspense fallback={<CalendarSkeleton />}>
         <CalendarContent includeOpps={includeOpps} />

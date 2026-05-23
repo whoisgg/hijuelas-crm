@@ -21,25 +21,35 @@ import type {
   ContractAmendment,
   ContractVersion,
 } from "@/components/contratos/types";
+import type { AttachmentRow } from "@/lib/actions/attachments";
+import type { Database } from "@/lib/database.types";
+
+type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 
 type Props = {
   contractId: string;
+  contractCurrency?: CurrencyCode;
   items: ContractItemRow[];
   payments: ContractPayment[];
   amendments: ContractAmendment[];
   versions: ContractVersion[];
   varieties: { id: string; name: string }[];
+  attachments: AttachmentRow[];
+  lastDeliveryDate: string | null;
 };
 
 type TabId = "items" | "pagos" | "entregas" | "amendments" | "versiones" | "adjuntos";
 
 export function ContratoTabs({
   contractId,
+  contractCurrency,
   items,
   payments,
   amendments,
   versions,
   varieties,
+  attachments,
+  lastDeliveryDate,
 }: Props) {
   const [tab, setTab] = React.useState<TabId>("items");
 
@@ -75,7 +85,14 @@ export function ContratoTabs({
             {versions.length}
           </Badge>
         </TabsTrigger>
-        <TabsTrigger value="adjuntos">Adjuntos</TabsTrigger>
+        <TabsTrigger value="adjuntos">
+          Adjuntos
+          {attachments.length > 0 ? (
+            <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">
+              {attachments.length}
+            </Badge>
+          ) : null}
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="items">
@@ -86,7 +103,12 @@ export function ContratoTabs({
         />
       </TabsContent>
       <TabsContent value="pagos">
-        <ContractPagosTab payments={payments} />
+        <ContractPagosTab
+          contractId={contractId}
+          payments={payments}
+          contractCurrency={contractCurrency}
+          lastDeliveryDate={lastDeliveryDate}
+        />
       </TabsContent>
       <TabsContent value="entregas">
         <ContractEntregasTab contractId={contractId} items={items} />
@@ -98,7 +120,10 @@ export function ContratoTabs({
         <ContractVersionsTab versions={versions} />
       </TabsContent>
       <TabsContent value="adjuntos">
-        <ContractAdjuntosTab contractId={contractId} />
+        <ContractAdjuntosTab
+          contractId={contractId}
+          attachments={attachments}
+        />
       </TabsContent>
     </Tabs>
   );

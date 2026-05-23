@@ -7,6 +7,10 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserCheck } from "lucide-react";
+import { resolveKamPeriod } from "@/lib/kam-period";
+import { parseKamStatuses } from "@/lib/kam-status";
+import { KamPeriodFilter } from "@/components/kam/kam-period-filter";
+import { KamStatusFilter } from "@/components/kam/kam-status-filter";
 
 export const metadata = { title: "KAM" };
 export const dynamic = "force-dynamic";
@@ -35,17 +39,34 @@ const ROLE_LABELS: Record<string, string> = {
   viewer: "Viewer",
 };
 
-export default async function KAMPage() {
-  const kams = await listKAMs();
-  const currentYear = new Date().getFullYear();
+export default async function KAMPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ period?: string; statuses?: string }>;
+}) {
+  const { period: rawPeriod, statuses: rawStatuses } = await searchParams;
+  const period = resolveKamPeriod(rawPeriod);
+  const statuses = parseKamStatuses(rawStatuses);
+  const kams = await listKAMs(period.value, rawStatuses);
+
+  // Mantener los searchParams al navegar a un KAM detail
+  const childSearch = new URLSearchParams();
+  if (period.value !== "current") childSearch.set("period", period.value);
+  if (rawStatuses) childSearch.set("statuses", rawStatuses);
+  const childQs = childSearch.toString() ? `?${childSearch.toString()}` : "";
 
   return (
     <AppShell>
       <PageHeader
         title="KAM"
-        description={`Key Account Managers. Métricas ${currentYear} en USD.`}
+        description={`Key Account Managers · ${period.longLabel}`}
         badge="Sprint 7"
+        actions={<KamPeriodFilter value={period.value} />}
       />
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <KamStatusFilter selected={statuses} />
+      </div>
 
       {kams.length === 0 ? (
         <Card className="p-10 text-center text-sm text-muted-foreground">
@@ -56,7 +77,7 @@ export default async function KAMPage() {
           {kams.map((k) => (
             <Link
               key={k.id}
-              href={`/kam/${k.id}`}
+              href={`/kam/${k.id}${childQs}`}
               className="group rounded-lg border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
             >
               <div className="flex items-start gap-3">
@@ -98,15 +119,19 @@ export default async function KAMPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Plantas YTD</div>
+                  <div className="text-muted-foreground">
+                    Plantas {period.shortLabel}
+                  </div>
                   <div className="font-mono text-sm font-medium tabular-nums">
-                    {numFmt.format(k.plantsYtd)}
+                    {numFmt.format(k.plantsInPeriod)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-muted-foreground">Revenue YTD</div>
+                  <div className="text-muted-foreground">
+                    Revenue {period.shortLabel}
+                  </div>
                   <div className="font-mono text-sm font-medium tabular-nums">
-                    {usdFmt.format(k.revenueUsdYtd)}
+                    {usdFmt.format(k.revenueUsdInPeriod)}
                   </div>
                 </div>
               </div>

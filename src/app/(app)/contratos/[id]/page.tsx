@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { getContract, listVarietiesForSelect } from "@/lib/actions/contratos";
+import { listAttachments } from "@/lib/actions/attachments";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { ContratoStatusBar } from "@/components/contratos/contrato-status-bar";
 import { ContratoTabs } from "@/components/contratos/contrato-tabs";
@@ -101,6 +102,32 @@ type RawVersion = {
 
 export const metadata = { title: "Contrato" };
 
+// Computa la fecha aproximada del lunes ISO de la última semana/año de entrega
+// del contrato. Usado para sugerir el due_date de pagos saldo.
+function lastDeliveryDate(items: ContractItemRow[]): string | null {
+  let bestYear = -Infinity;
+  let bestWeek = -Infinity;
+  for (const it of items) {
+    if (it.delivery_year == null || it.delivery_week == null) continue;
+    if (
+      it.delivery_year > bestYear ||
+      (it.delivery_year === bestYear && it.delivery_week > bestWeek)
+    ) {
+      bestYear = it.delivery_year;
+      bestWeek = it.delivery_week;
+    }
+  }
+  if (bestYear === -Infinity) return null;
+  // ISO week → Monday date
+  const jan4 = new Date(Date.UTC(bestYear, 0, 4));
+  const jan4Day = jan4.getUTCDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setUTCDate(jan4.getUTCDate() - (jan4Day - 1));
+  const monday = new Date(week1Monday);
+  monday.setUTCDate(week1Monday.getUTCDate() + (bestWeek - 1) * 7);
+  return monday.toISOString().slice(0, 10);
+}
+
 export default async function ContratoDetailPage({
   params,
 }: {
@@ -116,7 +143,10 @@ export default async function ContratoDetailPage({
   }
   if (!contract) notFound();
 
-  const varieties = await listVarietiesForSelect();
+  const [varieties, attachments] = await Promise.all([
+    listVarietiesForSelect(),
+    listAttachments("contract", id),
+  ]);
 
   const client = pickOne<{
     id: string;
@@ -304,11 +334,14 @@ export default async function ContratoDetailPage({
 
       <ContratoTabs
         contractId={contract.id}
+        contractCurrency={contract.currency}
         items={items}
         payments={payments}
         amendments={amendments}
         versions={versions}
         varieties={varieties}
+        attachments={attachments}
+        lastDeliveryDate={lastDeliveryDate(items)}
       />
     </AppShell>
   );

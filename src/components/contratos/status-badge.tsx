@@ -12,9 +12,11 @@ const STATUS_META: Record<
     label: "Borrador",
     className: "bg-muted text-muted-foreground border-transparent",
   },
+  // por_revisar se descontinuó — si un contrato legacy lo tiene, se muestra
+  // como "Borrador" (mismo color/look). Tras migration la mayoría son 0.
   por_revisar: {
-    label: "Por revisar",
-    className: "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+    label: "Borrador",
+    className: "bg-muted text-muted-foreground border-transparent",
   },
   firmado: {
     label: "Firmado",

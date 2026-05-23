@@ -3,15 +3,23 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  CalendarDays,
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  ExternalLink,
   Search,
+  Sigma,
   Sparkles,
   Building2,
-  CalendarClock,
 } from "lucide-react";
+import {
+  KAM_STATUS_GROUPS,
+  matchesKamStatuses,
+  type KamStatusKey,
+} from "@/lib/kam-status";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -110,6 +118,13 @@ export function CalendarGrid({
   const [includeOpps, setIncludeOpps] = React.useState<boolean>(initialIncludeOpps);
   const [minProb, setMinProb] = React.useState<number>(0);
   const [viewMode, setViewMode] = React.useState<ViewMode>("week");
+  // Status filter para contratos. Default: Activos + Por firmar (planning
+  // realista — borradores son compromisos reales que pronto serán firmados).
+  // Las oportunidades NO pasan por este filtro — usan el toggle `includeOpps`
+  // + `minProb`.
+  const [contractStatuses, setContractStatuses] = React.useState<Set<KamStatusKey>>(
+    () => new Set(["activos", "por_firmar"]),
+  );
 
   // Current week (anchor); render weeks [anchor, anchor + visibleWeeks - 1]
   const today = React.useMemo(() => isoWeekFromDate(new Date()), []);
@@ -186,6 +201,13 @@ export function CalendarGrid({
     const q = search.trim().toLowerCase();
     return events.filter((e) => {
       if (!includeOpps && e.source_type !== "contract") return false;
+      // Status filter aplica solo a contratos, sobre el status del CONTRATO
+      // padre (no del item de entrega que es pendiente/finalizado/etc).
+      if (
+        e.source_type === "contract" &&
+        !matchesKamStatuses(e.contract_status, contractStatuses)
+      )
+        return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
       if (
         includeOpps &&
@@ -202,8 +224,14 @@ export function CalendarGrid({
           (e.speciesName ?? "").toLowerCase().includes(q);
         if (!hit) return false;
       }
-      // Must be in visible range (week or month depending on mode)
       if (e.year == null || e.week == null) return false;
+      // No considerar periodos pasados — el calendario es de planning a futuro.
+      if (
+        e.year < today.year ||
+        (e.year === today.year && e.week < today.week)
+      )
+        return false;
+      // Must be in visible range (week or month depending on mode)
       if (viewMode === "week") {
         if (!weekKeys.includes(weekKey(e.year, e.week))) return false;
       } else {
@@ -211,7 +239,72 @@ export function CalendarGrid({
       }
       return true;
     });
-  }, [events, search, speciesId, includeOpps, minProb, viewMode, weekKeys, monthKeys]);
+  }, [
+    events,
+    search,
+    speciesId,
+    includeOpps,
+    minProb,
+    viewMode,
+    weekKeys,
+    monthKeys,
+    contractStatuses,
+    today,
+  ]);
+
+  // Eventos que pasan los filtros (búsqueda/especie/status/opps/minProb)
+  // pero SIN la restricción de rango visible — para KPIs por año.
+  // Excluye periodos pasados (calendario = planning, no histórico).
+  const eventsAllPeriods = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return events.filter((e) => {
+      if (!includeOpps && e.source_type !== "contract") return false;
+      if (
+        e.source_type === "contract" &&
+        !matchesKamStatuses(e.contract_status, contractStatuses)
+      )
+        return false;
+      if (speciesId !== "all" && e.speciesId !== speciesId) return false;
+      if (
+        includeOpps &&
+        e.source_type === "opportunity" &&
+        minProb > 0 &&
+        (e.probability_pct ?? 0) < minProb
+      )
+        return false;
+      if (q.length > 0) {
+        const hit =
+          (e.clientName ?? "").toLowerCase().includes(q) ||
+          (e.countryName ?? "").toLowerCase().includes(q) ||
+          (e.varietyName ?? "").toLowerCase().includes(q) ||
+          (e.speciesName ?? "").toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (e.year == null || e.week == null) return false;
+      if (
+        e.year < today.year ||
+        (e.year === today.year && e.week < today.week)
+      )
+        return false;
+      return true;
+    });
+  }, [events, search, speciesId, includeOpps, minProb, contractStatuses, today]);
+
+  // KPIs por año (total entregas + plantas por año).
+  const kpis = React.useMemo(() => {
+    const byYear = new Map<number, number>();
+    let total = 0;
+    for (const e of eventsAllPeriods) {
+      const y = e.year as number;
+      const qty = Number(e.qty ?? 0);
+      byYear.set(y, (byYear.get(y) ?? 0) + qty);
+      total += qty;
+    }
+    const years = Array.from(byYear.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([year, plants]) => ({ year, plants }));
+    return { total, years };
+  }, [eventsAllPeriods]);
 
   // Universe of countries: derived from ALL events (any week), not filtered ones.
   // This way the country list stays stable as user navigates weeks.
@@ -253,42 +346,20 @@ export function CalendarGrid({
     return Array.from(map.values());
   }, [allCountries, filtered, viewMode]);
 
-  // Find next upcoming week (from today onwards) that has at least one event
-  // matching current filters
-  const nextDeliveryWeek = React.useMemo(() => {
-    const todayKey = weekKey(today.year, today.week);
-    let bestKey: number | null = null;
-    let bestWeek: { year: number; week: number } | null = null;
-    const q = search.trim().toLowerCase();
-    for (const e of events) {
+  // Totales por columna (plantas) — usado en la fila inferior "Total".
+  // Se recalcula cuando cambia el modo de vista o los filtros.
+  const columnTotals = React.useMemo(() => {
+    const totals = new Map<number, number>();
+    for (const e of filtered) {
       if (e.year == null || e.week == null) continue;
-      const k = weekKey(e.year, e.week);
-      if (k < todayKey) continue;
-      // Apply same filters as the grid (without the week range constraint)
-      if (!includeOpps && e.source_type !== "contract") continue;
-      if (speciesId !== "all" && e.speciesId !== speciesId) continue;
-      if (
-        includeOpps &&
-        e.source_type === "opportunity" &&
-        minProb > 0 &&
-        (e.probability_pct ?? 0) < minProb
-      )
-        continue;
-      if (q.length > 0) {
-        const hit =
-          (e.clientName ?? "").toLowerCase().includes(q) ||
-          (e.countryName ?? "").toLowerCase().includes(q) ||
-          (e.varietyName ?? "").toLowerCase().includes(q) ||
-          (e.speciesName ?? "").toLowerCase().includes(q);
-        if (!hit) continue;
-      }
-      if (bestKey === null || k < bestKey) {
-        bestKey = k;
-        bestWeek = { year: e.year, week: e.week };
-      }
+      const key =
+        viewMode === "week"
+          ? weekKey(e.year, e.week)
+          : monthKeyOf(e.year, e.week);
+      totals.set(key, (totals.get(key) ?? 0) + Number(e.qty ?? 0));
     }
-    return bestWeek;
-  }, [events, today, includeOpps, speciesId, minProb, search]);
+    return totals;
+  }, [filtered, viewMode]);
 
   // Side sheet data
   const drillEvents = React.useMemo(() => {
@@ -301,15 +372,30 @@ export function CalendarGrid({
     );
   }, [events, drillCell]);
 
+  // El anchor nunca debe quedar antes de "today" — el calendario es planning,
+  // no se navega al pasado.
+  const clampToToday = (target: { year: number; week: number }) => {
+    if (
+      target.year < today.year ||
+      (target.year === today.year && target.week < today.week)
+    ) {
+      return today;
+    }
+    return target;
+  };
+
+  const isAtStart =
+    anchor.year === today.year && anchor.week === today.week;
+
   // Navigation
   const goPrev = (n: number) => {
+    if (isAtStart) return; // no-op si ya estamos en hoy
     if (viewMode === "week") {
-      setAnchor(addWeeks(anchor.year, anchor.week, -n));
+      setAnchor(clampToToday(addWeeks(anchor.year, anchor.week, -n)));
     } else {
-      // Move N months back — find Monday of that month, then get ISO week
       const monday = isoWeekToMonday(anchor.year, anchor.week);
       monday.setUTCMonth(monday.getUTCMonth() - n);
-      setAnchor(isoWeekFromDate(monday));
+      setAnchor(clampToToday(isoWeekFromDate(monday)));
     }
   };
   const goNext = (n: number) => {
@@ -361,34 +447,73 @@ export function CalendarGrid({
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
         {/* Nav buttons */}
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="sm" onClick={() => goPrev(4)} title="Anterior 4 semanas">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => goPrev(4)}
+            disabled={isAtStart}
+            title="Anterior 4 semanas"
+          >
             <ChevronsLeft className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => goPrev(1)} title="Semana anterior">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => goPrev(1)}
+            disabled={isAtStart}
+            title="Semana anterior"
+          >
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={goToday}>
             Hoy
           </Button>
-          {nextDeliveryWeek &&
-          (nextDeliveryWeek.year !== anchor.year ||
-            nextDeliveryWeek.week !== anchor.week) ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAnchor(nextDeliveryWeek)}
-              title={`Saltar a la entrega más próxima (Wk${nextDeliveryWeek.week}/${nextDeliveryWeek.year})`}
-            >
-              <CalendarClock className="h-4 w-4" />
-              Próxima
-            </Button>
-          ) : null}
           <Button variant="ghost" size="sm" onClick={() => goNext(1)} title="Semana siguiente">
             <ChevronRight className="h-4 w-4" />
           </Button>
           <Button variant="ghost" size="sm" onClick={() => goNext(4)} title="Siguiente 4 semanas">
             <ChevronsRight className="h-4 w-4" />
           </Button>
+        </div>
+
+        {/* View mode toggle: semanas / meses */}
+        <div
+          role="tablist"
+          aria-label="Modo de vista"
+          className="inline-flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === "week"}
+            onClick={() => setViewMode("week")}
+            className={
+              "inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors " +
+              (viewMode === "week"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground")
+            }
+            title="Vista por semanas (ISO)"
+          >
+            <CalendarRange className="h-3.5 w-3.5" />
+            Semanas
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={viewMode === "month"}
+            onClick={() => setViewMode("month")}
+            className={
+              "inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors " +
+              (viewMode === "month"
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground")
+            }
+            title="Vista por meses"
+          >
+            <CalendarDays className="h-3.5 w-3.5" />
+            Meses
+          </button>
         </div>
 
         <div className="relative flex flex-1 min-w-[180px] items-center">
@@ -419,6 +544,39 @@ export function CalendarGrid({
           </SelectContent>
         </Select>
 
+        {/* Status filter — solo aplica a contratos. Default: Activos. */}
+        <div className="inline-flex flex-wrap items-center gap-1">
+          {KAM_STATUS_GROUPS.map((g) => {
+            const active = contractStatuses.has(g.key);
+            return (
+              <label
+                key={g.key}
+                className={
+                  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors " +
+                  (active
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-muted")
+                }
+              >
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={active}
+                  onChange={() => {
+                    setContractStatuses((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g.key)) next.delete(g.key);
+                      else next.add(g.key);
+                      return next;
+                    });
+                  }}
+                />
+                {g.label}
+              </label>
+            );
+          })}
+        </div>
+
         <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
           <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-muted-foreground">Oportunidades</span>
@@ -440,6 +598,16 @@ export function CalendarGrid({
           </Select>
         ) : null}
       </div>
+
+      {/* KPIs — total entregas y breakdown por año (respetan los filtros) */}
+      {kpis.years.length > 0 ? (
+        <div className="flex flex-wrap items-stretch gap-2 rounded-lg border bg-card px-3 py-2">
+          <KpiCard label="Total entregas" plants={kpis.total} accent />
+          {kpis.years.map((y) => (
+            <KpiCard key={y.year} label={String(y.year)} plants={y.plants} />
+          ))}
+        </div>
+      ) : null}
 
       {/* Grid */}
       <div className="overflow-x-auto rounded-lg border bg-card">
@@ -697,6 +865,53 @@ export function CalendarGrid({
               );
             })
           )}
+
+          {/* Totals row */}
+          {countryRows.length > 0 ? (
+            <>
+              <div className="flex items-center gap-2 border-t-2 border-r border-t-border bg-muted/40 px-3 py-2 text-sm font-semibold">
+                <Sigma className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Total</span>
+              </div>
+              {(viewMode === "week" ? weeks : months).map((col, i) => {
+                const key =
+                  viewMode === "week"
+                    ? weekKey(
+                        (col as { year: number; week: number }).year,
+                        (col as { year: number; week: number }).week,
+                      )
+                    : (col as { year: number; month: number }).year * 100 +
+                      (col as { year: number; month: number }).month;
+                const isCur =
+                  viewMode === "week"
+                    ? isCurrentWeek(col as { year: number; week: number })
+                    : isCurrentMonth(col as { year: number; month: number });
+                const total = columnTotals.get(key) ?? 0;
+                return (
+                  <div
+                    key={`total-${i}`}
+                    className={
+                      "border-t-2 border-r border-t-border px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
+                      (isCur
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted/40 text-foreground")
+                    }
+                    title={
+                      total > 0
+                        ? `${numFmt.format(total)} plantas`
+                        : "Sin entregas en este período"
+                    }
+                  >
+                    {total > 0 ? (
+                      numFmt.format(total)
+                    ) : (
+                      <span className="text-muted-foreground/40">—</span>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          ) : null}
         </div>
       </div>
 
@@ -724,44 +939,62 @@ export function CalendarGrid({
             </SheetTitle>
           </SheetHeader>
           <div className="mt-4 space-y-2">
-            {drillEvents.map((e) => (
-              <div
-                key={`${e.source_type}-${e.source_id}`}
-                className="rounded-md border bg-card px-3 py-2 text-sm"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{e.clientName ?? "—"}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {e.varietyName ?? "—"} · {e.speciesName ?? "—"}
+            {drillEvents.map((e) => {
+              // Para contratos, source_id es el contract_item.id — necesitamos
+              // contract_id para navegar al detalle del contrato.
+              const href =
+                e.source_type === "opportunity"
+                  ? `/oportunidades/${e.source_id}`
+                  : e.contract_id
+                    ? `/contratos/${e.contract_id}`
+                    : "#";
+              return (
+                <Link
+                  key={`${e.source_type}-${e.source_id}`}
+                  href={href}
+                  className="group block rounded-md border bg-card px-3 py-2 text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate font-medium">
+                          {e.clientName ?? "—"}
+                        </span>
+                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                      </div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        {e.varietyName ?? "—"} · {e.speciesName ?? "—"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-mono text-base font-semibold tabular-nums">
+                        {numFmt.format(Number(e.qty ?? 0))}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">plantas</div>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-mono text-base font-semibold tabular-nums">
-                      {numFmt.format(Number(e.qty ?? 0))}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">plantas</div>
-                  </div>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-[10px]">
-                  {e.source_type === "opportunity" ? (
-                    <Link
-                      href={`/oportunidades/${e.source_id}`}
-                      className="inline-flex items-center gap-1 text-amber-600 hover:underline dark:text-amber-400"
-                    >
-                      <Sparkles className="h-3 w-3" />
-                      Oportunidad {e.probability_pct != null ? `${e.probability_pct}%` : ""}
-                    </Link>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      <Building2 className="h-3 w-3" />
-                      Contrato
+                  <div className="mt-2 flex items-center justify-between text-[10px]">
+                    {e.source_type === "opportunity" ? (
+                      <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <Sparkles className="h-3 w-3" />
+                        Oportunidad{" "}
+                        {e.probability_pct != null
+                          ? `${e.probability_pct}%`
+                          : ""}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-primary">
+                        <Building2 className="h-3 w-3" />
+                        Contrato
+                      </span>
+                    )}
+                    <span className="text-muted-foreground">
+                      {e.status ?? "—"}
                     </span>
-                  )}
-                  <span className="text-muted-foreground">{e.status ?? "—"}</span>
-                </div>
-              </div>
-            ))}
+                  </div>
+                </Link>
+              );
+            })}
             {drillEvents.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No hay entregas para esta semana en este país.
@@ -770,6 +1003,48 @@ export function CalendarGrid({
           </div>
         </SheetContent>
       </Sheet>
+    </div>
+  );
+}
+
+function KpiCard({
+  label,
+  plants,
+  accent,
+}: {
+  label: string;
+  plants: number;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={
+        "min-w-[110px] flex-1 rounded-md border px-3 py-1.5 " +
+        (accent
+          ? "border-primary/40 bg-primary/5"
+          : "border-border bg-background/40")
+      }
+      title={`${numFmt.format(plants)} plantas`}
+    >
+      <div
+        className={
+          "text-[10px] font-medium uppercase tracking-wider " +
+          (accent ? "text-primary" : "text-muted-foreground")
+        }
+      >
+        {label}
+      </div>
+      <div
+        className={
+          "font-mono text-base font-bold tabular-nums " +
+          (accent ? "text-foreground" : "text-foreground")
+        }
+      >
+        {numFmt.format(plants)}{" "}
+        <span className="text-[10px] font-normal text-muted-foreground">
+          plantas
+        </span>
+      </div>
     </div>
   );
 }

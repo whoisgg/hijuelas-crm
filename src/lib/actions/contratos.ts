@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { getFxRates } from "@/lib/actions/fx-rates";
 import type { Database, Json } from "@/lib/database.types";
 
 type ContractStatus = Database["public"]["Enums"]["contract_status"];
@@ -55,8 +56,10 @@ export type CreateContractInput = {
 };
 
 const ALLOWED_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
-  borrador: ["por_revisar", "cancelado"],
-  por_revisar: ["firmado", "cancelado"],
+  borrador: ["firmado", "cancelado"],
+  // por_revisar se descontinuó pero se permite la salida directa a firmado
+  // para datos legacy que aún no migraron.
+  por_revisar: ["firmado", "borrador", "cancelado"],
   firmado: ["en_proceso", "cancelado"],
   en_proceso: ["finalizado", "cancelado"],
   finalizado: [],
@@ -119,6 +122,23 @@ export async function getContract(id: string) {
   return contract;
 }
 
+/**
+ * Soft-delete de un contrato — marca deleted_at. Lo oculta de las listas y
+ * agregaciones (toda la app filtra por `.is("deleted_at", null)`).
+ */
+export async function deleteContract(contractId: string) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("contracts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", contractId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/contratos");
+  revalidatePath(`/contratos/${contractId}`);
+  return { ok: true };
+}
+
 export async function recalculateContractTotals(contractId: string) {
   const supabase = await createClient();
 
@@ -136,19 +156,63 @@ export async function recalculateContractTotals(contractId: string) {
     .single();
   if (contractErr) throw new Error(contractErr.message);
 
-  let totalNeto = 0;
+  // Trae FX rates del sistema (mode por currency). Fallback al fx del contrato
+  // para CLP / EUR si no hay datos suficientes.
+  const fxRates = await getFxRates();
+  const contractFx = Number(contract.fx_rate_to_usd ?? 0);
+  const clpPerUsd =
+    fxRates.clpPerUsd > 0
+      ? fxRates.clpPerUsd
+      : contract.currency === "CLP" && contractFx > 0
+        ? contractFx
+        : 950;
+  const eurPerUsd =
+    fxRates.eurPerUsd > 0
+      ? fxRates.eurPerUsd
+      : contract.currency === "EUR" && contractFx > 0
+        ? contractFx
+        : 0.92;
+
+  // Convierte un monto en moneda X a USD.
+  const toUsd = (amount: number, currency: string): number => {
+    switch (currency) {
+      case "USD":
+        return amount;
+      case "CLP":
+        return clpPerUsd > 0 ? amount / clpPerUsd : 0;
+      case "EUR":
+        return eurPerUsd > 0 ? amount / eurPerUsd : 0;
+      default:
+        return amount; // fallback: asume USD
+    }
+  };
+
+  // 1) Sumamos cada item en USD según su PROPIA currency.
+  let totalNetoUsd = 0;
   for (const it of items ?? []) {
-    totalNeto += Number(it.qty_plants) * Number(it.unit_price);
+    const v = Number(it.qty_plants) * Number(it.unit_price);
+    totalNetoUsd += toUsd(v, it.currency);
   }
+
+  // 2) total_neto en la currency del contrato (convierte USD → currency).
+  let totalNeto: number;
+  switch (contract.currency) {
+    case "USD":
+      totalNeto = totalNetoUsd;
+      break;
+    case "CLP":
+      totalNeto = totalNetoUsd * clpPerUsd;
+      break;
+    case "EUR":
+      totalNeto = totalNetoUsd * eurPerUsd;
+      break;
+    default:
+      totalNeto = totalNetoUsd;
+  }
+
+  // 3) IVA solo aplica si la currency del contrato es CLP.
   const ivaRate = contract.currency === "CLP" ? 0.19 : 0;
   const totalIva = totalNeto * ivaRate;
-  const fxRate = Number(contract.fx_rate_to_usd ?? 0);
-  const totalNetoUsd =
-    contract.currency === "USD"
-      ? totalNeto
-      : fxRate > 0
-        ? totalNeto / fxRate
-        : 0;
 
   const { error: updErr } = await supabase
     .from("contracts")

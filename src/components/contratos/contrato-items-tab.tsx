@@ -8,6 +8,13 @@ import { Pencil, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -19,6 +26,10 @@ import { DeliveryStatusBadge } from "@/components/contratos/status-badge";
 import { formatMoney, formatQty } from "@/components/contratos/format";
 import { updateContractItem } from "@/lib/actions/contratos";
 import type { ContractItemRow } from "@/components/contratos/types";
+import type { Database } from "@/lib/database.types";
+
+type CurrencyCode = Database["public"]["Enums"]["currency_code"];
+const CURRENCY_OPTIONS: CurrencyCode[] = ["CLP", "USD", "EUR"];
 
 type Props = {
   contractId: string;
@@ -29,6 +40,7 @@ type Props = {
 type Draft = {
   qty_plants: string;
   unit_price: string;
+  currency: CurrencyCode;
   delivery_year: string;
   delivery_week: string;
 };
@@ -44,6 +56,7 @@ export function ContractItemsTab({ items }: Props) {
     setDraft({
       qty_plants: String(item.qty_plants),
       unit_price: String(item.unit_price),
+      currency: item.currency as CurrencyCode,
       delivery_year: String(item.delivery_year),
       delivery_week: String(item.delivery_week),
     });
@@ -61,6 +74,7 @@ export function ContractItemsTab({ items }: Props) {
       await updateContractItem(id, {
         qty_plants: Number(draft.qty_plants),
         unit_price: Number(draft.unit_price),
+        currency: draft.currency,
         delivery_year: Number(draft.delivery_year),
         delivery_week: Number(draft.delivery_week),
       });
@@ -165,7 +179,27 @@ export function ContractItemsTab({ items }: Props) {
                   )}
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
-                  {it.currency}
+                  {isEditing && draft ? (
+                    <Select
+                      value={draft.currency}
+                      onValueChange={(v) =>
+                        setDraft({ ...draft, currency: v as CurrencyCode })
+                      }
+                    >
+                      <SelectTrigger className="h-7 w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    it.currency
+                  )}
                 </TableCell>
                 <TableCell className="text-right">
                   {isEditing && draft ? (
