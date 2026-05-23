@@ -21,11 +21,13 @@ export const metadata = { title: "Contratos" };
 
 type ContractStatus = Database["public"]["Enums"]["contract_status"];
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
+type ContractCondition = Database["public"]["Enums"]["condition_type"];
 
 type ListedContract = {
   id: string;
   number: string;
   status: ContractStatus;
+  condition: ContractCondition | null;
   currency: CurrencyCode;
   total_neto: number;
   total_iva: number;
@@ -142,6 +144,7 @@ export default async function ContratosPage({
         id: c.id,
         number: c.number,
         status: c.status,
+        condition: c.condition ?? "venta",
         signed_at: c.signed_at,
         totalPlants,
         totalUsd: Number(c.total_neto_usd),

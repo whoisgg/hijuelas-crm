@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { getContract, listVarietiesForSelect } from "@/lib/actions/contratos";
 import { listAttachments } from "@/lib/actions/attachments";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
+import { ContractConditionBadge } from "@/components/contratos/condition-badge";
 import { ContratoStatusBar } from "@/components/contratos/contrato-status-bar";
 import { ContratoTabs } from "@/components/contratos/contrato-tabs";
 import { ContratoModifyDialog } from "@/components/contratos/contrato-modify-dialog";
@@ -28,10 +29,13 @@ type AmendmentType = Database["public"]["Enums"]["amendment_type"];
 type MaterialType = Database["public"]["Enums"]["material_type"];
 type DeliveryStatus = Database["public"]["Enums"]["delivery_status"];
 
+type ContractCondition = Database["public"]["Enums"]["condition_type"];
+
 type RawContract = {
   id: string;
   number: string;
   status: ContractStatus;
+  condition: ContractCondition | null;
   currency: CurrencyCode;
   total_neto: number | string;
   total_iva: number | string;
@@ -285,7 +289,10 @@ export default async function ContratoDetailPage({
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
             Estado
           </p>
-          <ContractStatusBadge status={contract.status} />
+          <div className="flex flex-wrap items-center gap-1">
+            <ContractStatusBadge status={contract.status} />
+            <ContractConditionBadge condition={contract.condition ?? "venta"} />
+          </div>
         </div>
         <div>
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">

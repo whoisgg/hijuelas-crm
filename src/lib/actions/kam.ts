@@ -9,6 +9,10 @@ import {
   type KamPeriodValue,
 } from "@/lib/kam-period";
 import { matchesKamStatuses, parseKamStatuses } from "@/lib/kam-status";
+import {
+  matchesContractConditions,
+  parseContractConditions,
+} from "@/lib/contract-condition";
 
 export type KAMSummary = {
   id: string;
@@ -30,10 +34,12 @@ const ACTIVE_STATUSES = ["borrador", "por_revisar", "firmado", "en_proceso"] as 
 export async function listKAMs(
   rawPeriod?: KamPeriodValue | string,
   rawStatuses?: string,
+  rawConditions?: string,
 ): Promise<KAMSummary[]> {
   const supabase = await createClient();
   const period = resolveKamPeriod(rawPeriod);
   const statusFilter = parseKamStatuses(rawStatuses);
+  const conditionFilter = parseContractConditions(rawConditions);
 
   // 1) Pull users with role 'sales' only (admins are excluded from KAM listing)
   const usersRes = await supabase
@@ -49,7 +55,7 @@ export async function listKAMs(
   // 2) Pull contracts with kam_id + their items
   const contractsRes = await supabase
     .from("contracts")
-    .select("id, kam_id, status, total_neto_usd, signed_at, created_at, items:contract_items(qty_plants)")
+    .select("id, kam_id, status, condition, total_neto_usd, signed_at, created_at, items:contract_items(qty_plants)")
     .is("deleted_at", null)
     .not("kam_id", "is", null);
 
@@ -59,6 +65,7 @@ export async function listKAMs(
     id: string;
     kam_id: string | null;
     status: string;
+    condition: string | null;
     total_neto_usd: number | string | null;
     signed_at: string | null;
     created_at: string;
@@ -67,7 +74,7 @@ export async function listKAMs(
 
   const contracts: ContractLite[] = (contractsRes.data ?? []) as ContractLite[];
 
-  // 3) Aggregate per KAM — solo contratos cuyo status pase el filtro
+  // 3) Aggregate per KAM — solo contratos cuyo status y condition pasen el filtro
   const aggByKam = new Map<
     string,
     { active: number; total: number; plants: number; usd: number }
@@ -75,6 +82,7 @@ export async function listKAMs(
   for (const c of contracts) {
     if (!c.kam_id) continue;
     if (!matchesKamStatuses(c.status, statusFilter)) continue;
+    if (!matchesContractConditions(c.condition, conditionFilter)) continue;
 
     let agg = aggByKam.get(c.kam_id);
     if (!agg) {
@@ -119,6 +127,7 @@ export type KAMContractRow = {
   id: string;
   number: string;
   status: string;
+  condition: string;
   signed_at: string | null;
   created_at: string;
   totalPlants: number;
@@ -134,6 +143,7 @@ export type KAMGroupedContract = {
   id: string;
   number: string;
   status: string;
+  condition: string;
   signed_at: string | null;
   created_at: string;
   /** Plantas del contrato dentro de este bucket (program × country). */
@@ -168,9 +178,14 @@ const UNKNOWN_PROGRAM_NAME = "Sin programa";
 const UNKNOWN_COUNTRY_ISO = "??";
 const UNKNOWN_COUNTRY_NAME = "Sin país";
 
-export async function getKAMDetail(id: string, rawStatuses?: string) {
+export async function getKAMDetail(
+  id: string,
+  rawStatuses?: string,
+  rawConditions?: string,
+) {
   const supabase = await createClient();
   const statusFilter = parseKamStatuses(rawStatuses);
+  const conditionFilter = parseContractConditions(rawConditions);
 
   const userRes = await supabase
     .from("app_users")
@@ -182,7 +197,7 @@ export async function getKAMDetail(id: string, rawStatuses?: string) {
   const contractsRes = await supabase
     .from("contracts")
     .select(
-      `id, number, status, signed_at, created_at, total_neto_usd,
+      `id, number, status, condition, signed_at, created_at, total_neto_usd,
        client:clients!contracts_client_id_fkey (
          id, name,
          country:countries ( iso2, name_es )
@@ -203,6 +218,7 @@ export async function getKAMDetail(id: string, rawStatuses?: string) {
     id: string;
     number: string;
     status: string;
+    condition: string | null;
     signed_at: string | null;
     created_at: string;
     total_neto_usd: number | string | null;
@@ -237,6 +253,7 @@ export async function getKAMDetail(id: string, rawStatuses?: string) {
 
   for (const raw of rawContracts) {
     if (!matchesKamStatuses(raw.status, statusFilter)) continue;
+    if (!matchesContractConditions(raw.condition, conditionFilter)) continue;
 
     const client = pickOne<ClientRel>(raw.client);
     const country = client ? pickOne<CountryRel>(client.country) : null;
@@ -252,6 +269,7 @@ export async function getKAMDetail(id: string, rawStatuses?: string) {
       id: raw.id,
       number: raw.number,
       status: raw.status,
+      condition: raw.condition ?? "venta",
       signed_at: raw.signed_at,
       created_at: raw.created_at,
       totalPlants,
@@ -323,6 +341,7 @@ export async function getKAMDetail(id: string, rawStatuses?: string) {
         id: raw.id,
         number: raw.number,
         status: raw.status,
+        condition: raw.condition ?? "venta",
         signed_at: raw.signed_at,
         created_at: raw.created_at,
         plants: bucket.plants,

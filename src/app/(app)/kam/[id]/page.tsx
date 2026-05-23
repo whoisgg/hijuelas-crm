@@ -20,8 +20,11 @@ import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { Button } from "@/components/ui/button";
 import { isInPeriod, resolveKamPeriod } from "@/lib/kam-period";
 import { parseKamStatuses } from "@/lib/kam-status";
+import { parseContractConditions } from "@/lib/contract-condition";
 import { KamPeriodFilter } from "@/components/kam/kam-period-filter";
 import { KamStatusFilter } from "@/components/kam/kam-status-filter";
+import { KamConditionFilter } from "@/components/kam/kam-condition-filter";
+import { ContractConditionBadge } from "@/components/contratos/condition-badge";
 import {
   formatCompact,
   formatMoneyCompact,
@@ -62,16 +65,25 @@ export default async function KAMDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ period?: string; statuses?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    statuses?: string;
+    conditions?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { period: rawPeriod, statuses: rawStatuses } = await searchParams;
+  const {
+    period: rawPeriod,
+    statuses: rawStatuses,
+    conditions: rawConditions,
+  } = await searchParams;
   const period = resolveKamPeriod(rawPeriod);
   const statuses = parseKamStatuses(rawStatuses);
+  const conditions = parseContractConditions(rawConditions);
 
   let data;
   try {
-    data = await getKAMDetail(id, rawStatuses);
+    data = await getKAMDetail(id, rawStatuses, rawConditions);
   } catch {
     notFound();
   }
@@ -162,7 +174,10 @@ export default async function KAMDetailPage({
       </Card>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <KamStatusFilter selected={statuses} />
+        <div className="flex flex-wrap items-center gap-3">
+          <KamStatusFilter selected={statuses} />
+          <KamConditionFilter selected={conditions} />
+        </div>
         <p className="text-xs text-muted-foreground">
           Agrupado por <span className="font-medium text-foreground">programa genético</span> · país · contrato
         </p>
@@ -289,9 +304,16 @@ export default async function KAMDetailPage({
                               </td>
                               <td className="px-3 py-1.5">{c.clientName ?? "—"}</td>
                               <td className="px-3 py-1.5">
-                                <ContractStatusBadge
-                                  status={c.status as ContractStatus}
-                                />
+                                <div className="flex flex-wrap items-center gap-1">
+                                  <ContractStatusBadge
+                                    status={c.status as ContractStatus}
+                                  />
+                                  {c.condition !== "venta" ? (
+                                    <ContractConditionBadge
+                                      condition={c.condition}
+                                    />
+                                  ) : null}
+                                </div>
                               </td>
                               <td
                                 className="px-3 py-1.5 text-right font-mono tabular-nums"

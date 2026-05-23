@@ -71,7 +71,7 @@ export async function listContracts(filters: ContractListFilters = {}) {
   let q = supabase
     .from("contracts")
     .select(
-      `id, number, status, currency, total_neto, total_iva, total_neto_usd, signed_at, created_at, client_id, organization_id,
+      `id, number, status, condition, currency, total_neto, total_iva, total_neto_usd, signed_at, created_at, client_id, organization_id,
        client:clients!contracts_client_id_fkey ( id, name, country:countries ( id, iso2, name_es ) ),
        organization:organizations!contracts_organization_id_fkey ( id, name, contract_prefix ),
        items:contract_items ( id, qty_plants, variety:varieties ( id, name, species:species ( id, name ) ) )`,

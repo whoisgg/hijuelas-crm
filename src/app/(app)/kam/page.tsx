@@ -9,8 +9,10 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserCheck } from "lucide-react";
 import { resolveKamPeriod } from "@/lib/kam-period";
 import { parseKamStatuses } from "@/lib/kam-status";
+import { parseContractConditions } from "@/lib/contract-condition";
 import { KamPeriodFilter } from "@/components/kam/kam-period-filter";
 import { KamStatusFilter } from "@/components/kam/kam-status-filter";
+import { KamConditionFilter } from "@/components/kam/kam-condition-filter";
 
 export const metadata = { title: "KAM" };
 export const dynamic = "force-dynamic";
@@ -42,17 +44,27 @@ const ROLE_LABELS: Record<string, string> = {
 export default async function KAMPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; statuses?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    statuses?: string;
+    conditions?: string;
+  }>;
 }) {
-  const { period: rawPeriod, statuses: rawStatuses } = await searchParams;
+  const {
+    period: rawPeriod,
+    statuses: rawStatuses,
+    conditions: rawConditions,
+  } = await searchParams;
   const period = resolveKamPeriod(rawPeriod);
   const statuses = parseKamStatuses(rawStatuses);
-  const kams = await listKAMs(period.value, rawStatuses);
+  const conditions = parseContractConditions(rawConditions);
+  const kams = await listKAMs(period.value, rawStatuses, rawConditions);
 
   // Mantener los searchParams al navegar a un KAM detail
   const childSearch = new URLSearchParams();
   if (period.value !== "current") childSearch.set("period", period.value);
   if (rawStatuses) childSearch.set("statuses", rawStatuses);
+  if (rawConditions) childSearch.set("conditions", rawConditions);
   const childQs = childSearch.toString() ? `?${childSearch.toString()}` : "";
 
   return (
@@ -65,7 +77,10 @@ export default async function KAMPage({
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <KamStatusFilter selected={statuses} />
+        <div className="flex flex-wrap items-center gap-3">
+          <KamStatusFilter selected={statuses} />
+          <KamConditionFilter selected={conditions} />
+        </div>
       </div>
 
       {kams.length === 0 ? (

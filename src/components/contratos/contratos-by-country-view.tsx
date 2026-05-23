@@ -23,8 +23,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
+import { ContractConditionBadge } from "@/components/contratos/condition-badge";
+import { ContractConditionFilter } from "@/components/contratos/contract-condition-filter";
 import { ContractRowActions } from "@/components/contratos/contract-row-actions";
 import { CountryFlag } from "@/components/clientes/country-flag";
+import {
+  CONTRACT_CONDITION_OPTIONS,
+  matchesContractConditions,
+  type ContractCondition,
+} from "@/lib/contract-condition";
 import {
   formatMoney,
   formatMoneyCompact,
@@ -41,6 +48,7 @@ export type CountryContractRow = {
   id: string;
   number: string;
   status: ContractStatus;
+  condition: ContractCondition;
   signed_at: string | null;
   totalPlants: number;
   totalUsd: number;
@@ -77,6 +85,10 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
     // separados por sub-grupos Activos/Por firmar/Cancelados.
     () => new Set(["activos", "por_firmar", "cancelados"]),
   );
+  // Condition filter (Venta / Muestra / Reposición). Default: todos.
+  const [activeConditions, setActiveConditions] = React.useState<
+    Set<ContractCondition>
+  >(() => new Set(CONTRACT_CONDITION_OPTIONS.map((o) => o.key)));
   const [drilldown, setDrilldown] = React.useState<{ iso2: string | null }>({
     iso2: null,
   });
@@ -108,6 +120,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
       speciesId === "all" ? null : species.find((s) => s.id === speciesId)?.name ?? null;
     return rows.filter((r) => {
       if (!allowedStatuses.has(r.status)) return false;
+      if (!matchesContractConditions(r.condition, activeConditions)) return false;
       if (speciesName && !r.speciesNames.includes(speciesName)) return false;
       if (q.length > 0) {
         const hit =
@@ -118,7 +131,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
       }
       return true;
     });
-  }, [rows, search, speciesId, species, allowedStatuses]);
+  }, [rows, search, speciesId, species, allowedStatuses, activeConditions]);
 
   // Aggregate by country
   type CountryAgg = {
@@ -238,6 +251,12 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
             );
           })}
         </div>
+
+        {/* Condition filter (Venta / Muestra / Reposición) */}
+        <ContractConditionFilter
+          selected={activeConditions}
+          onChange={setActiveConditions}
+        />
 
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" render={<Link href="/contratos?view=list" />}>
@@ -687,7 +706,12 @@ function OrganizationsForCountry({ rows }: { rows: CountryContractRow[] }) {
                             {c.client.name ?? "—"}
                           </td>
                           <td className="px-3 py-1.5">
-                            <ContractStatusBadge status={c.status} />
+                            <div className="flex flex-wrap items-center gap-1">
+                              <ContractStatusBadge status={c.status} />
+                              {c.condition !== "venta" ? (
+                                <ContractConditionBadge condition={c.condition} />
+                              ) : null}
+                            </div>
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums">
                             {numFmt.format(c.totalPlants)}
