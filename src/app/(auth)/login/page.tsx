@@ -14,7 +14,16 @@ import { AuthCard, AuthField } from "@/components/auth/auth-card";
 type Mode = "password" | "magic";
 type Status = "idle" | "loading" | "sent" | "error";
 
+// useSearchParams() requiere Suspense boundary en build estático de Next 16.
 export default function LoginPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <LoginPageInner />
+    </React.Suspense>
+  );
+}
+
+function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const nextPath = params.get("next") ?? "/dashboard";
