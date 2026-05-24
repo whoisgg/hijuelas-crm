@@ -631,8 +631,10 @@ export function CalendarGrid({
         />
       </div>
 
-      {/* Grid TRANSPUESTO: filas = periodos (scroll vertical), columnas = países */}
-      <div className="overflow-auto rounded-lg border bg-card max-h-[70vh]">
+      {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
+          Vertical scroll = página (natural). Horizontal scroll = grid (cuando
+          hay más países que ancho disponible). */}
+      <div className="overflow-x-auto rounded-lg border bg-card">
         <div
           className="grid"
           style={{
@@ -641,19 +643,19 @@ export function CalendarGrid({
           }}
         >
           {/* Header row (sticky top): País por país */}
-          <div className="sticky top-0 z-10 border-b border-r bg-card px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="sticky top-14 z-10 border-b border-r bg-card px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Período
           </div>
           {allCountries.map((c) => (
             <div
               key={`hdr-${c.iso2}`}
-              className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-r bg-card px-2 py-2 text-xs"
+              className="sticky top-14 z-10 flex items-center gap-1.5 border-b border-r bg-card px-2 py-2 text-xs"
             >
               <CountryFlag iso2={c.iso2} size="sm" />
               <span className="truncate font-medium">{c.name}</span>
             </div>
           ))}
-          <div className="sticky top-0 z-10 border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="sticky top-14 z-10 border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Total
           </div>
 
