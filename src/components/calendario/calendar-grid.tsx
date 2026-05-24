@@ -109,8 +109,10 @@ export function CalendarGrid({
   events,
   species,
   initialIncludeOpps,
-  visibleWeeks = 6,
-  visibleMonths = 6,
+  // Layout transpuesto: periodos en filas (scroll vertical), países en cols.
+  // Mostramos más periodos a la vez porque ya hay scroll natural.
+  visibleWeeks = 16,
+  visibleMonths = 12,
 }: Props) {
   // Filters
   const [search, setSearch] = React.useState("");
@@ -629,189 +631,144 @@ export function CalendarGrid({
         />
       </div>
 
-      {/* Grid */}
-      <div className="overflow-x-auto rounded-lg border bg-card">
+      {/* Grid TRANSPUESTO: filas = periodos (scroll vertical), columnas = países */}
+      <div className="overflow-auto rounded-lg border bg-card max-h-[70vh]">
         <div
-          className="grid min-w-[900px]"
+          className="grid"
           style={{
-            gridTemplateColumns:
-              viewMode === "week"
-                ? `9rem repeat(${visibleWeeks}, minmax(7rem, 1fr))`
-                : `9rem repeat(${visibleMonths}, minmax(8rem, 1fr))`,
+            gridTemplateColumns: `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
+            minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
-          {viewMode === "week" ? (
-            <>
-              {/* Year band */}
-              <div className="border-b border-r bg-muted/50 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                &nbsp;
-              </div>
-              {yearBand.map((seg, i) => (
-                <div
-                  key={`y-${i}`}
-                  className="border-b border-r bg-muted/50 px-2 py-1 font-mono text-[11px] font-bold tracking-wider text-foreground"
-                  style={{ gridColumn: `span ${seg.span}` }}
-                >
-                  {seg.year}
-                </div>
-              ))}
+          {/* Header row (sticky top): País por país */}
+          <div className="sticky top-0 z-10 border-b border-r bg-card px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Período
+          </div>
+          {allCountries.map((c) => (
+            <div
+              key={`hdr-${c.iso2}`}
+              className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-r bg-card px-2 py-2 text-xs"
+            >
+              <CountryFlag iso2={c.iso2} size="sm" />
+              <span className="truncate font-medium">{c.name}</span>
+            </div>
+          ))}
+          <div className="sticky top-0 z-10 border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Total
+          </div>
 
-              {/* Month band */}
-              <div className="border-b border-r bg-muted/30 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                &nbsp;
-              </div>
-              {monthBand.map((seg, i) => (
-                <div
-                  key={`m-${i}`}
-                  className="border-b border-r bg-muted/30 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-                  style={{ gridColumn: `span ${seg.span}` }}
-                >
-                  {seg.month}
-                </div>
-              ))}
-
-              {/* Week headers */}
-              <div className="border-b border-r bg-muted/10 px-3 py-2 text-xs font-medium text-muted-foreground">
-                País
-              </div>
-              {weeks.map((w) => {
-                const { label, subLabel } = formatWeekRange(w.year, w.week);
-                const isCur = isCurrentWeek(w);
-                return (
-                  <div
-                    key={`${w.year}-${w.week}`}
-                    className={
-                      "border-b border-r px-2 py-2 text-xs " +
-                      (isCur
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted/10 text-muted-foreground")
-                    }
-                  >
-                    <div className="font-mono text-sm font-semibold">{label}</div>
-                    <div className="font-mono text-[10px] opacity-70">{subLabel}</div>
-                    {isCur ? (
-                      <Badge className="mt-0.5 h-4 px-1 py-0 text-[9px]">Hoy</Badge>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </>
-          ) : (
-            <>
-              {/* Year band for months */}
-              <div className="border-b border-r bg-muted/50 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                &nbsp;
-              </div>
-              {(() => {
-                const segments: { year: number; span: number }[] = [];
-                months.forEach((m) => {
-                  const last = segments[segments.length - 1];
-                  if (last && last.year === m.year) last.span += 1;
-                  else segments.push({ year: m.year, span: 1 });
-                });
-                return segments.map((seg, i) => (
-                  <div
-                    key={`y-${i}`}
-                    className="border-b border-r bg-muted/50 px-2 py-1 font-mono text-[11px] font-bold tracking-wider text-foreground"
-                    style={{ gridColumn: `span ${seg.span}` }}
-                  >
-                    {seg.year}
-                  </div>
-                ));
-              })()}
-
-              {/* Month headers */}
-              <div className="border-b border-r bg-muted/10 px-3 py-2 text-xs font-medium text-muted-foreground">
-                País
-              </div>
-              {months.map((m) => {
-                const isCur = isCurrentMonth(m);
-                return (
-                  <div
-                    key={`${m.year}-${m.month}`}
-                    className={
-                      "border-b border-r px-2 py-2 text-xs " +
-                      (isCur
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted/10 text-muted-foreground")
-                    }
-                  >
-                    <div className="text-sm font-semibold uppercase tracking-wider">
-                      {MONTHS_ES[m.month]}
-                    </div>
-                    {isCur ? (
-                      <Badge className="mt-0.5 h-4 px-1 py-0 text-[9px]">Hoy</Badge>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </>
-          )}
-
-          {/* Country rows */}
+          {/* Body: una fila por período */}
           {countryRows.length === 0 ? (
             <div
               className="border-r p-8 text-center text-sm text-muted-foreground"
-              style={{ gridColumn: `span ${(viewMode === "week" ? visibleWeeks : visibleMonths) + 1}` }}
+              style={{ gridColumn: `span ${allCountries.length + 2}` }}
             >
               No hay entregas registradas todavía.
             </div>
           ) : (
-            countryRows.map((cr) => {
-              const cols: Array<{
-                key: number;
-                isCur: boolean;
-                onClickCell: () => void;
-              }> =
-                viewMode === "week"
-                  ? weeks.map((w) => ({
-                      key: weekKey(w.year, w.week),
-                      isCur: isCurrentWeek(w),
-                      onClickCell: () => {},
-                    }))
-                  : months.map((m) => ({
-                      key: m.year * 100 + m.month,
-                      isCur: isCurrentMonth(m),
-                      onClickCell: () => {},
-                    }));
+            (viewMode === "week" ? weeks : months).map((col, idx) => {
+              const isWeek = viewMode === "week";
+              const colW = col as { year: number; week: number };
+              const colM = col as { year: number; month: number };
+              const key = isWeek
+                ? weekKey(colW.year, colW.week)
+                : colM.year * 100 + colM.month;
+              const isCur = isWeek
+                ? isCurrentWeek(colW)
+                : isCurrentMonth(colM);
+              const total = columnTotals.get(key) ?? 0;
+
+              // Drill-down date refs (year+week)
+              const drillYear = isWeek ? colW.year : colW.year;
+              const drillWeek = isWeek
+                ? colW.week
+                : isoWeekFromDate(new Date(Date.UTC(colM.year, colM.month, 4))).week;
+              // Override drillWeek for month mode using monday
+              const monthDrillRef = !isWeek
+                ? isoWeekFromDate(new Date(Date.UTC(colM.year, colM.month, 4)))
+                : null;
+              const drillY = monthDrillRef ? monthDrillRef.year : drillYear;
+              const drillW = monthDrillRef ? monthDrillRef.week : drillWeek;
+
+              // Period label
+              const periodLabel = isWeek
+                ? formatWeekRange(colW.year, colW.week)
+                : null;
+              const monthName = !isWeek ? MONTHS_ES[colM.month] : null;
+              const year = isWeek ? colW.year : colM.year;
+              const periodKey = isWeek
+                ? `${colW.year}-${colW.week}`
+                : `${colM.year}-${colM.month}`;
+              const isFirstOfYear =
+                idx === 0 ||
+                (isWeek
+                  ? (weeks[idx - 1] as { year: number }).year !== colW.year
+                  : (months[idx - 1] as { year: number }).year !== colM.year);
+
               return (
-                <React.Fragment key={cr.iso2}>
-                  <div className="flex items-center gap-2 border-b border-r px-3 py-2 text-sm">
-                    <span className="text-lg">
-                      <CountryFlag iso2={cr.iso2} />
-                    </span>
-                    <span className="truncate font-medium">{cr.name}</span>
-                  </div>
-                  {cols.map((col, idx) => {
-                    const items = cr.byKey.get(col.key) ?? [];
-                    const isCur = col.isCur;
-                    // For drill-down: in week mode we know year+week; in month mode use first week of month
-                    let drillYear = 0;
-                    let drillWeek = 0;
-                    if (viewMode === "week") {
-                      const w = weeks[idx];
-                      drillYear = w.year;
-                      drillWeek = w.week;
-                    } else {
-                      const m = months[idx];
-                      const monday = new Date(Date.UTC(m.year, m.month, 4));
-                      const iso = isoWeekFromDate(monday);
-                      drillYear = iso.year;
-                      drillWeek = iso.week;
+                <React.Fragment key={periodKey}>
+                  {/* Period label cell — sticky left, doble línea (year band si cambia) */}
+                  <div
+                    className={
+                      "sticky left-0 z-[5] border-b border-r px-3 py-2 " +
+                      (isCur ? "bg-primary/10" : "bg-card") +
+                      (isFirstOfYear ? " border-t-2 border-t-foreground/20" : "")
                     }
+                  >
+                    {isFirstOfYear ? (
+                      <div className="font-mono text-[10px] font-bold tracking-wider text-foreground/80">
+                        {year}
+                      </div>
+                    ) : null}
+                    {isWeek ? (
+                      <>
+                        <div
+                          className={
+                            "font-mono text-sm font-semibold " +
+                            (isCur ? "text-primary" : "text-foreground")
+                          }
+                        >
+                          {periodLabel!.label}
+                        </div>
+                        <div className="font-mono text-[10px] text-muted-foreground">
+                          {periodLabel!.subLabel} {periodLabel!.month}
+                        </div>
+                      </>
+                    ) : (
+                      <div
+                        className={
+                          "text-sm font-semibold uppercase tracking-wider " +
+                          (isCur ? "text-primary" : "text-foreground")
+                        }
+                      >
+                        {monthName}
+                      </div>
+                    )}
+                    {isCur ? (
+                      <Badge className="mt-0.5 h-4 px-1 py-0 text-[9px]">
+                        Hoy
+                      </Badge>
+                    ) : null}
+                  </div>
+
+                  {/* Country cells */}
+                  {allCountries.map((country) => {
+                    const cr = countryRows.find((r) => r.iso2 === country.iso2);
+                    const items = cr?.byKey.get(key) ?? [];
 
                     if (items.length === 0) {
                       return (
                         <div
-                          key={col.key}
+                          key={`${periodKey}-${country.iso2}`}
                           className={
-                            "border-b border-r " + (isCur ? "bg-primary/[0.03]" : "")
+                            "border-b border-r " +
+                            (isCur ? "bg-primary/[0.03]" : "")
                           }
                         />
                       );
                     }
-                    // aggregate by client name
-                    // condition: 'venta' (default), 'muestra', 'reposicion', null=opp
+
+                    // aggregate by client name (same logic as before)
                     type ClientAgg = {
                       qty: number;
                       isOpp: boolean;
@@ -823,7 +780,11 @@ export function CalendarGrid({
                       const name = it.clientName ?? "—";
                       const cur =
                         byClient.get(name) ??
-                        ({ qty: 0, isOpp: false, conditions: new Set() } as ClientAgg);
+                        ({
+                          qty: 0,
+                          isOpp: false,
+                          conditions: new Set(),
+                        } as ClientAgg);
                       cur.qty += Number(it.qty ?? 0);
                       if (it.source_type === "opportunity") {
                         cur.isOpp = true;
@@ -836,19 +797,26 @@ export function CalendarGrid({
                     const clientList = Array.from(byClient.entries()).sort(
                       (a, b) => b[1].qty - a[1].qty,
                     );
-                    const visiblePills = clientList.slice(0, viewMode === "month" ? 5 : 3);
+                    const visiblePills = clientList.slice(
+                      0,
+                      isWeek ? 3 : 5,
+                    );
                     const overflow = clientList.length - visiblePills.length;
-                    const totalQty = clientList.reduce((s, [, v]) => s + v.qty, 0);
+                    const totalQty = clientList.reduce(
+                      (s, [, v]) => s + v.qty,
+                      0,
+                    );
+
                     return (
                       <button
-                        key={col.key}
+                        key={`${periodKey}-${country.iso2}`}
                         type="button"
                         onClick={() =>
                           setDrillCell({
-                            iso2: cr.iso2,
-                            countryName: cr.name,
-                            year: drillYear,
-                            week: drillWeek,
+                            iso2: country.iso2,
+                            countryName: country.name,
+                            year: drillY,
+                            week: drillW,
                           })
                         }
                         className={
@@ -869,11 +837,6 @@ export function CalendarGrid({
                         </div>
                         <div className="flex flex-col gap-0.5">
                           {visiblePills.map(([name, info]) => {
-                            // Color por condition:
-                            //   opp           → amber (igual que antes)
-                            //   solo muestra  → amber sutil
-                            //   solo reposic. → sky
-                            //   resto/venta   → primary green (default)
                             let pillClass: string;
                             if (info.isOpp) {
                               pillClass =
@@ -919,40 +882,14 @@ export function CalendarGrid({
                       </button>
                     );
                   })}
-                </React.Fragment>
-              );
-            })
-          )}
 
-          {/* Totals row */}
-          {countryRows.length > 0 ? (
-            <>
-              <div className="flex items-center gap-2 border-t-2 border-r border-t-border bg-muted/40 px-3 py-2 text-sm font-semibold">
-                <Sigma className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Total</span>
-              </div>
-              {(viewMode === "week" ? weeks : months).map((col, i) => {
-                const key =
-                  viewMode === "week"
-                    ? weekKey(
-                        (col as { year: number; week: number }).year,
-                        (col as { year: number; week: number }).week,
-                      )
-                    : (col as { year: number; month: number }).year * 100 +
-                      (col as { year: number; month: number }).month;
-                const isCur =
-                  viewMode === "week"
-                    ? isCurrentWeek(col as { year: number; week: number })
-                    : isCurrentMonth(col as { year: number; month: number });
-                const total = columnTotals.get(key) ?? 0;
-                return (
+                  {/* Row total */}
                   <div
-                    key={`total-${i}`}
                     className={
-                      "border-t-2 border-r border-t-border px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
+                      "border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
                       (isCur
                         ? "bg-primary/10 text-primary"
-                        : "bg-muted/40 text-foreground")
+                        : "bg-muted/30 text-foreground")
                     }
                     title={
                       total > 0
@@ -966,10 +903,10 @@ export function CalendarGrid({
                       <span className="text-muted-foreground/40">—</span>
                     )}
                   </div>
-                );
-              })}
-            </>
-          ) : null}
+                </React.Fragment>
+              );
+            })
+          )}
         </div>
       </div>
 
