@@ -252,12 +252,6 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
           })}
         </div>
 
-        {/* Condition filter (Venta / Muestra / Reposición) */}
-        <ContractConditionFilter
-          selected={activeConditions}
-          onChange={setActiveConditions}
-        />
-
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" render={<Link href="/contratos?view=list" />}>
             <List className="h-4 w-4" />
@@ -286,8 +280,13 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
         </div>
       ) : null}
 
-      {/* FX rates legend */}
-      <div className="flex items-center justify-end">
+      {/* FX rates + Condition filter (controles secundarios) */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <ContractConditionFilter
+          selected={activeConditions}
+          onChange={setActiveConditions}
+          size="sm"
+        />
         <FxRatesLegend initial={fxRates} />
       </div>
 
