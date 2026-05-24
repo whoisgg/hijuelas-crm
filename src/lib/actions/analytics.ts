@@ -139,6 +139,8 @@ export type CalendarEvent = CalendarEventRow & {
   contract_id: string | null;
   /** Contract status padre (firmado/borrador/etc). NULL para opportunities. */
   contract_status: string | null;
+  /** Condition del contrato (venta/muestra/reposicion). NULL para opportunities. */
+  contract_condition: string | null;
 };
 
 export type CatalogStats = {
@@ -947,6 +949,7 @@ export async function getCalendarEvents(
     const raw = e as typeof e & {
       contract_id?: string | null;
       contract_status?: string | null;
+      contract_condition?: string | null;
     };
     return {
       ...e,
@@ -961,6 +964,7 @@ export async function getCalendarEvents(
       ownerName: e.owner_id ? ownerById.get(e.owner_id) ?? null : null,
       contract_id: raw.contract_id ?? null,
       contract_status: raw.contract_status ?? null,
+      contract_condition: raw.contract_condition ?? null,
     };
   });
 

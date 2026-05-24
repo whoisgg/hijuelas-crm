@@ -609,6 +609,26 @@ export function CalendarGrid({
         </div>
       ) : null}
 
+      {/* Leyenda compacta — explica el color de los pills */}
+      <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
+        <LegendDot
+          label="Venta"
+          className="bg-primary/10 text-primary"
+        />
+        <LegendDot
+          label="Muestra"
+          className="bg-amber-500/10 text-amber-700 dark:text-amber-300"
+        />
+        <LegendDot
+          label="Reposición"
+          className="bg-sky-500/10 text-sky-700 dark:text-sky-300"
+        />
+        <LegendDot
+          label="Oportunidad"
+          className="border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+        />
+      </div>
+
       {/* Grid */}
       <div className="overflow-x-auto rounded-lg border bg-card">
         <div
@@ -791,15 +811,25 @@ export function CalendarGrid({
                       );
                     }
                     // aggregate by client name
-                    const byClient = new Map<string, { qty: number; isOpp: boolean }>();
+                    // condition: 'venta' (default), 'muestra', 'reposicion', null=opp
+                    type ClientAgg = {
+                      qty: number;
+                      isOpp: boolean;
+                      conditions: Set<string>;
+                    };
+                    const byClient = new Map<string, ClientAgg>();
                     let opportunityCount = 0;
                     for (const it of items) {
                       const name = it.clientName ?? "—";
-                      const cur = byClient.get(name) ?? { qty: 0, isOpp: false };
+                      const cur =
+                        byClient.get(name) ??
+                        ({ qty: 0, isOpp: false, conditions: new Set() } as ClientAgg);
                       cur.qty += Number(it.qty ?? 0);
                       if (it.source_type === "opportunity") {
                         cur.isOpp = true;
                         opportunityCount += 1;
+                      } else if (it.contract_condition) {
+                        cur.conditions.add(it.contract_condition);
                       }
                       byClient.set(name, cur);
                     }
@@ -838,20 +868,48 @@ export function CalendarGrid({
                           ) : null}
                         </div>
                         <div className="flex flex-col gap-0.5">
-                          {visiblePills.map(([name, info]) => (
-                            <span
-                              key={name}
-                              className={
-                                "truncate rounded px-1 py-0.5 text-[10px] font-medium " +
-                                (info.isOpp
-                                  ? "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
-                                  : "bg-primary/10 text-primary")
-                              }
-                              title={name}
-                            >
-                              {name}
-                            </span>
-                          ))}
+                          {visiblePills.map(([name, info]) => {
+                            // Color por condition:
+                            //   opp           → amber (igual que antes)
+                            //   solo muestra  → amber sutil
+                            //   solo reposic. → sky
+                            //   resto/venta   → primary green (default)
+                            let pillClass: string;
+                            if (info.isOpp) {
+                              pillClass =
+                                "border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200";
+                            } else if (
+                              info.conditions.size === 1 &&
+                              info.conditions.has("muestra")
+                            ) {
+                              pillClass =
+                                "bg-amber-500/10 text-amber-700 dark:text-amber-300";
+                            } else if (
+                              info.conditions.size === 1 &&
+                              info.conditions.has("reposicion")
+                            ) {
+                              pillClass =
+                                "bg-sky-500/10 text-sky-700 dark:text-sky-300";
+                            } else {
+                              pillClass = "bg-primary/10 text-primary";
+                            }
+                            const titleSuffix =
+                              !info.isOpp && info.conditions.size === 1
+                                ? ` · ${info.conditions.values().next().value}`
+                                : "";
+                            return (
+                              <span
+                                key={name}
+                                className={
+                                  "truncate rounded px-1 py-0.5 text-[10px] font-medium " +
+                                  pillClass
+                                }
+                                title={name + titleSuffix}
+                              >
+                                {name}
+                              </span>
+                            );
+                          })}
                           {overflow > 0 ? (
                             <span className="text-[9px] text-muted-foreground">
                               + {overflow} más
@@ -1004,6 +1062,18 @@ export function CalendarGrid({
         </SheetContent>
       </Sheet>
     </div>
+  );
+}
+
+function LegendDot({ label, className }: { label: string; className: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        aria-hidden
+        className={"inline-block h-2.5 w-3 rounded-sm " + className}
+      />
+      <span>{label}</span>
+    </span>
   );
 }
 
