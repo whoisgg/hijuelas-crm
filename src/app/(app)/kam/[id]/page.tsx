@@ -174,14 +174,14 @@ export default async function KAMDetailPage({
       </Card>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <KamStatusFilter selected={statuses} />
-          <KamConditionFilter selected={conditions} />
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Agrupado por <span className="font-medium text-foreground">programa genético</span> · país · contrato
-        </p>
+        <KamStatusFilter selected={statuses} />
+        <KamConditionFilter selected={conditions} size="sm" />
       </div>
+      <p className="-mt-2 mb-3 text-xs text-muted-foreground">
+        Agrupado por{" "}
+        <span className="font-medium text-foreground">programa genético</span> ·
+        país · contrato
+      </p>
 
       {groups.length === 0 ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">

@@ -77,10 +77,8 @@ export default async function KAMPage({
       />
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <KamStatusFilter selected={statuses} />
-          <KamConditionFilter selected={conditions} />
-        </div>
+        <KamStatusFilter selected={statuses} />
+        <KamConditionFilter selected={conditions} size="sm" />
       </div>
 
       {kams.length === 0 ? (
