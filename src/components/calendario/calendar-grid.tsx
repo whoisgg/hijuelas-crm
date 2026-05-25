@@ -470,23 +470,10 @@ export function CalendarGrid({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // Sticky toolbar block (toolbar + KPIs + legend). Medimos su altura para
-  // empujar el grid header (sticky) a justo debajo, así no se solapan al
-  // hacer scroll vertical de la tabla.
-  const toolbarBlockRef = React.useRef<HTMLDivElement | null>(null);
-  const [toolbarH, setToolbarH] = React.useState(0);
-  React.useEffect(() => {
-    const node = toolbarBlockRef.current;
-    if (!node) return;
-    const ro = new ResizeObserver(([entry]) => {
-      setToolbarH(Math.ceil(entry.contentRect.height));
-    });
-    ro.observe(node);
-    return () => ro.disconnect();
-  }, []);
-  // Topbar viewport-fija ocupa 56px (h-14). El header de la tabla queda
-  // justo abajo del toolbar block sticky.
-  const headerTopPx = 56 + toolbarH;
+  // NOTE: sticky toolbar+KPIs+legend block está pendiente — la primera
+  // implementación empujaba los country headers ~300px hacia abajo, lo
+  // que no se ve bien. Pendiente: solo el toolbar (filters/search) sticky
+  // y dejar KPIs+legend en flujo normal. Ver Obsidian.
 
   React.useEffect(() => {
     const node = sentinelRef.current;
@@ -537,12 +524,6 @@ export function CalendarGrid({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Bloque sticky: toolbar + KPIs + leyenda. Se queda fijo bajo la
-          topbar mientras la tabla scrollea por abajo. */}
-      <div
-        ref={toolbarBlockRef}
-        className="sticky top-14 z-30 -mx-6 flex flex-col gap-3 border-b bg-background px-6 pb-3 pt-3 md:-mx-6 md:px-6"
-      >
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
         {/* Nav buttons */}
@@ -766,13 +747,11 @@ export function CalendarGrid({
           }}
         />
       </div>
-      </div>
-      {/* /Bloque sticky toolbar+KPIs+legend */}
 
       {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
           UN SOLO grid — header y body comparten gridTemplateColumns por
           definición, garantizando alineación perfecta. Header cells sticky
-          quedan abajo del toolbar block (top dinámico vía headerTopPx). */}
+          top-14 quedan abajo de la topbar al scrollear. */}
       <div className="overflow-x-hidden rounded-lg border bg-card md:overflow-x-auto">
         <div
           className="grid"
@@ -785,38 +764,26 @@ export function CalendarGrid({
               : `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
-          {/* Header row — sticky con `top` dinámico = 56 (topbar) + altura del
-              toolbar block sticky. Cell-by-cell. z-30 para el corner left
-              (que también es sticky-left), z-20 para los headers de país. */}
-          <div
-            className="sticky left-0 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3"
-            style={{ top: headerTopPx }}
-          >
+          {/* Header row — sticky top-14 a nivel viewport, cell-by-cell. */}
+          <div className="sticky left-0 top-14 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3">
             {isMobile ? (viewMode === "week" ? "Wk" : "Mes") : "Período"}
           </div>
           {isMobile ? (
-            <div
-              className="sticky z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
-              style={{ top: headerTopPx }}
-            >
+            <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Entregas
             </div>
           ) : (
             allCountries.map((c) => (
               <div
                 key={`hdr-${c.iso2}`}
-                className="sticky z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
-                style={{ top: headerTopPx }}
+                className="sticky top-14 z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
               >
                 <CountryFlag iso2={c.iso2} size="sm" />
                 <span className="truncate font-medium">{c.name}</span>
               </div>
             ))
           )}
-          <div
-            className="sticky z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
-            style={{ top: headerTopPx }}
-          >
+          <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             Total
           </div>
           {/* Body: una fila por período */}
