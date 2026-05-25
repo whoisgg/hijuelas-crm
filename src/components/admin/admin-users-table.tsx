@@ -25,11 +25,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type Role = "admin" | "sales" | "finance" | "viewer";
+type Role = "admin" | "sales" | "sales_support" | "finance" | "viewer";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "admin", label: "Admin" },
   { value: "sales", label: "Sales (KAM)" },
+  { value: "sales_support", label: "Sales (Soporte)" },
   { value: "finance", label: "Finance" },
   { value: "viewer", label: "Viewer" },
 ];
@@ -37,6 +38,7 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
 const ROLE_TONE: Record<Role, string> = {
   admin: "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-700 dark:bg-purple-950/50 dark:text-purple-300",
   sales: "border-primary/30 bg-primary/10 text-primary",
+  sales_support: "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
   finance: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
   viewer: "border-border bg-muted text-muted-foreground",
 };

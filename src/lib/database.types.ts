@@ -1646,7 +1646,7 @@ export type Database = {
       sale_type: "nacional" | "exportacion"
       share_permission: "view" | "comment" | "edit_suggested"
       share_scope: "cliente" | "contrato" | "calendario" | "mapa" | "dashboard"
-      user_role: "admin" | "sales" | "finance" | "viewer"
+      user_role: "admin" | "sales" | "sales_support" | "finance" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1794,7 +1794,7 @@ export const Constants = {
       sale_type: ["nacional", "exportacion"],
       share_permission: ["view", "comment", "edit_suggested"],
       share_scope: ["cliente", "contrato", "calendario", "mapa", "dashboard"],
-      user_role: ["admin", "sales", "finance", "viewer"],
+      user_role: ["admin", "sales", "sales_support", "finance", "viewer"],
     },
   },
 } as const
