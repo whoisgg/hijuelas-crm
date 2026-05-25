@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/sheet";
 import { CountryFlag } from "@/components/clientes/country-flag";
 import { DeliveryActions } from "@/components/calendario/delivery-actions";
+import { formatCompact } from "@/components/contratos/format";
 import type { CalendarEvent } from "@/lib/actions/analytics";
 
 export type SpeciesOption = { id: string; name: string };
@@ -985,8 +986,13 @@ export function CalendarGrid({
                         }
                       >
                         <div className="flex items-center justify-between text-[10px]">
-                          <span className="font-mono font-semibold tabular-nums">
-                            {numFmt.format(totalQty)}
+                          <span
+                            className="font-mono font-semibold tabular-nums"
+                            title={`${numFmt.format(totalQty)} plantas`}
+                          >
+                            {isMobile
+                              ? formatCompact(totalQty)
+                              : numFmt.format(totalQty)}
                           </span>
                           {opportunityCount > 0 ? (
                             <span className="inline-flex items-center gap-0.5 text-amber-600 dark:text-amber-400">
@@ -1058,7 +1064,7 @@ export function CalendarGrid({
                     }
                   >
                     {total > 0 ? (
-                      numFmt.format(total)
+                      isMobile ? formatCompact(total) : numFmt.format(total)
                     ) : (
                       <span className="text-muted-foreground/40">—</span>
                     )}
