@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   CalendarDays,
   CalendarRange,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -811,7 +812,9 @@ export function CalendarGrid({
                   <div
                     className={
                       "sticky left-0 z-[5] border-b border-r px-3 py-2 " +
-                      (isCur ? "bg-primary/10" : "bg-card") +
+                      (isCur
+                        ? "bg-primary/10 border-l-2 border-l-primary"
+                        : "bg-card") +
                       (isFirstOfYear ? " border-t-2 border-t-foreground/20" : "")
                     }
                   >
@@ -830,7 +833,14 @@ export function CalendarGrid({
                         >
                           {periodLabel!.label}
                         </div>
-                        <div className="font-mono text-[10px] text-muted-foreground">
+                        <div
+                          className={
+                            "font-mono text-[10px] " +
+                            (isCur
+                              ? "text-primary/80"
+                              : "text-muted-foreground")
+                          }
+                        >
                           {periodLabel!.subLabel} {periodLabel!.month}
                         </div>
                       </>
@@ -844,11 +854,6 @@ export function CalendarGrid({
                         {monthName}
                       </div>
                     )}
-                    {isCur ? (
-                      <Badge className="mt-0.5 h-4 px-1 py-0 text-[9px]">
-                        Hoy
-                      </Badge>
-                    ) : null}
                   </div>
 
                   {/* Country cells */}
@@ -1014,11 +1019,16 @@ export function CalendarGrid({
       {countryRows.length > 0 ? (
         <div
           ref={sentinelRef}
-          className="flex items-center justify-center py-3 text-[11px] text-muted-foreground"
+          className="flex flex-col items-center justify-center gap-1.5 py-4"
         >
-          {extraPeriods > 0
-            ? `Mostrando ${(viewMode === "week" ? totalVisibleWeeks : totalVisibleMonths)} ${viewMode === "week" ? "semanas" : "meses"} · scroll para cargar más`
-            : "Scroll para cargar más periodos"}
+          <div className="flex h-7 w-7 animate-bounce items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm">
+            <ChevronDown className="h-3.5 w-3.5" />
+          </div>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {extraPeriods > 0
+              ? `${viewMode === "week" ? totalVisibleWeeks : totalVisibleMonths} ${viewMode === "week" ? "semanas" : "meses"} · scroll para más`
+              : `Scroll para cargar más ${viewMode === "week" ? "semanas" : "meses"}`}
+          </span>
         </div>
       ) : null}
 
