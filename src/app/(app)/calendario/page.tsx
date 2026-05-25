@@ -64,8 +64,8 @@ async function CalendarContent({ includeOpps }: { includeOpps: boolean }) {
       events={events}
       species={speciesOptions}
       initialIncludeOpps={includeOpps}
-      visibleWeeks={26}
-      visibleMonths={18}
+      visibleWeeks={10}
+      visibleMonths={6}
     />
   );
 }

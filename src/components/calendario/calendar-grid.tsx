@@ -109,10 +109,10 @@ export function CalendarGrid({
   events,
   species,
   initialIncludeOpps,
-  // Layout transpuesto: periodos en filas (scroll vertical), países en cols.
-  // Mostramos más periodos a la vez porque ya hay scroll natural.
-  visibleWeeks = 16,
-  visibleMonths = 12,
+  // Periodos iniciales — el infinite scroll va agregando más al hacer scroll
+  // hacia el final del grid.
+  visibleWeeks = 10,
+  visibleMonths = 6,
 }: Props) {
   // Filters
   const [search, setSearch] = React.useState("");
@@ -127,6 +127,13 @@ export function CalendarGrid({
   const [contractStatuses, setContractStatuses] = React.useState<Set<KamStatusKey>>(
     () => new Set(["activos", "por_firmar"]),
   );
+  // Filtro vía leyenda: ocultar condiciones específicas (venta/muestra/reposicion).
+  const [hiddenConditions, setHiddenConditions] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  // Infinite scroll: cuántos periodos extras agregamos sobre el inicial.
+  // Se incrementa cuando el sentinel del final entra en viewport.
+  const [extraPeriods, setExtraPeriods] = React.useState(0);
 
   // Current week (anchor); render weeks [anchor, anchor + visibleWeeks - 1]
   const today = React.useMemo(() => isoWeekFromDate(new Date()), []);
@@ -148,16 +155,17 @@ export function CalendarGrid({
     window.history.replaceState({}, "", `${window.location.pathname}?${sp.toString()}`);
   }, [includeOpps]);
 
-  // Compute visible week range
+  // Compute visible week range (incluye los periodos extra de infinite scroll)
+  const totalVisibleWeeks = visibleWeeks + extraPeriods;
   const weeks = React.useMemo(() => {
     const arr: { year: number; week: number }[] = [];
     let cur = anchor;
-    for (let i = 0; i < visibleWeeks; i++) {
+    for (let i = 0; i < totalVisibleWeeks; i++) {
       arr.push(cur);
       cur = addWeeks(cur.year, cur.week, 1);
     }
     return arr;
-  }, [anchor, visibleWeeks]);
+  }, [anchor, totalVisibleWeeks]);
 
   const weekKeys = React.useMemo(() => weeks.map((w) => weekKey(w.year, w.week)), [weeks]);
 
@@ -167,11 +175,12 @@ export function CalendarGrid({
     const monday = isoWeekToMonday(anchor.year, anchor.week);
     return { year: monday.getUTCFullYear(), month: monday.getUTCMonth() };
   }, [anchor]);
+  const totalVisibleMonths = visibleMonths + extraPeriods;
   const months = React.useMemo<MonthCol[]>(() => {
     const arr: MonthCol[] = [];
     let y = anchorMonth.year;
     let m = anchorMonth.month;
-    for (let i = 0; i < visibleMonths; i++) {
+    for (let i = 0; i < totalVisibleMonths; i++) {
       arr.push({ year: y, month: m });
       m += 1;
       if (m > 11) {
@@ -180,7 +189,7 @@ export function CalendarGrid({
       }
     }
     return arr;
-  }, [anchorMonth, visibleMonths]);
+  }, [anchorMonth, totalVisibleMonths]);
   const monthKeys = React.useMemo(
     () => months.map((m) => m.year * 100 + m.month),
     [months],
@@ -209,6 +218,14 @@ export function CalendarGrid({
         e.source_type === "contract" &&
         !matchesKamStatuses(e.contract_status, contractStatuses)
       )
+        return false;
+      // Filtro vía leyenda: ocultar condiciones específicas
+      if (
+        e.source_type === "contract" &&
+        hiddenConditions.has(e.contract_condition ?? "venta")
+      )
+        return false;
+      if (e.source_type === "opportunity" && hiddenConditions.has("opp"))
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
       if (
@@ -251,6 +268,7 @@ export function CalendarGrid({
     weekKeys,
     monthKeys,
     contractStatuses,
+    hiddenConditions,
     today,
   ]);
 
@@ -265,6 +283,14 @@ export function CalendarGrid({
         e.source_type === "contract" &&
         !matchesKamStatuses(e.contract_status, contractStatuses)
       )
+        return false;
+      // Filtro vía leyenda: ocultar condiciones
+      if (
+        e.source_type === "contract" &&
+        hiddenConditions.has(e.contract_condition ?? "venta")
+      )
+        return false;
+      if (e.source_type === "opportunity" && hiddenConditions.has("opp"))
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
       if (
@@ -290,7 +316,16 @@ export function CalendarGrid({
         return false;
       return true;
     });
-  }, [events, search, speciesId, includeOpps, minProb, contractStatuses, today]);
+  }, [
+    events,
+    search,
+    speciesId,
+    includeOpps,
+    minProb,
+    contractStatuses,
+    hiddenConditions,
+    today,
+  ]);
 
   // KPIs por año (total entregas + plantas por año).
   const kpis = React.useMemo(() => {
@@ -409,7 +444,33 @@ export function CalendarGrid({
       setAnchor(isoWeekFromDate(monday));
     }
   };
-  const goToday = () => setAnchor(today);
+  const goToday = () => {
+    setAnchor(today);
+    setExtraPeriods(0);
+  };
+
+  // Reset infinite-scroll cuando cambia el modo de vista (semanas ↔ meses)
+  React.useEffect(() => {
+    setExtraPeriods(0);
+  }, [viewMode]);
+
+  // IntersectionObserver: cuando el sentinel del final entra al viewport,
+  // carga 10 periodos más.
+  const sentinelRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const node = sentinelRef.current;
+    if (!node) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setExtraPeriods((p) => p + 10);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [viewMode]); // re-init si cambia modo (sentinel se re-monta)
 
   const isCurrentWeek = (w: { year: number; week: number }) =>
     w.year === today.year && w.week === today.week;
@@ -611,23 +672,60 @@ export function CalendarGrid({
         </div>
       ) : null}
 
-      {/* Leyenda compacta — explica el color de los pills */}
-      <div className="flex flex-wrap items-center gap-3 px-1 text-[10px] text-muted-foreground">
+      {/* Leyenda — clickeable para ocultar/mostrar tipos */}
+      <div className="flex flex-wrap items-center gap-2 px-1 text-[10px]">
         <LegendDot
           label="Venta"
-          className="bg-primary/10 text-primary"
+          colorClass="bg-primary/10 text-primary"
+          active={!hiddenConditions.has("venta")}
+          onClick={() =>
+            setHiddenConditions((prev) => {
+              const next = new Set(prev);
+              if (next.has("venta")) next.delete("venta");
+              else next.add("venta");
+              return next;
+            })
+          }
         />
         <LegendDot
           label="Muestra"
-          className="bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          colorClass="bg-amber-500/10 text-amber-700 dark:text-amber-300"
+          active={!hiddenConditions.has("muestra")}
+          onClick={() =>
+            setHiddenConditions((prev) => {
+              const next = new Set(prev);
+              if (next.has("muestra")) next.delete("muestra");
+              else next.add("muestra");
+              return next;
+            })
+          }
         />
         <LegendDot
           label="Reposición"
-          className="bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          colorClass="bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          active={!hiddenConditions.has("reposicion")}
+          onClick={() =>
+            setHiddenConditions((prev) => {
+              const next = new Set(prev);
+              if (next.has("reposicion")) next.delete("reposicion");
+              else next.add("reposicion");
+              return next;
+            })
+          }
         />
         <LegendDot
           label="Oportunidad"
-          className="border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+          colorClass="border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+          active={!hiddenConditions.has("opp") && includeOpps}
+          onClick={() => {
+            // Click sobre oportunidad → toggle del switch principal
+            setIncludeOpps((v) => !v);
+            setHiddenConditions((prev) => {
+              const next = new Set(prev);
+              next.delete("opp");
+              return next;
+            });
+          }}
         />
       </div>
 
@@ -912,6 +1010,18 @@ export function CalendarGrid({
         </div>
       </div>
 
+      {/* Sentinel — al entrar en viewport carga 10 periodos más (infinite scroll) */}
+      {countryRows.length > 0 ? (
+        <div
+          ref={sentinelRef}
+          className="flex items-center justify-center py-3 text-[11px] text-muted-foreground"
+        >
+          {extraPeriods > 0
+            ? `Mostrando ${(viewMode === "week" ? totalVisibleWeeks : totalVisibleMonths)} ${viewMode === "week" ? "semanas" : "meses"} · scroll para cargar más`
+            : "Scroll para cargar más periodos"}
+        </div>
+      ) : null}
+
       {/* Side sheet */}
       <Sheet
         open={drillCell !== null}
@@ -1004,15 +1114,37 @@ export function CalendarGrid({
   );
 }
 
-function LegendDot({ label, className }: { label: string; className: string }) {
+function LegendDot({
+  label,
+  colorClass,
+  active,
+  onClick,
+}: {
+  label: string;
+  colorClass: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors hover:bg-muted/50 " +
+        (active ? "text-foreground" : "text-muted-foreground/50 line-through")
+      }
+      title={active ? `Click para ocultar ${label}` : `Click para mostrar ${label}`}
+    >
       <span
         aria-hidden
-        className={"inline-block h-2.5 w-3 rounded-sm " + className}
+        className={
+          "inline-block h-2.5 w-3 rounded-sm " +
+          colorClass +
+          (active ? "" : " opacity-40")
+        }
       />
       <span>{label}</span>
-    </span>
+    </button>
   );
 }
 
