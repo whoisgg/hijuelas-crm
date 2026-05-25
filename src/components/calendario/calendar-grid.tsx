@@ -758,8 +758,10 @@ export function CalendarGrid({
               : `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
-          {/* Header row — sticky top-14 a nivel viewport, cell-by-cell */}
-          <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          {/* Header row — sticky top-14 a nivel viewport, cell-by-cell.
+              z-30 (más alto que las period cells z-[5]) para que el header
+              quede encima al hacer scroll vertical. */}
+          <div className="sticky left-0 top-14 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3">
             {isMobile ? (viewMode === "week" ? "Wk" : "Mes") : "Período"}
           </div>
           {isMobile ? (
@@ -845,23 +847,23 @@ export function CalendarGrid({
                       ▸ {year} ◂
                     </div>
                   ) : null}
-                  {/* Period label cell — sticky left. Year inline en la fecha. */}
+                  {/* Period label cell — sticky left. Año se muestra en la
+                      banner row "▸ YYYY ◂" — no inline aquí para no comer ancho.
+                      `justify-start` + sin overflow-hidden para que el label
+                      ("Wk22") NUNCA se recorte aunque la fila sea baja. */}
                   <div
                     className={
-                      "sticky left-0 z-[5] flex min-w-0 flex-col justify-center overflow-hidden border-b border-r px-3 py-2 " +
+                      "sticky left-0 z-[5] flex min-w-0 flex-col justify-start gap-0.5 border-b border-r px-2 py-2 md:px-3 " +
                       (isCur
                         ? "bg-primary/10 border-l-2 border-l-primary"
-                        : "bg-card") +
-                      (isFirstOfYear && !isCur
-                        ? " border-t-2 border-t-foreground/20"
-                        : "")
+                        : "bg-card")
                     }
                   >
                     {isWeek ? (
                       <>
                         <div
                           className={
-                            "font-mono text-sm font-semibold " +
+                            "font-mono text-[13px] font-semibold leading-tight md:text-sm " +
                             (isCur ? "text-primary" : "text-foreground")
                           }
                         >
@@ -869,20 +871,19 @@ export function CalendarGrid({
                         </div>
                         <div
                           className={
-                            "font-mono text-[10px] " +
+                            "truncate font-mono text-[10px] leading-tight " +
                             (isCur
                               ? "text-primary/80"
                               : "text-muted-foreground")
                           }
                         >
                           {periodLabel!.subLabel} {periodLabel!.month}
-                          {/* El año se muestra en la banner row "▸ YYYY ◂" — no inline para mantener altura uniforme */}
                         </div>
                       </>
                     ) : (
                       <div
                         className={
-                          "text-sm font-semibold uppercase tracking-wider " +
+                          "text-sm font-semibold uppercase tracking-wider leading-tight " +
                           (isCur ? "text-primary" : "text-foreground")
                         }
                       >
