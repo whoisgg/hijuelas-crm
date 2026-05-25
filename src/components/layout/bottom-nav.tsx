@@ -9,7 +9,13 @@ import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
 
 // 4 ítems principales en el bottom-bar (iOS-style). El resto vive en "Más".
-const PRIMARY_HREFS = ["/dashboard", "/contratos", "/calendario", "/kam"];
+// Orden mobile: Dashboard, Calendario, Contratos, Oportunidades.
+const PRIMARY_HREFS = [
+  "/dashboard",
+  "/calendario",
+  "/contratos",
+  "/oportunidades",
+];
 
 /**
  * Bottom navigation tipo iOS app — sólo visible en mobile.
