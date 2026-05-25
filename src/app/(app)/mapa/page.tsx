@@ -48,7 +48,6 @@ export default async function MapaPage({
       <PageHeader
         title="Mapa Mundial"
         description="Colores por país. Cada tag muestra plantas comprometidas y total USD."
-        badge="Sprint 6"
       />
 
       <Suspense fallback={<MapaSkeleton />}>

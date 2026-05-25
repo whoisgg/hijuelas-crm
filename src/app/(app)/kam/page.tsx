@@ -72,7 +72,6 @@ export default async function KAMPage({
       <PageHeader
         title="KAM"
         description={`Key Account Managers · ${period.longLabel}`}
-        badge="Sprint 7"
         actions={<KamPeriodFilter value={period.value} />}
       />
 

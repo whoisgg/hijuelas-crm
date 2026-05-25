@@ -24,7 +24,6 @@ export default async function NuevoContratoPage() {
       <PageHeader
         title="Nuevo contrato"
         description="Wizard de 4 pasos: cliente, organización, items y detalles."
-        badge="Sprint 3"
         actions={
           <Button variant="outline" render={<Link href="/contratos" />}>
             <ChevronLeft className="h-4 w-4" />

@@ -82,7 +82,6 @@ export default function ReportesPage() {
       <PageHeader
         title="Reportes"
         description="Vistas analíticas y reportes guardados. Más reportes vienen en sprints futuros."
-        badge="Sprint 6"
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

@@ -52,7 +52,6 @@ export default async function CatalogoPage({
       <PageHeader
         title="Catálogo"
         description="Especies, variedades y métricas por variedad."
-        badge="Sprint 6"
         actions={
           <Button variant="default" size="sm">
             <Plus className="size-3.5" />

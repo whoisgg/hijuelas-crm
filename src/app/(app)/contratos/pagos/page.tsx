@@ -67,7 +67,6 @@ export default async function PagosPage({
             ? "Pagos cuya fecha de vencimiento ya pasó."
             : "Todos los pagos en estado pendiente, ordenados por vencimiento."
         }
-        badge="Sprint 4"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" render={<Link href="/contratos" />}>

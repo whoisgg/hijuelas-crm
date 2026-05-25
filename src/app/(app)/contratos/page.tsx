@@ -168,7 +168,6 @@ export default async function ContratosPage({
         description={
           view === "country" ? undefined : "Vista de lista plana. Filtros avanzados."
         }
-        badge="Sprint 3"
       />
       {view === "country" ? (
         <ContratosByCountryView

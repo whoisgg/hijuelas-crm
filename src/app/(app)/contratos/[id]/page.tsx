@@ -237,7 +237,6 @@ export default async function ContratoDetailPage({
             ? `${client.name}${organization ? ` · ${organization.name}` : ""}`
             : organization?.name
         }
-        badge="Sprint 3"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" render={<Link href="/contratos" />}>

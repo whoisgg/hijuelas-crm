@@ -67,7 +67,6 @@ export default async function EntregasPage({
       <PageHeader
         title="Entregas próximas"
         description={`Items pendientes o en proceso en las próximas ${weeksAhead} semanas.`}
-        badge="Sprint 4"
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" render={<Link href="/contratos" />}>
