@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { MonthTimeline } from "@/components/dashboard/month-timeline";
-import { WorldMap } from "@/components/mapa/world-map";
+import { CountryGrid } from "@/components/dashboard/country-grid";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { formatNumber } from "@/lib/format";
 import { Globe2 } from "lucide-react";
@@ -206,18 +206,7 @@ async function DashboardContent({
               />
             </div>
           ) : (
-            <WorldMap
-              data={mapData}
-              includeOpportunities={false}
-              // Zoom enfocado en las Americas + Atlántico (cubre los
-              // mercados reales: AR/BR/CL/CO/EC/MX/PE + ES/NL/PT + MA/ZM).
-              // El cuadrante NE (Asia) queda parcialmente fuera — es OK,
-              // Korea es marginal vs el volumen de Americas.
-              // Crop ajustado: México como tope, Argentina como base.
-              // No mostramos USA/Canadá (poca/ninguna actividad) ni el
-              // ártico. Europa/África/Korea quedan dentro al lado este.
-              projectionConfig={{ scale: 420, center: [-40, -5] }}
-            />
+            <CountryGrid data={mapData} />
           )}
         </div>
       </Card>
