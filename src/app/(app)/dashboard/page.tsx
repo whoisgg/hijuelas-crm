@@ -28,23 +28,30 @@ type DashboardSearchParams = {
 
 /**
  * Parse `?month=YYYY-MM` → { year, month } | { year, month: null } (= todo el año).
- * Si el valor es inválido o "all" o ausente, usa año actual sin filtro de mes.
+ * Default (sin param) = MES ACTUAL. `?month=all` = año completo explícito.
  */
 function parseMonthParam(value: string | undefined): {
   year: number;
   month: number | null;
   selected: string;
 } {
-  const currentYear = new Date().getUTCFullYear();
-  if (!value || value === "all") {
+  const now = new Date();
+  const currentYear = now.getUTCFullYear();
+  const currentMonth = now.getUTCMonth() + 1;
+  // Default: mes actual
+  if (!value) {
+    const selected = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
+    return { year: currentYear, month: currentMonth, selected };
+  }
+  if (value === "all") {
     return { year: currentYear, month: null, selected: "all" };
   }
   const match = /^(\d{4})-(\d{2})$/.exec(value);
-  if (!match) return { year: currentYear, month: null, selected: "all" };
+  if (!match) return { year: currentYear, month: currentMonth, selected: `${currentYear}-${String(currentMonth).padStart(2, "0")}` };
   const y = Number(match[1]);
   const m = Number(match[2]);
   if (!Number.isFinite(y) || m < 1 || m > 12) {
-    return { year: currentYear, month: null, selected: "all" };
+    return { year: currentYear, month: currentMonth, selected: `${currentYear}-${String(currentMonth).padStart(2, "0")}` };
   }
   return { year: y, month: m, selected: value };
 }
@@ -156,7 +163,7 @@ async function DashboardContent({
             {mapData.length} {mapData.length === 1 ? "país" : "países"} con actividad
           </span>
         </div>
-        <div className="relative h-[320px] w-full md:h-[480px]">
+        <div className="relative h-[480px] w-full md:h-[640px]">
           {mapData.length === 0 ? (
             <div className="flex h-full w-full items-center justify-center">
               <EmptyState
@@ -186,7 +193,7 @@ function DashboardSkeleton() {
           <Skeleton key={i} className="h-[88px] w-full rounded-lg" />
         ))}
       </div>
-      <Skeleton className="mt-4 h-[320px] w-full rounded-lg md:h-[480px]" />
+      <Skeleton className="mt-4 h-[480px] w-full rounded-lg md:h-[640px]" />
     </>
   );
 }
