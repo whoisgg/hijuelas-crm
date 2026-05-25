@@ -835,16 +835,21 @@ export function CalendarGrid({
               // idx=0 — así Wk22 (current) tiene la misma altura que el resto y
               // el año queda claro al inicio del calendario también.
               const showYearDivider = isFirstOfYear;
-              // Margin-top extra para la primera fila bajo el year-divider —
-              // crea un gap real (bg del grid container) entre el banner y la
-              // fila, en lugar de solo padding interno.
-              const firstRowMt = isFirstOfYear ? "mt-4" : "";
+              // El gap visual ahora vive dentro del year-divider (pb-5 abajo
+              // del label) — así la columna Total (que tiene bg-muted/30) no
+              // muestra un strip blanco contrastante entre el banner y la
+              // primera fila. firstRowMt queda vacío.
+              const firstRowMt = "";
 
               return (
                 <React.Fragment key={periodKey}>
                   {showYearDivider ? (
                     <div
-                      className="flex items-center justify-center border-y-2 border-primary/30 bg-primary/5 py-2 font-mono text-xs font-bold tracking-widest text-primary"
+                      // pb-5 (no py-2) — el label "▸ YYYY ◂" se queda arriba y
+                      // los 20px restantes son bg-primary/5, actuando como gap
+                      // visual continuo sin revelar el bg-card del container
+                      // (que se veía feo bajo la columna Total).
+                      className="flex items-start justify-center border-y-2 border-primary/30 bg-primary/5 pt-2 pb-5 font-mono text-xs font-bold tracking-widest text-primary"
                       style={{
                         gridColumn: `span ${isMobile ? 3 : allCountries.length + 2}`,
                       }}
