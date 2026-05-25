@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const MONTHS_ES_SHORT = [
@@ -89,23 +90,65 @@ export function MonthTimeline({
     scroller.scrollBy({ left: offset, behavior: "smooth" });
   }, [selected]);
 
+  // Track scroll position para enable/disable flechas en bordes.
+  const [scrollState, setScrollState] = React.useState({
+    canLeft: false,
+    canRight: true,
+  });
+  React.useEffect(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const update = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = scroller;
+      setScrollState({
+        canLeft: scrollLeft > 2,
+        canRight: scrollLeft + clientWidth < scrollWidth - 2,
+      });
+    };
+    update();
+    scroller.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(scroller);
+    return () => {
+      scroller.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, []);
+
+  const nudge = React.useCallback((dir: 1 | -1) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    // Scroll ~80% del clientWidth — suficiente para mostrar nuevos pills
+    // sin saltarse cosas.
+    scroller.scrollBy({
+      left: dir * scroller.clientWidth * 0.8,
+      behavior: "smooth",
+    });
+  }, []);
+
   // Para mostrar el año en el primer pill de cada año (visual aid).
   let lastYear: number | null = null;
 
   return (
-    <div className="relative">
-      {/* Fade edges para indicar que se puede scrollear */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-gradient-to-r from-background to-transparent"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-gradient-to-l from-background to-transparent"
-      />
+    <div className="relative flex items-stretch">
+      {/* Flecha izquierda */}
+      <button
+        type="button"
+        onClick={() => nudge(-1)}
+        disabled={!scrollState.canLeft}
+        aria-label="Meses anteriores"
+        className={cn(
+          "z-10 flex w-8 shrink-0 items-center justify-center border-r bg-background text-muted-foreground transition-colors",
+          scrollState.canLeft
+            ? "hover:bg-muted hover:text-foreground"
+            : "cursor-not-allowed opacity-30",
+        )}
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
       <div
         ref={scrollerRef}
-        className="flex snap-x snap-mandatory items-stretch gap-1.5 overflow-x-auto overscroll-x-contain scroll-smooth px-6 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex flex-1 snap-x snap-mandatory items-stretch gap-1.5 overflow-x-auto overscroll-x-contain scroll-smooth px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="tablist"
         aria-label="Línea de tiempo por mes"
       >
@@ -177,6 +220,21 @@ export function MonthTimeline({
           );
         })}
       </div>
+      {/* Flecha derecha */}
+      <button
+        type="button"
+        onClick={() => nudge(1)}
+        disabled={!scrollState.canRight}
+        aria-label="Meses siguientes"
+        className={cn(
+          "z-10 flex w-8 shrink-0 items-center justify-center border-l bg-background text-muted-foreground transition-colors",
+          scrollState.canRight
+            ? "hover:bg-muted hover:text-foreground"
+            : "cursor-not-allowed opacity-30",
+        )}
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
     </div>
   );
 }
