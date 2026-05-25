@@ -1428,9 +1428,24 @@ export async function getDashboardSummary(
  */
 export async function getTopRankings(params: {
   year?: number;
+  /** Si se pasa, filtra los items por delivery_week dentro de esos meses. */
+  months?: number[] | null;
 } = {}): Promise<TopRankings> {
   const year = params.year ?? currentYear();
   const supabase = await createClient();
+
+  // Set de semanas ISO para filtro de mes (null = año completo).
+  const monthWeeks = (() => {
+    const list = params.months ?? null;
+    if (!list || list.length === 0) return null;
+    const acc = new Set<number>();
+    for (const m of list) {
+      if (m >= 1 && m <= 12) {
+        for (const w of weeksInMonth(year, m)) acc.add(w);
+      }
+    }
+    return acc.size > 0 ? acc : null;
+  })();
 
   // Traemos contratos con sus items + datos de cliente/país + programas.
   const { data: contracts } = await supabase
@@ -1438,7 +1453,7 @@ export async function getTopRankings(params: {
     .select(
       `id, total_neto_usd, status, client_id,
        client:clients!inner ( id, name, country:countries ( id, name_es ) ),
-       contract_items ( qty_plants, delivery_year, deleted_at, genetic_program_id )`,
+       contract_items ( qty_plants, delivery_year, delivery_week, deleted_at, genetic_program_id )`,
     )
     .is("deleted_at", null)
     .in("status", [
@@ -1457,6 +1472,7 @@ export async function getTopRankings(params: {
   type ItemRow = {
     qty_plants: number | string | null;
     delivery_year: number;
+    delivery_week: number | null;
     deleted_at: string | null;
     genetic_program_id: string | null;
   };
@@ -1476,13 +1492,33 @@ export async function getTopRankings(params: {
 
   for (const c of contracts ?? []) {
     const items = (c.contract_items as ItemRow[] | null) ?? [];
-    // Items del año actual
-    const itemsYear = items.filter(
-      (it) => !it.deleted_at && Number(it.delivery_year) === year,
-    );
-    if (itemsYear.length === 0) continue;
+    // Items del año (y mes si se filtra)
+    const itemsInPeriod = items.filter((it) => {
+      if (it.deleted_at) return false;
+      if (Number(it.delivery_year) !== year) return false;
+      if (monthWeeks) {
+        if (it.delivery_week == null) return false;
+        if (!monthWeeks.has(Number(it.delivery_week))) return false;
+      }
+      return true;
+    });
+    if (itemsInPeriod.length === 0) continue;
 
-    const usd = Number(c.total_neto_usd ?? 0);
+    const contractUsd = Number(c.total_neto_usd ?? 0);
+    if (contractUsd === 0) continue;
+
+    // Prorrateo: USD atribuido al período = total_neto_usd × (plantas en período / plantas totales del contrato).
+    // Para "Año actual" sin filtro de mes, el ratio queda ~1 si todos los items son del año.
+    const totalPlantsContract = items.reduce(
+      (a, it) => (it.deleted_at ? a : a + Number(it.qty_plants ?? 0)),
+      0,
+    );
+    const plantsInPeriod = itemsInPeriod.reduce(
+      (a, it) => a + Number(it.qty_plants ?? 0),
+      0,
+    );
+    const periodRatio = totalPlantsContract > 0 ? plantsInPeriod / totalPlantsContract : 0;
+    const usd = contractUsd * periodRatio;
     if (usd === 0) continue;
 
     grandTotal += usd;
@@ -1503,20 +1539,16 @@ export async function getTopRankings(params: {
       else byCountry.set(country.id, { name: country.name_es, usd });
     }
 
-    // Programa genético: split por qty_plants del año
-    const totalPlantsYear = itemsYear.reduce(
-      (a, it) => a + Number(it.qty_plants ?? 0),
-      0,
-    );
-    if (totalPlantsYear > 0) {
+    // Programa genético: split de la usd del período por qty_plants del programa
+    if (plantsInPeriod > 0) {
       const plantsByProgram = new Map<string, number>();
-      for (const it of itemsYear) {
+      for (const it of itemsInPeriod) {
         const pgId = it.genetic_program_id ?? "__sin_programa__";
         const qty = Number(it.qty_plants ?? 0);
         plantsByProgram.set(pgId, (plantsByProgram.get(pgId) ?? 0) + qty);
       }
       for (const [pgId, plants] of plantsByProgram) {
-        const share = plants / totalPlantsYear;
+        const share = plants / plantsInPeriod;
         const attributedUsd = usd * share;
         const prev = byProgram.get(pgId);
         if (prev) prev.usd += attributedUsd;

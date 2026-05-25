@@ -7,32 +7,34 @@ import { formatUsd } from "@/lib/format";
 
 type Props = {
   data: TopRankingsData;
+  /** Label del período activo para mostrar en el header (ej "este mes", "2027"). */
+  periodLabel: string;
 };
 
 /**
  * Tres mini-rankings (top 5) que complementan al país-grid del dashboard:
  * programa genético, cliente, país — todos por USD comprometido del
- * año actual. Cada ranking incluye barra visual de share relativo.
+ * período activo. Cambian al cambiar el chip de período.
  */
-export function TopRankings({ data }: Props) {
+export function TopRankings({ data, periodLabel }: Props) {
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
       <RankingCard
         title="Top programas genéticos"
         icon={Sprout}
-        year={data.year}
+        periodLabel={periodLabel}
         items={data.programs}
       />
       <RankingCard
         title="Top clientes"
         icon={Building2}
-        year={data.year}
+        periodLabel={periodLabel}
         items={data.clients}
       />
       <RankingCard
         title="Top países"
         icon={Globe2}
-        year={data.year}
+        periodLabel={periodLabel}
         items={data.countries}
       />
     </div>
@@ -42,12 +44,12 @@ export function TopRankings({ data }: Props) {
 function RankingCard({
   title,
   icon: Icon,
-  year,
+  periodLabel,
   items,
 }: {
   title: string;
   icon: LucideIcon;
-  year: number;
+  periodLabel: string;
   items: TopRankingItem[];
 }) {
   return (
@@ -57,7 +59,7 @@ function RankingCard({
           <Icon className="size-3.5 text-muted-foreground" />
           {title}
         </span>
-        <span className="tabular-nums text-muted-foreground">{year}</span>
+        <span className="tabular-nums text-muted-foreground">{periodLabel}</span>
       </div>
       {items.length === 0 ? (
         <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
