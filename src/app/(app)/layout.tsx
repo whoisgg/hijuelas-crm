@@ -24,10 +24,18 @@ export default async function AppLayout({
     redirect("/login");
   }
 
+  // Role check para mostrar entradas admin en la nav.
+  const { data: appUser } = await supabase
+    .from("app_users")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isAdmin = appUser?.role === "admin";
+
   return (
     <div className="min-h-screen bg-background">
       <Topbar userEmail={user.email ?? null} />
-      <Sidebar />
+      <Sidebar isAdmin={isAdmin} />
       <BottomNav />
       {/* Desktop: padding-left para sidebar (w-14). Mobile: padding-bottom
           para que el bottom-nav (h-16 aprox + safe-area) no tape contenido. */}

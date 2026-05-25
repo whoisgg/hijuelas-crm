@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleHelp } from "lucide-react";
+import { CircleHelp, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/constants";
+import { NAV_ITEMS, type NavItem } from "@/lib/constants";
 import {
   Tooltip,
   TooltipContent,
@@ -13,8 +13,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export function Sidebar() {
+const ADMIN_NAV: NavItem = {
+  label: "Usuarios",
+  href: "/admin/usuarios",
+  icon: Shield,
+};
+
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV] : NAV_ITEMS;
 
   return (
     <TooltipProvider delay={200}>
@@ -29,7 +36,7 @@ export function Sidebar() {
       >
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3">
           <ul className="flex flex-col gap-1 px-2">
-            {NAV_ITEMS.map((item) => {
+            {items.map((item) => {
               const Icon = item.icon;
               const isActive =
                 pathname === item.href ||
