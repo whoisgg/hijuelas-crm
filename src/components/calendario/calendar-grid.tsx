@@ -869,8 +869,10 @@ export function CalendarGrid({
                   ? (weeks[idx - 1] as { year: number }).year !== colW.year
                   : (months[idx - 1] as { year: number }).year !== colM.year);
 
-              // Year-change divider: solo en transiciones (NO en idx=0)
-              const showYearDivider = idx > 0 && isFirstOfYear;
+              // Year-divider en CUALQUIER fila que sea primera del año, incluyendo
+              // idx=0 — así Wk22 (current) tiene la misma altura que el resto y
+              // el año queda claro al inicio del calendario también.
+              const showYearDivider = isFirstOfYear;
 
               return (
                 <React.Fragment key={periodKey}>
@@ -915,26 +917,18 @@ export function CalendarGrid({
                           }
                         >
                           {periodLabel!.subLabel} {periodLabel!.month}
-                          {/* Año solo en la primera fila (idx 0) — los year-changes posteriores tienen su propia banner row */}
-                          {idx === 0 ? ` ${year}` : ""}
+                          {/* El año se muestra en la banner row "▸ YYYY ◂" — no inline para mantener altura uniforme */}
                         </div>
                       </>
                     ) : (
-                      <>
-                        <div
-                          className={
-                            "text-sm font-semibold uppercase tracking-wider " +
-                            (isCur ? "text-primary" : "text-foreground")
-                          }
-                        >
-                          {monthName}
-                        </div>
-                        {isFirstOfYear ? (
-                          <div className="font-mono text-[10px] text-muted-foreground">
-                            {year}
-                          </div>
-                        ) : null}
-                      </>
+                      <div
+                        className={
+                          "text-sm font-semibold uppercase tracking-wider " +
+                          (isCur ? "text-primary" : "text-foreground")
+                        }
+                      >
+                        {monthName}
+                      </div>
                     )}
                   </div>
 
