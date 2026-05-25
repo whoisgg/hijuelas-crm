@@ -177,7 +177,15 @@ async function DashboardContent({
               />
             </div>
           ) : (
-            <WorldMap data={mapData} includeOpportunities={false} />
+            <WorldMap
+              data={mapData}
+              includeOpportunities={false}
+              // Zoom enfocado en las Americas + Atlántico (cubre los
+              // mercados reales: AR/BR/CL/CO/EC/MX/PE + ES/NL/PT + MA/ZM).
+              // El cuadrante NE (Asia) queda parcialmente fuera — es OK,
+              // Korea es marginal vs el volumen de Americas.
+              projectionConfig={{ scale: 360, center: [-40, 15] }}
+            />
           )}
         </div>
       </Card>

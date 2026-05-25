@@ -22,6 +22,12 @@ const GEO_URL = "https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json"
 type Props = {
   data: MapCountryDatum[];
   includeOpportunities: boolean;
+  /**
+   * Override de la proyección. Default: vista mundial centrada en
+   * Atlántico (scale 220). El dashboard pasa un zoom más cerrado para
+   * que las Americas + Europa/África se vean grandes.
+   */
+  projectionConfig?: { scale?: number; center?: [number, number] };
 };
 
 // Stable categorical palette — distinct hues, oklch for harmony with theme
@@ -82,7 +88,7 @@ const CENTROIDS: Record<string, [number, number]> = {
   ITA: [12.6, 41.9],
 };
 
-export function WorldMap({ data, includeOpportunities }: Props) {
+export function WorldMap({ data, includeOpportunities, projectionConfig }: Props) {
   const router = useRouter();
   const [hover, setHover] = React.useState<HoverPayload | null>(null);
 
@@ -122,7 +128,10 @@ export function WorldMap({ data, includeOpportunities }: Props) {
     <div className="relative h-full w-full">
       <ComposableMap
         projection="geoEqualEarth"
-        projectionConfig={{ scale: 220, center: [-30, 5] }}
+        projectionConfig={{
+          scale: projectionConfig?.scale ?? 220,
+          center: projectionConfig?.center ?? [-30, 5],
+        }}
         className="h-full w-full"
         style={{ background: "transparent" }}
       >
