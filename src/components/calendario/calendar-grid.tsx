@@ -470,10 +470,60 @@ export function CalendarGrid({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // NOTE: sticky toolbar+KPIs+legend block está pendiente — la primera
-  // implementación empujaba los country headers ~300px hacia abajo, lo
-  // que no se ve bien. Pendiente: solo el toolbar (filters/search) sticky
-  // y dejar KPIs+legend en flujo normal. Ver Obsidian.
+  // Sticky toolbar: solo la barra de filtros se queda pegada bajo la
+  // topbar al scrollear. KPIs y legend en flujo normal (se pierden en
+  // scroll, está OK — los country headers + columna Total dan referencia).
+  // El intento previo (6edebde, reverted) stickó todo el bloque y
+  // empujaba country headers ~300px abajo.
+  // ResizeObserver mide la altura del wrapper sticky (cambia con
+  // flex-wrap en viewports angostos) para calcular dónde anclar los
+  // country headers (top = 56px topbar + altura toolbar).
+  const toolbarBlockRef = React.useRef<HTMLDivElement | null>(null);
+  const gridContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const [toolbarH, setToolbarH] = React.useState(0);
+  // useLayoutEffect: medimos sincrónicamente antes del paint para evitar
+  // un flash de headers en posición incorrecta.
+  React.useLayoutEffect(() => {
+    const node = toolbarBlockRef.current;
+    if (!node) return;
+    setToolbarH(Math.ceil(node.getBoundingClientRect().height));
+    const ro = new ResizeObserver(([entry]) => {
+      if (entry) setToolbarH(Math.ceil(entry.contentRect.height));
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+  // El contenedor del grid tiene overflow-x:auto (necesario para scroll
+  // horizontal cuando hay muchos países), lo cual fuerza overflow-y:auto
+  // por spec CSS y crea un *sticky context* propio. Eso significa que
+  // los headers del grid se anclan al contenedor — no a la ventana — y
+  // su posición en viewport varía con el scroll de la página.
+  //
+  // Fix: scroll listener (con rAF) que computa el sticky-top dinámico
+  // necesario para que el header quede SIEMPRE bajo el toolbar (en
+  // viewport position = 56 topbar + altura toolbar). Escribe a una CSS
+  // variable para no disparar re-renders.
+  React.useLayoutEffect(() => {
+    const target = 56 + toolbarH;
+    const wrapper = gridContainerRef.current;
+    if (!wrapper) return;
+    let raf = 0;
+    const update = () => {
+      const containerTop = wrapper.getBoundingClientRect().top;
+      const stickyTop = Math.max(0, target - containerTop);
+      wrapper.style.setProperty("--cal-hdr-top", stickyTop + "px");
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [toolbarH]);
 
   React.useEffect(() => {
     const node = sentinelRef.current;
@@ -524,6 +574,13 @@ export function CalendarGrid({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Toolbar sticky — bg-background + negative margins para full-bleed
+          (compensa el p-6 del AppShell main) y que el contenido scrolleando
+          por debajo no se vea por los costados. */}
+      <div
+        ref={toolbarBlockRef}
+        className="sticky top-14 z-30 -mx-6 bg-background px-6 pb-2"
+      >
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
         {/* Nav buttons */}
@@ -679,6 +736,8 @@ export function CalendarGrid({
           </Select>
         ) : null}
       </div>
+      </div>
+      {/* /Toolbar sticky */}
 
       {/* KPIs — total entregas y breakdown por año (respetan los filtros).
           Ocultos en mobile para dar espacio al grid. */}
@@ -751,8 +810,15 @@ export function CalendarGrid({
       {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
           UN SOLO grid — header y body comparten gridTemplateColumns por
           definición, garantizando alineación perfecta. Header cells sticky
-          top-14 quedan abajo de la topbar al scrollear. */}
-      <div className="overflow-x-hidden rounded-lg border bg-card md:overflow-x-auto">
+          con top dinámico = 56 (topbar) + altura del toolbar sticky. */}
+      {/* Contenedor del grid: overflow-x-auto crea un sticky context propio
+          (CSS coerce overflow-y a auto también). Para que los headers
+          internos queden anclados bajo el toolbar al hacer scroll, ver
+          el useLayoutEffect que actualiza --cal-hdr-top con rAF. */}
+      <div
+        ref={gridContainerRef}
+        className="overflow-x-hidden rounded-lg border bg-card md:overflow-x-auto"
+      >
         <div
           className="grid"
           style={{
@@ -764,26 +830,38 @@ export function CalendarGrid({
               : `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
-          {/* Header row — sticky top-14 a nivel viewport, cell-by-cell. */}
-          <div className="sticky left-0 top-14 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3">
+          {/* Header row — sticky con top dinámico = 56 (topbar fixed) +
+              altura del toolbar sticky. Cell-by-cell. z-30 para el corner
+              left (también sticky-left), z-20 para los headers de país. */}
+          <div
+            className="sticky left-0 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3"
+            style={{ top: "var(--cal-hdr-top, 56px)" }}
+          >
             {isMobile ? (viewMode === "week" ? "Wk" : "Mes") : "Período"}
           </div>
           {isMobile ? (
-            <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div
+              className="sticky z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+              style={{ top: "var(--cal-hdr-top, 56px)" }}
+            >
               Entregas
             </div>
           ) : (
             allCountries.map((c) => (
               <div
                 key={`hdr-${c.iso2}`}
-                className="sticky top-14 z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
+                className="sticky z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
+                style={{ top: "var(--cal-hdr-top, 56px)" }}
               >
                 <CountryFlag iso2={c.iso2} size="sm" />
                 <span className="truncate font-medium">{c.name}</span>
               </div>
             ))
           )}
-          <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div
+            className="sticky z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+            style={{ top: "var(--cal-hdr-top, 56px)" }}
+          >
             Total
           </div>
           {/* Body: una fila por período */}
