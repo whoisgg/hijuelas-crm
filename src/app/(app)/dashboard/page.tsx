@@ -27,8 +27,11 @@ type DashboardSearchParams = {
 };
 
 /**
- * Parse `?month=YYYY-MM` → { year, month } | { year, month: null } (= todo el año).
- * Default (sin param) = MES ACTUAL. `?month=all` = año completo explícito.
+ * Parse `?month=`:
+ *  - sin param → mes actual (default)
+ *  - "all"     → todos los años (no filter)
+ *  - "YYYY"    → año completo (month=null pero year=Y)
+ *  - "YYYY-MM" → mes específico
  */
 function parseMonthParam(value: string | undefined): {
   year: number;
@@ -38,22 +41,33 @@ function parseMonthParam(value: string | undefined): {
   const now = new Date();
   const currentYear = now.getUTCFullYear();
   const currentMonth = now.getUTCMonth() + 1;
+  const currentSelected = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
   // Default: mes actual
   if (!value) {
-    const selected = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
-    return { year: currentYear, month: currentMonth, selected };
+    return { year: currentYear, month: currentMonth, selected: currentSelected };
   }
   if (value === "all") {
     return { year: currentYear, month: null, selected: "all" };
   }
-  const match = /^(\d{4})-(\d{2})$/.exec(value);
-  if (!match) return { year: currentYear, month: currentMonth, selected: `${currentYear}-${String(currentMonth).padStart(2, "0")}` };
-  const y = Number(match[1]);
-  const m = Number(match[2]);
-  if (!Number.isFinite(y) || m < 1 || m > 12) {
-    return { year: currentYear, month: currentMonth, selected: `${currentYear}-${String(currentMonth).padStart(2, "0")}` };
+  // YYYY-MM
+  const matchMonth = /^(\d{4})-(\d{2})$/.exec(value);
+  if (matchMonth) {
+    const y = Number(matchMonth[1]);
+    const m = Number(matchMonth[2]);
+    if (Number.isFinite(y) && m >= 1 && m <= 12) {
+      return { year: y, month: m, selected: value };
+    }
   }
-  return { year: y, month: m, selected: value };
+  // YYYY
+  const matchYear = /^(\d{4})$/.exec(value);
+  if (matchYear) {
+    const y = Number(matchYear[1]);
+    if (Number.isFinite(y)) {
+      return { year: y, month: null, selected: value };
+    }
+  }
+  // Fallback
+  return { year: currentYear, month: currentMonth, selected: currentSelected };
 }
 
 export default async function DashboardPage({
@@ -199,7 +213,10 @@ async function DashboardContent({
               // mercados reales: AR/BR/CL/CO/EC/MX/PE + ES/NL/PT + MA/ZM).
               // El cuadrante NE (Asia) queda parcialmente fuera — es OK,
               // Korea es marginal vs el volumen de Americas.
-              projectionConfig={{ scale: 360, center: [-40, 15] }}
+              // Crop ajustado: México como tope, Argentina como base.
+              // No mostramos USA/Canadá (poca/ninguna actividad) ni el
+              // ártico. Europa/África/Korea quedan dentro al lado este.
+              projectionConfig={{ scale: 420, center: [-40, -5] }}
             />
           )}
         </div>
