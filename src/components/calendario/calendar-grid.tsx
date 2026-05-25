@@ -458,6 +458,31 @@ export function CalendarGrid({
   // IntersectionObserver: cuando el sentinel del final entra al viewport,
   // carga 10 periodos más.
   const sentinelRef = React.useRef<HTMLButtonElement | null>(null);
+  // Refs para sincronizar scroll horizontal entre el header sticky (fuera del
+  // wrapper para que el sticky-top funcione relativo al viewport) y el body.
+  const headerScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const bodyScrollRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const body = bodyScrollRef.current;
+    const header = headerScrollRef.current;
+    if (!body || !header) return;
+    const onBodyScroll = () => {
+      if (header.scrollLeft !== body.scrollLeft) {
+        header.scrollLeft = body.scrollLeft;
+      }
+    };
+    const onHeaderScroll = () => {
+      if (body.scrollLeft !== header.scrollLeft) {
+        body.scrollLeft = header.scrollLeft;
+      }
+    };
+    body.addEventListener("scroll", onBodyScroll, { passive: true });
+    header.addEventListener("scroll", onHeaderScroll, { passive: true });
+    return () => {
+      body.removeEventListener("scroll", onBodyScroll);
+      header.removeEventListener("scroll", onHeaderScroll);
+    };
+  }, []);
   React.useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
@@ -731,9 +756,42 @@ export function CalendarGrid({
       </div>
 
       {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
-          Vertical scroll = página (natural). Horizontal scroll = grid (cuando
-          hay más países que ancho disponible). */}
-      <div className="overflow-x-auto rounded-lg border bg-card">
+          Header sticky a top del viewport (FUERA del wrapper para que funcione
+          el sticky correctamente). Body en wrapper con overflow-x-auto.
+          Scroll horizontal sincronizado via JS entre header y body. */}
+      <div className="rounded-lg border bg-card">
+        {/* Sticky header: solo countries, scroll horizontal sincronizado */}
+        <div
+          ref={headerScrollRef}
+          className="sticky top-14 z-20 overflow-x-auto border-b bg-card"
+        >
+          <div
+            className="grid"
+            style={{
+              gridTemplateColumns: `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
+              minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
+            }}
+          >
+            <div className="border-r px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Período
+            </div>
+            {allCountries.map((c) => (
+              <div
+                key={`hdr-${c.iso2}`}
+                className="flex items-center gap-1.5 border-r px-2 py-2 text-xs"
+              >
+                <CountryFlag iso2={c.iso2} size="sm" />
+                <span className="truncate font-medium">{c.name}</span>
+              </div>
+            ))}
+            <div className="border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Total
+            </div>
+          </div>
+        </div>
+
+        {/* Body: scroll horizontal independiente, sync via JS con el header */}
+        <div ref={bodyScrollRef} className="overflow-x-auto">
         <div
           className="grid"
           style={{
@@ -741,23 +799,6 @@ export function CalendarGrid({
             minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
-          {/* Header row (sticky top): País por país */}
-          <div className="sticky top-14 z-20 border-b border-r bg-card px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Período
-          </div>
-          {allCountries.map((c) => (
-            <div
-              key={`hdr-${c.iso2}`}
-              className="sticky top-14 z-20 flex items-center gap-1.5 border-b border-r bg-card px-2 py-2 text-xs"
-            >
-              <CountryFlag iso2={c.iso2} size="sm" />
-              <span className="truncate font-medium">{c.name}</span>
-            </div>
-          ))}
-          <div className="sticky top-14 z-20 border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Total
-          </div>
-
           {/* Body: una fila por período */}
           {countryRows.length === 0 ? (
             <div
@@ -1031,6 +1072,7 @@ export function CalendarGrid({
               );
             })
           )}
+        </div>
         </div>
       </div>
 
