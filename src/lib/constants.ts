@@ -86,8 +86,7 @@ export type QuickCreateItem = {
 };
 
 export const QUICK_CREATE_ITEMS: QuickCreateItem[] = [
-  { label: "Cliente", href: "/clientes/nuevo", shortcut: "n c" },
-  { label: "Contrato", href: "/contratos/nuevo", shortcut: "n k" },
-  { label: "Oportunidad", href: "/oportunidades/nueva", shortcut: "n o" },
-  { label: "Actividad", href: "/actividades/nueva", shortcut: "n t" },
+  { label: "Cliente", href: "/clientes/nuevo" },
+  { label: "Contrato", href: "/contratos/nuevo" },
+  { label: "Oportunidad", href: "/oportunidades/nueva" },
 ];

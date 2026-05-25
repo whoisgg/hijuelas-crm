@@ -226,7 +226,11 @@ export function NewOpportunityForm({
             }}
           >
             <SelectTrigger id="organization" className="w-full">
-              <SelectValue placeholder="Selecciona" />
+              <SelectValue placeholder="Selecciona">
+                {(value) =>
+                  organizations.find((o) => o.id === value)?.name ?? "Selecciona"
+                }
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {organizations.map((o) => (
@@ -247,7 +251,9 @@ export function NewOpportunityForm({
             }}
           >
             <SelectTrigger id="stage" className="w-full">
-              <SelectValue placeholder="Selecciona" />
+              <SelectValue placeholder="Selecciona">
+                {(value) => stages.find((s) => s.id === value)?.name ?? "Selecciona"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {stages.map((s) => (
@@ -272,7 +278,12 @@ export function NewOpportunityForm({
             }}
           >
             <SelectTrigger id="owner" className="w-full">
-              <SelectValue placeholder="Sin owner" />
+              <SelectValue placeholder="Sin owner">
+                {(value) => {
+                  const u = users.find((x) => x.id === value);
+                  return u ? (u.full_name ?? u.email ?? "—") : "Sin owner";
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {users.map((u) => (
