@@ -116,6 +116,26 @@ export type MapCountryDatum = {
   opportunitiesCount: number;
 };
 
+export type ContractStatusCounts = {
+  firmados: number;    // firmado + en_proceso + finalizado
+  porFirmar: number;   // borrador + por_revisar
+  cancelados: number;  // cancelado
+};
+
+export type YearCommitmentKpi = {
+  year: number;
+  plants: number;
+};
+
+export type DashboardSummary = {
+  year: number;
+  month: number | null; // 1-12 si filtrado por mes, null si todo el año
+  mapData: MapCountryDatum[];
+  statusCounts: ContractStatusCounts;
+  currentYearCommitments: YearCommitmentKpi;
+  nextYearCommitments: YearCommitmentKpi;
+};
+
 export type CalendarFilters = {
   ownerId?: string | null;
   clientId?: string | null;
@@ -163,6 +183,25 @@ export type CatalogStats = {
 const PAGE_SIZE = 1000;
 
 const currentYear = (): number => new Date().getUTCFullYear();
+
+/**
+ * Set de números de semana ISO que CAEN al menos parcialmente dentro
+ * del mes calendario `month` (1-12) del año `year`. Una semana puede
+ * pertenecer a dos meses adyacentes — la incluimos en ambos.
+ */
+function weeksInMonth(year: number, month: number): number[] {
+  const result = new Set<number>();
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const lastDay = new Date(Date.UTC(year, month, 0));
+  for (
+    let d = new Date(firstDay);
+    d.getTime() <= lastDay.getTime();
+    d.setUTCDate(d.getUTCDate() + 1)
+  ) {
+    result.add(getISOWeek(d));
+  }
+  return Array.from(result).sort((a, b) => a - b);
+}
 
 /** Sum helper que ignora null/undefined. */
 function sum<T>(items: readonly T[], pick: (item: T) => number | null | undefined): number {
@@ -654,6 +693,12 @@ export async function getMyPendingTasks(limit = 8): Promise<PendingTask[]> {
 
 export type MapFilters = {
   year?: number;
+  /**
+   * Mes calendario 1-12. Si se pasa, filtra contract_items por
+   * delivery_week dentro de ese mes (usando weeksInMonth). null/undefined
+   * = todo el año.
+   */
+  month?: number | null;
   organizationId?: string | null;
   speciesId?: string | null;
   includeOpportunities?: boolean;
@@ -665,6 +710,12 @@ export async function getMapData(
 ): Promise<MapCountryDatum[]> {
   const supabase = await createClient();
   const year = filters.year ?? currentYear();
+  // Si hay filtro de mes, precomputamos las semanas ISO que caen en él.
+  // Null = sin filtro de mes (todo el año).
+  const monthWeeks =
+    filters.month != null && filters.month >= 1 && filters.month <= 12
+      ? new Set(weeksInMonth(year, filters.month))
+      : null;
 
   // Lista de países como base
   const countriesRes = await supabase
@@ -693,7 +744,7 @@ export async function getMapData(
   let contractsQ = supabase
     .from("contracts")
     .select(
-      "id, client_id, status, total_neto_usd, organization_id, clients!inner(country_id), contract_items(qty_plants, variety_id, delivery_year, deleted_at, varieties(species_id))",
+      "id, client_id, status, total_neto_usd, organization_id, clients!inner(country_id), contract_items(qty_plants, variety_id, delivery_year, delivery_week, deleted_at, varieties(species_id))",
     )
     .is("deleted_at", null);
 
@@ -710,6 +761,7 @@ export async function getMapData(
     qty_plants: number | string;
     variety_id: string;
     delivery_year: number;
+    delivery_week: number | null;
     deleted_at: string | null;
     varieties: { species_id: string | null } | { species_id: string | null }[] | null;
   };
@@ -729,6 +781,12 @@ export async function getMapData(
     for (const item of items) {
       if (item.deleted_at) continue;
       if (Number(item.delivery_year) !== year) continue;
+      // Filtro de mes: incluir solo items cuya semana ISO cae en el mes.
+      // Items sin delivery_week se excluyen del filtro de mes.
+      if (monthWeeks) {
+        if (item.delivery_week == null) continue;
+        if (!monthWeeks.has(Number(item.delivery_week))) continue;
+      }
       if (filters.speciesId) {
         const speciesRel = item.varieties as { species_id: string | null } | { species_id: string | null }[] | null;
         const speciesIdItem = Array.isArray(speciesRel) ? speciesRel[0]?.species_id : speciesRel?.species_id;
@@ -1237,4 +1295,91 @@ export async function getClientsLookup(): Promise<LookupItem[]> {
     .order("name")
     .limit(PAGE_SIZE);
   return (res.data ?? []).map((c) => ({ id: c.id, label: c.name }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Dashboard Summary — landing page: mapa + KPIs status + KPIs año            */
+/* -------------------------------------------------------------------------- */
+
+const STATUS_FIRMADOS = ["firmado", "en_proceso", "finalizado"];
+const STATUS_POR_FIRMAR = ["borrador", "por_revisar"];
+const STATUS_CANCELADOS = ["cancelado"];
+
+export type DashboardSummaryParams = {
+  /** Mes calendario 1-12. Si null/undefined, el mapa toma el año completo. */
+  month?: number | null;
+  /** Año del slider; default = año actual UTC. */
+  year?: number;
+};
+
+/**
+ * Carga todo lo necesario para el Dashboard home en una sola llamada
+ * server-side (evita waterfalls):
+ *  - mapa con plantas comprometidas por país (filtradas por mes si se pide)
+ *  - conteo de contratos por status group (firmados / por firmar / cancelados),
+ *    siempre snapshot total (no del mes)
+ *  - plantas comprometidas año actual + próximo (totales del año, fijos)
+ */
+export async function getDashboardSummary(
+  params: DashboardSummaryParams = {},
+): Promise<DashboardSummary> {
+  const year = params.year ?? currentYear();
+  const month = params.month ?? null;
+  const supabase = await createClient();
+
+  const [mapData, statusRes, currYearRes, nextYearRes] = await Promise.all([
+    // Para el mapa: TODOS los contratos comprometidos (firmados + por firmar),
+    // excluyendo solo los cancelados. Los KPIs muestran el desglose por
+    // status, así que el mapa muestra el universo de compromisos activos.
+    getMapData({
+      year,
+      month,
+      contractStatuses: [...STATUS_FIRMADOS, ...STATUS_POR_FIRMAR],
+    }),
+    supabase
+      .from("contracts")
+      .select("status")
+      .is("deleted_at", null),
+    supabase
+      .from("contract_items")
+      .select("qty_plants")
+      .eq("delivery_year", year)
+      .is("deleted_at", null),
+    supabase
+      .from("contract_items")
+      .select("qty_plants")
+      .eq("delivery_year", year + 1)
+      .is("deleted_at", null),
+  ]);
+
+  const statusRows = statusRes.data ?? [];
+  const statusCounts: ContractStatusCounts = {
+    firmados: 0,
+    porFirmar: 0,
+    cancelados: 0,
+  };
+  for (const c of statusRows) {
+    const s = c.status as string;
+    if (STATUS_FIRMADOS.includes(s)) statusCounts.firmados++;
+    else if (STATUS_POR_FIRMAR.includes(s)) statusCounts.porFirmar++;
+    else if (STATUS_CANCELADOS.includes(s)) statusCounts.cancelados++;
+  }
+
+  const currentYearCommitments: YearCommitmentKpi = {
+    year,
+    plants: sum(currYearRes.data ?? [], (i) => Number(i.qty_plants)),
+  };
+  const nextYearCommitments: YearCommitmentKpi = {
+    year: year + 1,
+    plants: sum(nextYearRes.data ?? [], (i) => Number(i.qty_plants)),
+  };
+
+  return {
+    year,
+    month,
+    mapData,
+    statusCounts,
+    currentYearCommitments,
+    nextYearCommitments,
+  };
 }
