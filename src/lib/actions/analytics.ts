@@ -102,6 +102,21 @@ export type PendingTask = {
   opportunityName: string;
 };
 
+export type TopRankingItem = {
+  key: string;       // id (genetic_program | client | country)
+  name: string;
+  totalUsd: number;
+  share: number;     // 0..1, share of total visible
+};
+
+export type TopRankings = {
+  year: number;
+  totalUsd: number;  // gran total considerado en el ranking
+  programs: TopRankingItem[];
+  clients: TopRankingItem[];
+  countries: TopRankingItem[];
+};
+
 export type MapCountryDatum = {
   countryId: string;
   iso2: string;
@@ -1392,5 +1407,162 @@ export async function getDashboardSummary(
     statusCounts,
     currentYearCommitments,
     nextYearCommitments,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Top Rankings — dashboard: top 5 por programa genético / cliente / país     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Top 5 por dimensión, basado en USD comprometido del año.
+ *
+ * Metodología:
+ *  - Contratos del año: que tengan al menos un item con delivery_year=year,
+ *    en status no cancelado.
+ *  - USD por cliente / país: sum directo de contract.total_neto_usd
+ *    (ya convertido a USD por la action de contratos).
+ *  - USD por programa genético: split prorrateado del total_neto_usd
+ *    según la fracción de qty_plants del programa en ese contrato (en
+ *    items del año). Esto evita problemas de currency mixto en items.
+ */
+export async function getTopRankings(params: {
+  year?: number;
+} = {}): Promise<TopRankings> {
+  const year = params.year ?? currentYear();
+  const supabase = await createClient();
+
+  // Traemos contratos con sus items + datos de cliente/país + programas.
+  const { data: contracts } = await supabase
+    .from("contracts")
+    .select(
+      `id, total_neto_usd, status, client_id,
+       client:clients!inner ( id, name, country:countries ( id, name_es ) ),
+       contract_items ( qty_plants, delivery_year, deleted_at, genetic_program_id )`,
+    )
+    .is("deleted_at", null)
+    .in("status", [
+      "firmado",
+      "en_proceso",
+      "finalizado",
+      "borrador",
+      "por_revisar",
+    ]);
+
+  type ClientRel = {
+    id: string;
+    name: string;
+    country: { id: string; name_es: string } | { id: string; name_es: string }[] | null;
+  };
+  type ItemRow = {
+    qty_plants: number | string | null;
+    delivery_year: number;
+    deleted_at: string | null;
+    genetic_program_id: string | null;
+  };
+
+  const pickOne = <T,>(v: unknown): T | null => {
+    if (!v) return null;
+    if (Array.isArray(v)) return (v[0] as T) ?? null;
+    return v as T;
+  };
+
+  // Mapas para acumular USD por dimensión
+  const byClient = new Map<string, { name: string; usd: number }>();
+  const byCountry = new Map<string, { name: string; usd: number }>();
+  const byProgram = new Map<string, { usd: number }>(); // name se resuelve después
+
+  let grandTotal = 0;
+
+  for (const c of contracts ?? []) {
+    const items = (c.contract_items as ItemRow[] | null) ?? [];
+    // Items del año actual
+    const itemsYear = items.filter(
+      (it) => !it.deleted_at && Number(it.delivery_year) === year,
+    );
+    if (itemsYear.length === 0) continue;
+
+    const usd = Number(c.total_neto_usd ?? 0);
+    if (usd === 0) continue;
+
+    grandTotal += usd;
+
+    // Cliente
+    const cli = pickOne<ClientRel>(c.client);
+    if (cli?.id) {
+      const prev = byClient.get(cli.id);
+      if (prev) prev.usd += usd;
+      else byClient.set(cli.id, { name: cli.name, usd });
+    }
+
+    // País
+    const country = cli ? pickOne<{ id: string; name_es: string }>(cli.country) : null;
+    if (country?.id) {
+      const prev = byCountry.get(country.id);
+      if (prev) prev.usd += usd;
+      else byCountry.set(country.id, { name: country.name_es, usd });
+    }
+
+    // Programa genético: split por qty_plants del año
+    const totalPlantsYear = itemsYear.reduce(
+      (a, it) => a + Number(it.qty_plants ?? 0),
+      0,
+    );
+    if (totalPlantsYear > 0) {
+      const plantsByProgram = new Map<string, number>();
+      for (const it of itemsYear) {
+        const pgId = it.genetic_program_id ?? "__sin_programa__";
+        const qty = Number(it.qty_plants ?? 0);
+        plantsByProgram.set(pgId, (plantsByProgram.get(pgId) ?? 0) + qty);
+      }
+      for (const [pgId, plants] of plantsByProgram) {
+        const share = plants / totalPlantsYear;
+        const attributedUsd = usd * share;
+        const prev = byProgram.get(pgId);
+        if (prev) prev.usd += attributedUsd;
+        else byProgram.set(pgId, { usd: attributedUsd });
+      }
+    }
+  }
+
+  // Resolver nombres de programas genéticos
+  const programIds = Array.from(byProgram.keys()).filter(
+    (id) => id !== "__sin_programa__",
+  );
+  const programNames = new Map<string, string>();
+  if (programIds.length > 0) {
+    const { data: pgs } = await supabase
+      .from("genetic_programs")
+      .select("id, name")
+      .in("id", programIds);
+    for (const pg of pgs ?? []) programNames.set(pg.id, pg.name);
+  }
+
+  const buildTop = <K extends string>(
+    map: Map<K, { name?: string; usd: number }>,
+    nameResolver?: (key: K) => string,
+  ): TopRankingItem[] => {
+    return Array.from(map.entries())
+      .map(([key, val]) => ({
+        key: String(key),
+        name: val.name ?? nameResolver?.(key) ?? "—",
+        totalUsd: val.usd,
+        share: grandTotal > 0 ? val.usd / grandTotal : 0,
+      }))
+      .filter((r) => r.totalUsd > 0)
+      .sort((a, b) => b.totalUsd - a.totalUsd)
+      .slice(0, 5);
+  };
+
+  return {
+    year,
+    totalUsd: grandTotal,
+    programs: buildTop(byProgram, (id) =>
+      id === "__sin_programa__"
+        ? "Sin programa"
+        : programNames.get(id) ?? "—",
+    ),
+    clients: buildTop(byClient),
+    countries: buildTop(byCountry),
   };
 }

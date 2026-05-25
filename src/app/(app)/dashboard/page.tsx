@@ -1,13 +1,14 @@
 import { Suspense } from "react";
 import { CheckCircle2, FileSignature, Globe2, Sprout, XCircle } from "lucide-react";
 
-import { getDashboardSummary } from "@/lib/actions/analytics";
+import { getDashboardSummary, getTopRankings } from "@/lib/actions/analytics";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { PeriodFilter, type PeriodKey } from "@/components/dashboard/period-filter";
 import { CountryGrid } from "@/components/dashboard/country-grid";
+import { TopRankings } from "@/components/dashboard/top-rankings";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { formatNumber } from "@/lib/format";
 
@@ -82,16 +83,7 @@ export default async function DashboardPage({
   const period = resolvePeriod(params.period);
 
   return (
-    <div
-      className={
-        // Altura fija = viewport - topbar (56). En mobile además restamos
-        // el bottom nav (h-16 = 4rem) + safe-area inset. overflow-hidden
-        // + flex-col + grid-card como flex-1 → el grid absorbe el remanente
-        // sin scroll vertical.
-        "mx-auto flex w-full max-w-7xl flex-col overflow-hidden px-4 py-6 md:px-6 " +
-        "h-[calc(100dvh-3.5rem-4rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem)]"
-      }
-    >
+    <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-6 md:px-6">
       <PageHeader title="Dashboard" />
 
       {/* Período rápido — 4 chips. Diferencia el dashboard del calendario
@@ -108,10 +100,12 @@ export default async function DashboardPage({
 }
 
 async function DashboardContent({ period }: { period: ResolvedPeriod }) {
-  const summary = await getDashboardSummary({
-    year: period.year,
-    months: period.months,
-  });
+  // En paralelo: summary (KPIs + país grid) + top rankings (siempre del
+  // año actual independiente del period chip).
+  const [summary, topRankings] = await Promise.all([
+    getDashboardSummary({ year: period.year, months: period.months }),
+    getTopRankings({}),
+  ]);
   const { statusCounts, mapData } = summary;
 
   // Total dinámico — suma de plantas del grid de países, refleja el
@@ -164,9 +158,12 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
         </div>
       </Card>
 
-      {/* Placeholder para widgets futuros (mantiene la página llenando
-          el viewport y aprovecha el espacio cuando hay pocos países). */}
-      <div className="hidden flex-1 md:block" />
+      {/* Rankings — top 5 programas genéticos / clientes / países por
+          USD comprometido del año actual. Independiente del period chip
+          (siempre snapshot anual para dar contexto estable). */}
+      <div className="mt-4">
+        <TopRankings data={topRankings} />
+      </div>
     </>
   );
 }
