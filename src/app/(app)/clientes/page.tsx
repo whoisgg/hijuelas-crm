@@ -4,13 +4,13 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import {
   listClients,
+  listClientsLeaderboard,
   listCountries,
   listOwners,
-  listAllClientsForCountryView,
 } from "@/lib/actions/clientes";
 import { DEFAULT_PAGE_SIZE } from "@/lib/actions/clientes-types";
 import { ClientesListView } from "@/components/clientes/clientes-list-view";
-import { ClientesByCountryView } from "@/components/clientes/clientes-by-country-view";
+import { ClientesLeaderboard } from "@/components/clientes/clientes-leaderboard";
 import { ClientesListSkeleton } from "@/components/clientes/clientes-skeletons";
 
 export const metadata = { title: "Clientes" };
@@ -30,7 +30,9 @@ export default async function ClientesPage({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const view = sp.view === "list" ? "list" : "country";
+  // Default: leaderboard (cards rankeadas por $USD). `?view=list` activa
+  // la tabla plana clásica con paginación y filtros avanzados.
+  const view = sp.view === "list" ? "list" : "leaderboard";
 
   const search = sp.q ?? "";
   const countryId = sp.country ?? "";
@@ -42,17 +44,10 @@ export default async function ClientesPage({
 
   return (
     <AppShell>
-      <PageHeader
-        title="Clientes"
-        description={
-          view === "country"
-            ? "Vista por país. Drill-down a clientes."
-            : "Lista plana con filtros avanzados."
-        }
-      />
+      <PageHeader title="Clientes" />
       <Suspense fallback={<ClientesListSkeleton />}>
-        {view === "country" ? (
-          <ClientesCountryBody />
+        {view === "leaderboard" ? (
+          <ClientesLeaderboardBody />
         ) : (
           <ClientesListBody
             search={search}
@@ -67,9 +62,9 @@ export default async function ClientesPage({
   );
 }
 
-async function ClientesCountryBody() {
-  const rows = await listAllClientsForCountryView();
-  return <ClientesByCountryView rows={rows} />;
+async function ClientesLeaderboardBody() {
+  const rows = await listClientsLeaderboard();
+  return <ClientesLeaderboard rows={rows} />;
 }
 
 async function ClientesListBody({

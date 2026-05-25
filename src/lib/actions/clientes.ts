@@ -779,6 +779,99 @@ export async function listCountries(): Promise<CountryOption[]> {
   return data ?? [];
 }
 
+/* -------------------------------------------------------------------------- */
+/* Leaderboard — vista clientes por valor                                     */
+/* -------------------------------------------------------------------------- */
+
+export type ClientLeaderRow = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  country: { iso2: string | null; name: string } | null;
+  kam: { id: string; name: string } | null;
+  activeContracts: number;       // count of contratos no cancelados
+  totalUsd: number;              // suma total_neto_usd de esos contratos
+  totalPlants: number;           // suma qty_plants de items de esos contratos
+};
+
+/**
+ * Lista completa de clientes con métricas agregadas — usada en el
+ * leaderboard del /clientes (ordenado por totalUsd desc en el cliente).
+ * Sin paginación: ~150 clientes, all-in-one es OK.
+ */
+export async function listClientsLeaderboard(): Promise<ClientLeaderRow[]> {
+  const supabase = await createClient();
+
+  // 1) Clientes con país + KAM
+  const { data: rows, error } = await supabase
+    .from("clients")
+    .select(
+      `id, name, is_active,
+       country:countries ( iso2, name_es ),
+       owner:app_users!clients_account_owner_id_fkey ( id, full_name, email )`,
+    )
+    .is("deleted_at", null)
+    .order("name");
+  if (error) throw new Error(error.message);
+
+  const ids = (rows ?? []).map((c) => c.id);
+  type Agg = { contracts: number; usd: number; plants: number };
+  const aggByClient = new Map<string, Agg>();
+
+  if (ids.length > 0) {
+    // 2) Contratos activos (excluye cancelados) + sus items para plants
+    const { data: contracts } = await supabase
+      .from("contracts")
+      .select("id, client_id, total_neto_usd, contract_items(qty_plants, deleted_at)")
+      .is("deleted_at", null)
+      .in("client_id", ids)
+      .in("status", ["firmado", "en_proceso", "finalizado", "borrador", "por_revisar"]);
+
+    type ItemRow = { qty_plants: number | string | null; deleted_at: string | null };
+    for (const c of contracts ?? []) {
+      if (!c.client_id) continue;
+      let agg = aggByClient.get(c.client_id);
+      if (!agg) {
+        agg = { contracts: 0, usd: 0, plants: 0 };
+        aggByClient.set(c.client_id, agg);
+      }
+      agg.contracts += 1;
+      agg.usd += Number(c.total_neto_usd ?? 0);
+      const items = (c.contract_items as ItemRow[] | null) ?? [];
+      for (const it of items) {
+        if (it.deleted_at) continue;
+        agg.plants += Number(it.qty_plants ?? 0);
+      }
+    }
+  }
+
+  type CountryRel = { iso2: string | null; name_es: string };
+  type OwnerRel = { id: string; full_name: string | null; email: string | null };
+  const pickOne = <T,>(v: unknown): T | null => {
+    if (!v) return null;
+    if (Array.isArray(v)) return (v[0] as T) ?? null;
+    return v as T;
+  };
+
+  return (rows ?? []).map((c) => {
+    const country = pickOne<CountryRel>(c.country);
+    const owner = pickOne<OwnerRel>(c.owner);
+    const agg = aggByClient.get(c.id) ?? { contracts: 0, usd: 0, plants: 0 };
+    return {
+      id: c.id,
+      name: c.name,
+      isActive: c.is_active ?? true,
+      country: country ? { iso2: country.iso2, name: country.name_es } : null,
+      kam: owner
+        ? { id: owner.id, name: owner.full_name ?? owner.email ?? "—" }
+        : null,
+      activeContracts: agg.contracts,
+      totalUsd: agg.usd,
+      totalPlants: agg.plants,
+    };
+  });
+}
+
 export async function listOwners(): Promise<OwnerOption[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
