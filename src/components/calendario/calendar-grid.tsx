@@ -605,7 +605,7 @@ export function CalendarGrid({
           por debajo no se vea por los costados. */}
       <div
         ref={toolbarBlockRef}
-        className="sticky top-14 z-30 -mx-6 bg-background px-6 pb-2"
+        className="sticky top-14 z-20 -mx-6 bg-background px-6 pb-2"
       >
       {/* Toolbar compacto: nav · vista · search · KPI inline · Filtros (popover).
           Filtros que antes ocupaban 2-3 filas (especies/status/opps/leyenda)
@@ -927,10 +927,13 @@ export function CalendarGrid({
           }}
         >
           {/* Header row — sticky con top dinámico = 56 (topbar fixed) +
-              altura del toolbar sticky. Cell-by-cell. z-30 para el corner
-              left (también sticky-left), z-20 para los headers de país. */}
+              altura del toolbar sticky. Cell-by-cell. z-[25] para el
+              corner left (también sticky-left, queda sobre country headers
+              en la esquina), z-20 para los headers de país.
+              NOTA: todos los sticky del calendario quedan en z ≤ 25 para
+              que el sidebar (z-30) los tape al expandirse en hover. */}
           <div
-            className="sticky left-0 z-30 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3"
+            className="sticky left-0 z-[25] min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground md:px-3"
             style={{ top: "var(--cal-hdr-top, 56px)" }}
           >
             {isMobile ? (viewMode === "week" ? "Wk" : "Mes") : "Período"}
