@@ -15,10 +15,15 @@ export function PageHeader({
   actions,
   className,
 }: PageHeaderProps) {
+  // Cuando solo hay título (sin descripción/badge/actions) no agregamos
+  // border-b ni padding/margin grande — el título alcanza, no necesita
+  // visualmente separar de la siguiente sección.
+  const isMinimal = !description && !badge && !actions;
   return (
     <div
       className={cn(
-        "mb-6 flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-end sm:justify-between",
+        "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between",
+        isMinimal ? "mb-3" : "mb-6 border-b pb-4",
         className,
       )}
     >
