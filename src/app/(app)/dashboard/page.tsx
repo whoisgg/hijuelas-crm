@@ -126,58 +126,49 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
 
   return (
     <>
-      {/* KPI Row — mobile 2 cols (compactos), desktop 3→5. Override
-          height en mobile vía [&_[data-slot=card]] para evitar wrapping
-          de labels largos. */}
-      {/* Mobile: 6-col grid con span manual → fila 1 (status x3, span-2)
-          + fila 2 (año x2, span-3). Total 2 filas en mobile, label completo
-          sin wrap. Desktop: grid normal 3→5 cols. */}
-      <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-3 md:gap-3 xl:grid-cols-5 [&>*]:col-span-2 md:[&>*]:col-span-1 [&>*:nth-child(n+4)]:col-span-3 md:[&>*:nth-child(n+4)]:col-span-1">
-        <KpiCard
-          label="Firmados"
-          value={formatNumber(statusCounts.firmados)}
-          helper="contratos activos"
-          icon={CheckCircle2}
-          tone="positive"
-        />
-        <KpiCard
-          label="Por firmar"
-          value={formatNumber(statusCounts.porFirmar)}
-          helper="borradores y revisión"
-          icon={FileSignature}
-        />
-        <KpiCard
-          label="Cancelados"
-          value={formatNumber(statusCounts.cancelados)}
-          helper="contratos descartados"
-          icon={XCircle}
-          tone="muted"
-        />
+      {/* KPI — mobile: strips compactos (sin Card chrome) que toman
+          poco vertical. Desktop: KpiCards completos en grid 3→5. */}
+      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
+        <KpiCard label="Firmados" value={formatNumber(statusCounts.firmados)} icon={CheckCircle2} tone="positive" />
+        <KpiCard label="Por firmar" value={formatNumber(statusCounts.porFirmar)} icon={FileSignature} />
+        <KpiCard label="Cancelados" value={formatNumber(statusCounts.cancelados)} icon={XCircle} tone="muted" />
         <KpiCard
           label={`Plantas ${currentYearCommitments.year}`}
-          value={formatNumber(
-            currentYearCommitments.plants,
-            currentYearCommitments.plants >= 10_000,
-          )}
-          helper="comprometidas — año completo"
+          value={formatNumber(currentYearCommitments.plants, currentYearCommitments.plants >= 10_000)}
           icon={Sprout}
         />
         <KpiCard
           label={`Plantas ${nextYearCommitments.year}`}
-          value={formatNumber(
-            nextYearCommitments.plants,
-            nextYearCommitments.plants >= 10_000,
-          )}
-          helper="comprometidas — año completo"
+          value={formatNumber(nextYearCommitments.plants, nextYearCommitments.plants >= 10_000)}
           icon={Sprout}
           tone="muted"
         />
       </div>
 
-      {/* Grid de países con actividad — más legible y rápido que el
-          WorldMap SVG. Ordenado por plantas desc, cards clickeables a
-          /clientes?country=ISO2. */}
-      <Card className="mt-4 flex min-h-[320px] flex-1 flex-col overflow-hidden md:min-h-[420px]">
+      {/* Mobile only: KPI strips inline — máxima densidad para dejar
+          espacio al grid de países. */}
+      <div className="mt-3 grid grid-cols-1 gap-1.5 md:hidden">
+        <KpiStrip icon={CheckCircle2} label="Firmados" value={formatNumber(statusCounts.firmados)} tone="positive" />
+        <KpiStrip icon={FileSignature} label="Por firmar" value={formatNumber(statusCounts.porFirmar)} />
+        <KpiStrip icon={XCircle} label="Cancelados" value={formatNumber(statusCounts.cancelados)} tone="muted" />
+        <div className="grid grid-cols-2 gap-1.5">
+          <KpiStrip
+            icon={Sprout}
+            label={`Plantas ${currentYearCommitments.year}`}
+            value={formatNumber(currentYearCommitments.plants, currentYearCommitments.plants >= 10_000)}
+          />
+          <KpiStrip
+            icon={Sprout}
+            label={`Plantas ${nextYearCommitments.year}`}
+            value={formatNumber(nextYearCommitments.plants, nextYearCommitments.plants >= 10_000)}
+            tone="muted"
+          />
+        </div>
+      </div>
+
+      {/* Grid de países — natural height (no flex-1) hasta máximo 3
+          filas. Debajo queda espacio reservado para widgets futuros. */}
+      <Card className="mt-4 flex flex-col overflow-hidden">
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs">
           <span className="font-medium text-muted-foreground">
             Entregas comprometidas — <span className="text-foreground">{period.label}</span>
@@ -186,9 +177,9 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
             {mapData.length} {mapData.length === 1 ? "país" : "países"} con actividad
           </span>
         </div>
-        <div className="relative min-h-0 w-full flex-1">
+        <div className="relative w-full">
           {mapData.length === 0 ? (
-            <div className="flex h-full w-full items-center justify-center">
+            <div className="flex h-32 w-full items-center justify-center">
               <EmptyState
                 icon={Globe2}
                 title="Sin actividad en este período"
@@ -200,22 +191,67 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
           )}
         </div>
       </Card>
+
+      {/* Placeholder para widgets futuros (mantiene la página llenando
+          el viewport y aprovecha el espacio cuando hay pocos países). */}
+      <div className="hidden flex-1 md:block" />
     </>
+  );
+}
+
+function KpiStrip({
+  icon: Icon,
+  label,
+  value,
+  tone = "default",
+}: {
+  icon: typeof CheckCircle2;
+  label: string;
+  value: string;
+  tone?: "default" | "positive" | "muted";
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-md border bg-card px-3 py-2">
+      <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Icon className="size-3.5" />
+        {label}
+      </span>
+      <span
+        className={
+          "text-sm font-semibold tabular-nums " +
+          (tone === "positive"
+            ? "text-emerald-600 dark:text-emerald-400"
+            : tone === "muted"
+              ? "text-muted-foreground"
+              : "text-foreground")
+        }
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 
 function DashboardSkeleton() {
   return (
     <>
-      {/* Mobile: 6-col grid con span manual → fila 1 (status x3, span-2)
-          + fila 2 (año x2, span-3). Total 2 filas en mobile, label completo
-          sin wrap. Desktop: grid normal 3→5 cols. */}
-      <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-3 md:gap-3 xl:grid-cols-5 [&>*]:col-span-2 md:[&>*]:col-span-1 [&>*:nth-child(n+4)]:col-span-3 md:[&>*:nth-child(n+4)]:col-span-1">
+      {/* Desktop KPIs skeleton */}
+      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="h-[88px] w-full rounded-lg" />
+          <Skeleton key={i} className="h-[78px] w-full rounded-lg" />
         ))}
       </div>
-      <Skeleton className="mt-4 min-h-[320px] w-full flex-1 rounded-lg md:min-h-[420px]" />
+      {/* Mobile KPI strips skeleton */}
+      <div className="mt-3 grid grid-cols-1 gap-1.5 md:hidden">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <Skeleton key={i} className="h-[36px] w-full rounded-md" />
+        ))}
+        <div className="grid grid-cols-2 gap-1.5">
+          <Skeleton className="h-[36px] w-full rounded-md" />
+          <Skeleton className="h-[36px] w-full rounded-md" />
+        </div>
+      </div>
+      <Skeleton className="mt-4 h-[280px] w-full rounded-lg md:h-[360px]" />
     </>
   );
 }

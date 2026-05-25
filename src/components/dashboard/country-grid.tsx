@@ -30,7 +30,10 @@ export function CountryGrid({ data }: Props) {
   if (sorted.length === 0) return null;
 
   return (
-    <div className="h-full overflow-y-auto p-3 md:p-4">
+    // max-h ~ 3 filas de cards (94px aprox + gap 12) en desktop, plus
+    // padding. Si hay más, scroll interno. Mobile: max ~5 cards
+    // visibles, scroll para el resto.
+    <div className="max-h-[400px] overflow-y-auto p-3 md:max-h-[340px] md:p-4">
       {/* Mobile: 2 cols compactos. Desktop: auto-fit con min 240px →
           cards grandes que crecen para llenar el espacio sin dejar
           huecos cuando hay pocos países. */}
