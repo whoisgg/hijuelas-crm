@@ -13,13 +13,23 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Calendar, GripVertical } from "lucide-react";
+import { AlertCircle, Calendar, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  deleteOpportunity,
   markOpportunityLost,
   transitionOpportunityStage,
   type OpportunityStage,
@@ -93,6 +103,11 @@ export function KanbanBoard({ stages, byStage }: KanbanBoardProps) {
     oppId: string;
     oppName: string;
   } | null>(null);
+  const [deleteDialog, setDeleteDialog] = React.useState<{
+    oppId: string;
+    oppName: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
 
   const findOpp = (id: string): OpportunityWithRelations | null => {
@@ -175,6 +190,10 @@ export function KanbanBoard({ stages, byStage }: KanbanBoardProps) {
               key={stage.id}
               stage={stage}
               items={columns[stage.id] ?? []}
+              onEdit={(opp) => router.push(`/oportunidades/${opp.id}`)}
+              onDelete={(opp) =>
+                setDeleteDialog({ oppId: opp.id, oppName: opp.name })
+              }
             />
           ))}
         </div>
@@ -218,6 +237,55 @@ export function KanbanBoard({ stages, byStage }: KanbanBoardProps) {
           }
         />
       ) : null}
+
+      {deleteDialog ? (
+        <Dialog
+          open
+          onOpenChange={(o) => (o ? null : setDeleteDialog(null))}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Eliminar oportunidad</DialogTitle>
+              <DialogDescription>
+                Se eliminará &quot;{deleteDialog.oppName}&quot;. La acción es
+                reversible solo via base de datos.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setDeleteDialog(null)}
+                disabled={isDeleting}
+              >
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={isDeleting}
+                onClick={async () => {
+                  setIsDeleting(true);
+                  try {
+                    await deleteOpportunity(deleteDialog.oppId);
+                    toast.success("Oportunidad eliminada");
+                    setDeleteDialog(null);
+                    router.refresh();
+                  } catch (err) {
+                    toast.error(
+                      err instanceof Error
+                        ? err.message
+                        : "Error al eliminar",
+                    );
+                  } finally {
+                    setIsDeleting(false);
+                  }
+                }}
+              >
+                {isDeleting ? "Eliminando…" : "Eliminar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   );
 }
@@ -225,9 +293,13 @@ export function KanbanBoard({ stages, byStage }: KanbanBoardProps) {
 function KanbanColumn({
   stage,
   items,
+  onEdit,
+  onDelete,
 }: {
   stage: OpportunityStage;
   items: OpportunityWithRelations[];
+  onEdit: (opp: OpportunityWithRelations) => void;
+  onDelete: (opp: OpportunityWithRelations) => void;
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: stage.id });
   const totalValue = items.reduce(
@@ -266,14 +338,29 @@ function KanbanColumn({
             Sin oportunidades
           </div>
         ) : (
-          items.map((opp) => <DraggableCard key={opp.id} opp={opp} />)
+          items.map((opp) => (
+            <DraggableCard
+              key={opp.id}
+              opp={opp}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))
         )}
       </div>
     </div>
   );
 }
 
-function DraggableCard({ opp }: { opp: OpportunityWithRelations }) {
+function DraggableCard({
+  opp,
+  onEdit,
+  onDelete,
+}: {
+  opp: OpportunityWithRelations;
+  onEdit: (opp: OpportunityWithRelations) => void;
+  onDelete: (opp: OpportunityWithRelations) => void;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: opp.id,
   });
@@ -283,12 +370,9 @@ function DraggableCard({ opp }: { opp: OpportunityWithRelations }) {
       ref={setNodeRef}
       {...attributes}
       {...listeners}
-      className={cn(
-        "touch-none",
-        isDragging && "opacity-30",
-      )}
+      className={cn("touch-none", isDragging && "opacity-30")}
     >
-      <KanbanCard opp={opp} />
+      <KanbanCard opp={opp} onEdit={onEdit} onDelete={onDelete} />
     </div>
   );
 }
@@ -296,9 +380,13 @@ function DraggableCard({ opp }: { opp: OpportunityWithRelations }) {
 export function KanbanCard({
   opp,
   dragging,
+  onEdit,
+  onDelete,
 }: {
   opp: OpportunityWithRelations;
   dragging?: boolean;
+  onEdit?: (opp: OpportunityWithRelations) => void;
+  onDelete?: (opp: OpportunityWithRelations) => void;
 }) {
   const overdue = isOverdue(opp.expected_close_date);
   const clientLabel =
@@ -326,7 +414,39 @@ export function KanbanCard({
             {clientLabel}
           </div>
         </div>
-        <GripVertical className="h-3 w-3 shrink-0 text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+          {onEdit ? (
+            <button
+              type="button"
+              aria-label="Editar oportunidad"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEdit(opp);
+              }}
+              className="rounded p-0.5 text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              type="button"
+              aria-label="Eliminar oportunidad"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete(opp);
+              }}
+              className="rounded p-0.5 text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          ) : null}
+          <GripVertical className="h-3 w-3 text-muted-foreground/50" />
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-1">

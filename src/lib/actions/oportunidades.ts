@@ -368,6 +368,25 @@ export async function updateOpportunity(
   revalidatePath(`/oportunidades/${id}`);
 }
 
+export async function deleteOpportunity(id: string): Promise<void> {
+  const supabase = await createClient();
+  const userId = await getCurrentUserId();
+
+  const { error } = await supabase
+    .from("opportunities")
+    .update({
+      deleted_at: new Date().toISOString(),
+      updated_by: userId,
+    })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+
+  // Note: no logActivity — el row de oportunidad ya está soft-deleted
+  // y no la vamos a mostrar más. Si en el futuro hacemos vista de
+  // "archivo" / restore, agregar acá.
+  revalidatePath("/oportunidades");
+}
+
 export async function transitionOpportunityStage(
   id: string,
   toStageId: string,
