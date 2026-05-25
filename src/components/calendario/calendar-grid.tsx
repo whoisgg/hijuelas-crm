@@ -857,11 +857,14 @@ export function CalendarGrid({
                       ("Wk22") NUNCA se recorte aunque la fila sea baja. */}
                   <div
                     className={
-                      "sticky left-0 z-[5] flex min-w-0 flex-col justify-start gap-0.5 border-b border-r px-2 py-2 md:px-3 " +
+                      // border-l-2 SIEMPRE (transparente cuando no es current)
+                      // para que el ancho de contenido sea idéntico en todas
+                      // las filas y no se vea "chueco" en la fila current.
+                      "sticky left-0 z-[5] flex min-w-0 flex-col justify-start gap-0.5 border-b border-l-2 border-r px-2 py-2 md:px-3 " +
                       firstRowTopPad + " " +
                       (isCur
-                        ? "bg-primary/10 border-l-2 border-l-primary"
-                        : "bg-card")
+                        ? "bg-primary/10 border-l-primary"
+                        : "bg-card border-l-transparent")
                     }
                   >
                     {isWeek ? (
