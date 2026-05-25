@@ -129,7 +129,7 @@ export type YearCommitmentKpi = {
 
 export type DashboardSummary = {
   year: number;
-  month: number | null; // 1-12 si filtrado por mes, null si todo el año
+  months: number[] | null; // lista de meses filtrados; null = año completo
   mapData: MapCountryDatum[];
   statusCounts: ContractStatusCounts;
   currentYearCommitments: YearCommitmentKpi;
@@ -694,11 +694,11 @@ export async function getMyPendingTasks(limit = 8): Promise<PendingTask[]> {
 export type MapFilters = {
   year?: number;
   /**
-   * Mes calendario 1-12. Si se pasa, filtra contract_items por
-   * delivery_week dentro de ese mes (usando weeksInMonth). null/undefined
-   * = todo el año.
+   * Lista de meses calendario 1-12 a incluir. Si se pasa, filtra
+   * contract_items por delivery_week dentro de cualquiera de esos meses
+   * (unión). null/undefined o array vacío = todo el año.
    */
-  month?: number | null;
+  months?: number[] | null;
   organizationId?: string | null;
   speciesId?: string | null;
   includeOpportunities?: boolean;
@@ -710,12 +710,20 @@ export async function getMapData(
 ): Promise<MapCountryDatum[]> {
   const supabase = await createClient();
   const year = filters.year ?? currentYear();
-  // Si hay filtro de mes, precomputamos las semanas ISO que caen en él.
-  // Null = sin filtro de mes (todo el año).
-  const monthWeeks =
-    filters.month != null && filters.month >= 1 && filters.month <= 12
-      ? new Set(weeksInMonth(year, filters.month))
-      : null;
+  // Si hay filtro de meses, precomputamos la UNIÓN de semanas ISO que
+  // caen en cualquiera de ellos. null/empty = sin filtro de mes (año
+  // completo).
+  const monthWeeks = (() => {
+    const list = filters.months ?? null;
+    if (!list || list.length === 0) return null;
+    const acc = new Set<number>();
+    for (const m of list) {
+      if (m >= 1 && m <= 12) {
+        for (const w of weeksInMonth(year, m)) acc.add(w);
+      }
+    }
+    return acc.size > 0 ? acc : null;
+  })();
 
   // Lista de países como base
   const countriesRes = await supabase
@@ -1306,9 +1314,12 @@ const STATUS_POR_FIRMAR = ["borrador", "por_revisar"];
 const STATUS_CANCELADOS = ["cancelado"];
 
 export type DashboardSummaryParams = {
-  /** Mes calendario 1-12. Si null/undefined, el mapa toma el año completo. */
-  month?: number | null;
-  /** Año del slider; default = año actual UTC. */
+  /**
+   * Lista de meses 1-12. Si null/undefined o vacío, el mapa toma el año
+   * completo. Acepta múltiples meses (ej. próximos 3 = [5,6,7]).
+   */
+  months?: number[] | null;
+  /** Año del filtro; default = año actual UTC. */
   year?: number;
 };
 
@@ -1324,7 +1335,7 @@ export async function getDashboardSummary(
   params: DashboardSummaryParams = {},
 ): Promise<DashboardSummary> {
   const year = params.year ?? currentYear();
-  const month = params.month ?? null;
+  const months = params.months && params.months.length > 0 ? params.months : null;
   const supabase = await createClient();
 
   const [mapData, statusRes, currYearRes, nextYearRes] = await Promise.all([
@@ -1333,7 +1344,7 @@ export async function getDashboardSummary(
     // status, así que el mapa muestra el universo de compromisos activos.
     getMapData({
       year,
-      month,
+      months,
       contractStatuses: [...STATUS_FIRMADOS, ...STATUS_POR_FIRMAR],
     }),
     supabase
@@ -1376,7 +1387,7 @@ export async function getDashboardSummary(
 
   return {
     year,
-    month,
+    months,
     mapData,
     statusCounts,
     currentYearCommitments,

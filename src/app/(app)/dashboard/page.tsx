@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { CheckCircle2, FileSignature, Plus, Sprout, XCircle } from "lucide-react";
+import { CheckCircle2, FileSignature, Globe2, Plus, Sprout, XCircle } from "lucide-react";
 
 import { getDashboardSummary } from "@/lib/actions/analytics";
 import { PageHeader } from "@/components/page-header";
@@ -8,66 +8,65 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
-import { MonthTimeline } from "@/components/dashboard/month-timeline";
+import { PeriodFilter, type PeriodKey } from "@/components/dashboard/period-filter";
 import { CountryGrid } from "@/components/dashboard/country-grid";
 import { EmptyState } from "@/components/dashboard/empty-state";
 import { formatNumber } from "@/lib/format";
-import { Globe2 } from "lucide-react";
 
 export const metadata = { title: "Dashboard" };
 export const dynamic = "force-dynamic";
 
 const MONTHS_ES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+  "ene", "feb", "mar", "abr", "may", "jun",
+  "jul", "ago", "sep", "oct", "nov", "dic",
 ];
 
 type DashboardSearchParams = {
-  month?: string; // "YYYY-MM" o "all"
+  /** "this-month" (default) | "next-3" | "year" | "next-year". */
+  period?: string;
+};
+
+type ResolvedPeriod = {
+  key: PeriodKey;
+  year: number;
+  months: number[] | null; // null = año completo
+  label: string;           // texto humano para el header del mapa
 };
 
 /**
- * Parse `?month=`:
- *  - sin param → mes actual (default)
- *  - "all"     → todos los años (no filter)
- *  - "YYYY"    → año completo (month=null pero year=Y)
- *  - "YYYY-MM" → mes específico
+ * Resuelve el query param `period` a:
+ *  - el año a consultar
+ *  - la lista de meses (null = año completo)
+ *  - un label legible
  */
-function parseMonthParam(value: string | undefined): {
-  year: number;
-  month: number | null;
-  selected: string;
-} {
+function resolvePeriod(value: string | undefined): ResolvedPeriod {
   const now = new Date();
-  const currentYear = now.getUTCFullYear();
-  const currentMonth = now.getUTCMonth() + 1;
-  const currentSelected = `${currentYear}-${String(currentMonth).padStart(2, "0")}`;
-  // Default: mes actual
-  if (!value) {
-    return { year: currentYear, month: currentMonth, selected: currentSelected };
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth() + 1;
+  const key: PeriodKey =
+    value === "next-3" || value === "year" || value === "next-year"
+      ? value
+      : "this-month";
+
+  if (key === "this-month") {
+    return { key, year: y, months: [m], label: `${MONTHS_ES[m - 1]} ${y}` };
   }
-  if (value === "all") {
-    return { year: currentYear, month: null, selected: "all" };
+  if (key === "next-3") {
+    const months = [0, 1, 2].map((i) => ((m - 1 + i) % 12) + 1);
+    // Si los meses cruzan año, mostramos solo el año del primer mes
+    // (caso límite Nov-Dic-Ene); el mapa filtra contract_items.delivery_year
+    // por `year` actual, así que enero del próximo año NO entraría con
+    // este modelo. Decisión: mantenemos el año actual y aceptamos el corte
+    // — es un dashboard, no contabilidad.
+    const last = months[months.length - 1];
+    const labelRange = `${MONTHS_ES[months[0] - 1]} – ${MONTHS_ES[last - 1]} ${y}`;
+    return { key, year: y, months, label: labelRange };
   }
-  // YYYY-MM
-  const matchMonth = /^(\d{4})-(\d{2})$/.exec(value);
-  if (matchMonth) {
-    const y = Number(matchMonth[1]);
-    const m = Number(matchMonth[2]);
-    if (Number.isFinite(y) && m >= 1 && m <= 12) {
-      return { year: y, month: m, selected: value };
-    }
+  if (key === "year") {
+    return { key, year: y, months: null, label: `${y}` };
   }
-  // YYYY
-  const matchYear = /^(\d{4})$/.exec(value);
-  if (matchYear) {
-    const y = Number(matchYear[1]);
-    if (Number.isFinite(y)) {
-      return { year: y, month: null, selected: value };
-    }
-  }
-  // Fallback
-  return { year: currentYear, month: currentMonth, selected: currentSelected };
+  // next-year
+  return { key, year: y + 1, months: null, label: `${y + 1}` };
 }
 
 export default async function DashboardPage({
@@ -76,22 +75,22 @@ export default async function DashboardPage({
   searchParams: Promise<DashboardSearchParams>;
 }) {
   const params = await searchParams;
-  const { year, month, selected } = parseMonthParam(params.month);
+  const period = resolvePeriod(params.period);
 
   return (
     <div
       className={
         // Altura fija = viewport - topbar (56). En mobile además restamos
         // el bottom nav (h-16 = 4rem) + safe-area inset. overflow-hidden
-        // + flex-col + map como flex-1 → el mapa absorbe el remanente
-        // sin scroll vertical en ningún breakpoint.
+        // + flex-col + grid-card como flex-1 → el grid absorbe el remanente
+        // sin scroll vertical.
         "mx-auto flex w-full max-w-7xl flex-col overflow-hidden px-4 py-6 md:px-6 " +
         "h-[calc(100dvh-3.5rem-4rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem)]"
       }
     >
       <PageHeader
         title="Dashboard"
-        description="Compromisos de entrega por país. Navegá por mes o ve el año completo."
+        description="Visión general por período. Para detalle por semana → calendario."
         actions={
           <Button
             size="sm"
@@ -105,38 +104,30 @@ export default async function DashboardPage({
         }
       />
 
-      {/* Timeline — parte SIEMPRE en mes actual (monthsBack=0); meses
-          pasados se acceden con el pill "Todo el año". */}
+      {/* Período rápido — 4 chips. Diferencia el dashboard del calendario
+          detallado (allá se navega semana por semana). */}
       <div className="-mx-4 mt-4 border-y bg-card/50 md:-mx-6">
-        <MonthTimeline selected={selected} monthsBack={0} monthsForward={18} />
+        <PeriodFilter selected={period.key} />
       </div>
 
-      <Suspense fallback={<DashboardSkeleton />} key={selected}>
-        <DashboardContent year={year} month={month} />
+      <Suspense fallback={<DashboardSkeleton />} key={period.key}>
+        <DashboardContent period={period} />
       </Suspense>
     </div>
   );
 }
 
-async function DashboardContent({
-  year,
-  month,
-}: {
-  year: number;
-  month: number | null;
-}) {
-  const summary = await getDashboardSummary({ year, month });
+async function DashboardContent({ period }: { period: ResolvedPeriod }) {
+  const summary = await getDashboardSummary({
+    year: period.year,
+    months: period.months,
+  });
   const { statusCounts, currentYearCommitments, nextYearCommitments, mapData } =
     summary;
 
-  const monthLabel =
-    month != null ? `${MONTHS_ES[month - 1]} ${year}` : `${year}`;
-
   return (
     <>
-      {/* KPI Row — mobile: scroll horizontal (chips, una fila); desktop:
-          grid de 3 → 5 cols. Mobile evita las 3 filas que empujaban al
-          mapa fuera del viewport. */}
+      {/* KPI Row — mobile: scroll horizontal; desktop: grid 3→5. */}
       <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[160px] md:mx-0 md:grid md:grid-cols-3 md:px-0 md:overflow-visible md:[&>*]:min-w-0 xl:grid-cols-5">
         <KpiCard
           label="Firmados"
@@ -179,14 +170,13 @@ async function DashboardContent({
         />
       </div>
 
-      {/* Mapa — full width, ocupa el espacio remanente del viewport vía
-          flex-1 (el padre del DashboardPage es flex column con min-h
-          dvh). Sin scroll en desktop; en mobile estrecho min-h evita
-          que se aplaste. */}
+      {/* Grid de países con actividad — más legible y rápido que el
+          WorldMap SVG. Ordenado por plantas desc, cards clickeables a
+          /clientes?country=ISO2. */}
       <Card className="mt-4 flex min-h-[320px] flex-1 flex-col overflow-hidden md:min-h-[420px]">
         <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs">
           <span className="font-medium text-muted-foreground">
-            Entregas comprometidas — <span className="text-foreground">{monthLabel}</span>
+            Entregas comprometidas — <span className="text-foreground">{period.label}</span>
           </span>
           <span className="tabular-nums text-muted-foreground">
             {mapData.length} {mapData.length === 1 ? "país" : "países"} con actividad
@@ -198,11 +188,7 @@ async function DashboardContent({
               <EmptyState
                 icon={Globe2}
                 title="Sin actividad en este período"
-                description={
-                  month != null
-                    ? "No hay entregas comprometidas en el mes seleccionado."
-                    : "No hay entregas comprometidas en el año seleccionado."
-                }
+                description="No hay entregas comprometidas en el período seleccionado."
               />
             </div>
           ) : (
@@ -217,7 +203,7 @@ async function DashboardContent({
 function DashboardSkeleton() {
   return (
     <>
-      <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[160px] md:mx-0 md:grid md:grid-cols-3 md:px-0 md:overflow-visible md:[&>*]:min-w-0 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[88px] w-full rounded-lg" />
         ))}
