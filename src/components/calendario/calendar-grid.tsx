@@ -399,12 +399,12 @@ export function CalendarGrid({
     return totals;
   }, [filtered, viewMode]);
 
-  // Side sheet data
+  // Side sheet data — iso2 "__all__" significa todos los países (mobile)
   const drillEvents = React.useMemo(() => {
     if (!drillCell) return [] as CalendarEvent[];
     return events.filter(
       (e) =>
-        e.countryIso2 === drillCell.iso2 &&
+        (drillCell.iso2 === "__all__" || e.countryIso2 === drillCell.iso2) &&
         e.year === drillCell.year &&
         e.week === drillCell.week,
     );
@@ -458,6 +458,16 @@ export function CalendarGrid({
   // IntersectionObserver: cuando el sentinel del final entra al viewport,
   // carga 10 periodos más.
   const sentinelRef = React.useRef<HTMLButtonElement | null>(null);
+  // Mobile breakpoint: colapsa los países en una sola columna "Entregas".
+  const [isMobile, setIsMobile] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+
   // Refs para sincronizar scroll horizontal entre el header sticky (fuera del
   // wrapper para que el sticky-top funcione relativo al viewport) y el body.
   const headerScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -775,15 +785,21 @@ export function CalendarGrid({
             <div className="border-r px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Período
             </div>
-            {allCountries.map((c) => (
-              <div
-                key={`hdr-${c.iso2}`}
-                className="flex items-center gap-1.5 border-r px-2 py-2 text-xs"
-              >
-                <CountryFlag iso2={c.iso2} size="sm" />
-                <span className="truncate font-medium">{c.name}</span>
+            {isMobile ? (
+              <div className="border-r px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Entregas
               </div>
-            ))}
+            ) : (
+              allCountries.map((c) => (
+                <div
+                  key={`hdr-${c.iso2}`}
+                  className="flex items-center gap-1.5 border-r px-2 py-2 text-xs"
+                >
+                  <CountryFlag iso2={c.iso2} size="sm" />
+                  <span className="truncate font-medium">{c.name}</span>
+                </div>
+              ))
+            )}
             <div className="border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Total
             </div>
@@ -795,15 +811,19 @@ export function CalendarGrid({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
-            minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
+            gridTemplateColumns: isMobile
+              ? `5rem 1fr 4rem`
+              : `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
+            minWidth: isMobile
+              ? "auto"
+              : `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
           {/* Body: una fila por período */}
           {countryRows.length === 0 ? (
             <div
               className="border-r p-8 text-center text-sm text-muted-foreground"
-              style={{ gridColumn: `span ${allCountries.length + 2}` }}
+              style={{ gridColumn: `span ${isMobile ? 3 : allCountries.length + 2}` }}
             >
               No hay entregas registradas todavía.
             </div>
@@ -856,7 +876,7 @@ export function CalendarGrid({
                     <div
                       className="flex items-center justify-center border-y-2 border-primary/30 bg-primary/5 py-2 font-mono text-xs font-bold tracking-widest text-primary"
                       style={{
-                        gridColumn: `span ${allCountries.length + 2}`,
+                        gridColumn: `span ${isMobile ? 3 : allCountries.length + 2}`,
                       }}
                     >
                       ▸ {year} ◂
@@ -916,10 +936,29 @@ export function CalendarGrid({
                     )}
                   </div>
 
-                  {/* Country cells */}
-                  {allCountries.map((country) => {
-                    const cr = countryRows.find((r) => r.iso2 === country.iso2);
-                    const items = cr?.byKey.get(key) ?? [];
+                  {/* Country cells — desktop por país, mobile colapsado en 1 columna */}
+                  {(isMobile
+                    ? [
+                        {
+                          iso2: "__all__",
+                          name: "Entregas",
+                          items: countryRows.flatMap(
+                            (cr) => cr.byKey.get(key) ?? [],
+                          ),
+                        },
+                      ]
+                    : allCountries.map((country) => {
+                        const cr = countryRows.find(
+                          (r) => r.iso2 === country.iso2,
+                        );
+                        return {
+                          iso2: country.iso2,
+                          name: country.name,
+                          items: cr?.byKey.get(key) ?? [],
+                        };
+                      })
+                  ).map((country) => {
+                    const items = country.items;
 
                     if (items.length === 0) {
                       return (
@@ -1089,9 +1128,7 @@ export function CalendarGrid({
             <ChevronDown className="h-4 w-4" />
           </div>
           <span className="text-[11px] font-medium tracking-wider text-muted-foreground group-hover:text-foreground">
-            {extraPeriods > 0
-              ? `Mostrando ${viewMode === "week" ? totalVisibleWeeks : totalVisibleMonths} ${viewMode === "week" ? "semanas" : "meses"} · ver más`
-              : `Cargar más ${viewMode === "week" ? "semanas" : "meses"}`}
+            Ver más
           </span>
         </button>
       ) : null}
@@ -1108,9 +1145,11 @@ export function CalendarGrid({
             <SheetTitle className="flex items-center gap-2">
               {drillCell ? (
                 <>
-                  <span className="text-2xl">
-                    <CountryFlag iso2={drillCell.iso2} />
-                  </span>
+                  {drillCell.iso2 !== "__all__" ? (
+                    <span className="text-2xl">
+                      <CountryFlag iso2={drillCell.iso2} />
+                    </span>
+                  ) : null}
                   <span>{drillCell.countryName}</span>
                   <Badge variant="outline" className="font-mono">
                     Wk{drillCell.week}/{drillCell.year}
@@ -1138,6 +1177,10 @@ export function CalendarGrid({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
+                        {/* En mobile (drillCell.iso2='__all__') mostramos el flag por item */}
+                        {drillCell?.iso2 === "__all__" ? (
+                          <CountryFlag iso2={e.countryIso2} size="xs" showName={false} />
+                        ) : null}
                         <span className="truncate font-medium">
                           {e.clientName ?? "—"}
                         </span>
