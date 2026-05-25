@@ -11,7 +11,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -68,7 +67,9 @@ export function Topbar({ userEmail }: TopbarProps) {
           <ChevronDown className="h-3 w-3 opacity-70" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Crear nuevo</DropdownMenuLabel>
+          <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">
+            Crear nuevo
+          </div>
           <DropdownMenuSeparator />
           {QUICK_CREATE_ITEMS.map((item) => (
             <DropdownMenuItem
@@ -111,14 +112,12 @@ export function Topbar({ userEmail }: TopbarProps) {
           </Avatar>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel className="font-normal">
-            <div className="flex flex-col">
-              <span className="text-sm font-medium">Mi cuenta</span>
-              <span className="truncate text-xs text-muted-foreground">
-                {userEmail ?? "Invitado"}
-              </span>
-            </div>
-          </DropdownMenuLabel>
+          <div className="flex flex-col px-1.5 py-1">
+            <span className="text-sm font-medium">Mi cuenta</span>
+            <span className="truncate text-xs text-muted-foreground">
+              {userEmail ?? "Invitado"}
+            </span>
+          </div>
           <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => router.push("/perfil")}
