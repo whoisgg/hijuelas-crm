@@ -20,7 +20,8 @@ export function Sidebar() {
     <TooltipProvider delay={200}>
       <aside
         className={cn(
-          "group/sidebar fixed inset-y-0 left-0 z-30 flex flex-col",
+          // Mobile usa <BottomNav> tipo iOS, sidebar oculto.
+          "group/sidebar fixed inset-y-0 left-0 z-30 hidden md:flex flex-col",
           "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
           "w-14 hover:w-56 transition-[width] duration-200 ease-out",
           "pt-14",
