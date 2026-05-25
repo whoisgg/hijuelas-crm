@@ -469,31 +469,6 @@ export function CalendarGrid({
     return () => mq.removeEventListener("change", update);
   }, []);
 
-  // Refs para sincronizar scroll horizontal entre el header sticky (fuera del
-  // wrapper para que el sticky-top funcione relativo al viewport) y el body.
-  const headerScrollRef = React.useRef<HTMLDivElement | null>(null);
-  const bodyScrollRef = React.useRef<HTMLDivElement | null>(null);
-  React.useEffect(() => {
-    const body = bodyScrollRef.current;
-    const header = headerScrollRef.current;
-    if (!body || !header) return;
-    const onBodyScroll = () => {
-      if (header.scrollLeft !== body.scrollLeft) {
-        header.scrollLeft = body.scrollLeft;
-      }
-    };
-    const onHeaderScroll = () => {
-      if (body.scrollLeft !== header.scrollLeft) {
-        body.scrollLeft = header.scrollLeft;
-      }
-    };
-    body.addEventListener("scroll", onBodyScroll, { passive: true });
-    header.addEventListener("scroll", onHeaderScroll, { passive: true });
-    return () => {
-      body.removeEventListener("scroll", onBodyScroll);
-      header.removeEventListener("scroll", onHeaderScroll);
-    };
-  }, []);
   React.useEffect(() => {
     const node = sentinelRef.current;
     if (!node) return;
@@ -768,64 +743,43 @@ export function CalendarGrid({
       </div>
 
       {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
-          Header sticky a top del viewport (FUERA del wrapper para que funcione
-          el sticky correctamente). Body en wrapper con overflow-x-auto.
-          Scroll horizontal sincronizado via JS entre header y body. */}
-      <div className="rounded-lg border bg-card">
-        {/* Sticky header: solo countries, scroll horizontal sincronizado.
-            Mobile (3 cols fit): overflow-x-hidden — sin drag. */}
-        <div
-          ref={headerScrollRef}
-          className="sticky top-14 z-20 overflow-x-hidden md:overflow-x-auto border-b bg-card"
-        >
-          <div
-            className="grid"
-            style={{
-              gridTemplateColumns: `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
-              minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
-            }}
-          >
-            <div className="min-w-0 overflow-hidden border-r px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Período
-            </div>
-            {isMobile ? (
-              <div className="min-w-0 overflow-hidden border-r px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                Entregas
-              </div>
-            ) : (
-              allCountries.map((c) => (
-                <div
-                  key={`hdr-${c.iso2}`}
-                  className="flex min-w-0 items-center gap-1.5 overflow-hidden border-r px-2 py-2 text-xs"
-                >
-                  <CountryFlag iso2={c.iso2} size="sm" />
-                  <span className="truncate font-medium">{c.name}</span>
-                </div>
-              ))
-            )}
-            <div className="min-w-0 overflow-hidden border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-              Total
-            </div>
-          </div>
-        </div>
-
-        {/* Body: scroll horizontal independiente, sync via JS con el header.
-            Mobile (3 cols fit): overflow-x-hidden — sin drag. */}
-        <div
-          ref={bodyScrollRef}
-          className="overflow-x-hidden md:overflow-x-auto"
-        >
+          UN SOLO grid — header y body comparten gridTemplateColumns por
+          definición, garantizando alineación perfecta. Header cells sticky
+          top-14 quedan abajo de la topbar al scrollear. */}
+      <div className="overflow-x-hidden rounded-lg border bg-card md:overflow-x-auto">
         <div
           className="grid"
           style={{
             gridTemplateColumns: isMobile
-              ? `4.5rem minmax(0, 1fr) 3.5rem`
+              ? `3.5rem minmax(0, 1fr) 3.5rem`
               : `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
             minWidth: isMobile
               ? "auto"
               : `${7 + allCountries.length * 8 + 5.5}rem`,
           }}
         >
+          {/* Header row — sticky top-14 a nivel viewport, cell-by-cell */}
+          <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            {isMobile ? (viewMode === "week" ? "Wk" : "Mes") : "Período"}
+          </div>
+          {isMobile ? (
+            <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-r bg-card px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Entregas
+            </div>
+          ) : (
+            allCountries.map((c) => (
+              <div
+                key={`hdr-${c.iso2}`}
+                className="sticky top-14 z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
+              >
+                <CountryFlag iso2={c.iso2} size="sm" />
+                <span className="truncate font-medium">{c.name}</span>
+              </div>
+            ))
+          )}
+          <div className="sticky top-14 z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Total
+          </div>
           {/* Body: una fila por período */}
           {countryRows.length === 0 ? (
             <div
@@ -1112,7 +1066,6 @@ export function CalendarGrid({
               );
             })
           )}
-        </div>
         </div>
       </div>
 
