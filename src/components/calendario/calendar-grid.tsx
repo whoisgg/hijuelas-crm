@@ -39,6 +39,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { CountryFlag } from "@/components/clientes/country-flag";
+import { DeliveryActions } from "@/components/calendario/delivery-actions";
 import type { CalendarEvent } from "@/lib/actions/analytics";
 
 export type SpeciesOption = { id: string; name: string };
@@ -1160,31 +1161,31 @@ export function CalendarGrid({
           </SheetHeader>
           <div className="mt-4 space-y-2">
             {drillEvents.map((e) => {
-              // Para contratos, source_id es el contract_item.id — necesitamos
-              // contract_id para navegar al detalle del contrato.
-              const href =
-                e.source_type === "opportunity"
-                  ? `/oportunidades/${e.source_id}`
-                  : e.contract_id
-                    ? `/contratos/${e.contract_id}`
-                    : "#";
+              const isOpp = e.source_type === "opportunity";
+              const detailHref = isOpp
+                ? `/oportunidades/${e.source_id}`
+                : e.contract_id
+                  ? `/contratos/${e.contract_id}`
+                  : null;
               return (
-                <Link
+                <div
                   key={`${e.source_type}-${e.source_id}`}
-                  href={href}
-                  className="group block rounded-md border bg-card px-3 py-2 text-sm transition-colors hover:border-primary/40 hover:bg-primary/5"
+                  className="rounded-md border bg-card px-3 py-2 text-sm"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         {/* En mobile (drillCell.iso2='__all__') mostramos el flag por item */}
                         {drillCell?.iso2 === "__all__" ? (
-                          <CountryFlag iso2={e.countryIso2} size="xs" showName={false} />
+                          <CountryFlag
+                            iso2={e.countryIso2}
+                            size="xs"
+                            showName={false}
+                          />
                         ) : null}
                         <span className="truncate font-medium">
                           {e.clientName ?? "—"}
                         </span>
-                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
                       </div>
                       <div className="truncate text-xs text-muted-foreground">
                         {e.varietyName ?? "—"} · {e.speciesName ?? "—"}
@@ -1194,11 +1195,13 @@ export function CalendarGrid({
                       <div className="font-mono text-base font-semibold tabular-nums">
                         {numFmt.format(Number(e.qty ?? 0))}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">plantas</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        plantas
+                      </div>
                     </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[10px]">
-                    {e.source_type === "opportunity" ? (
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                    {isOpp ? (
                       <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400">
                         <Sparkles className="h-3 w-3" />
                         Oportunidad{" "}
@@ -1209,14 +1212,38 @@ export function CalendarGrid({
                     ) : (
                       <span className="inline-flex items-center gap-1 text-primary">
                         <Building2 className="h-3 w-3" />
-                        Contrato
+                        Contrato · {e.status ?? "—"}
                       </span>
                     )}
-                    <span className="text-muted-foreground">
-                      {e.status ?? "—"}
-                    </span>
+                    <div className="ml-auto flex items-center gap-0.5">
+                      {detailHref ? (
+                        <Link
+                          href={detailHref}
+                          title={isOpp ? "Ir a la oportunidad" : "Ir al contrato"}
+                          aria-label="Abrir detalle"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : null}
+                      {/* Edit/delete solo para contratos — opps tienen su propio flujo */}
+                      {!isOpp &&
+                      e.source_id &&
+                      e.year != null &&
+                      e.week != null ? (
+                        <DeliveryActions
+                          itemId={e.source_id}
+                          qty={Number(e.qty ?? 0)}
+                          year={e.year}
+                          week={e.week}
+                          clientName={e.clientName}
+                          varietyName={e.varietyName}
+                          onAfter={() => setDrillCell(null)}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                </Link>
+                </div>
               );
             })}
             {drillEvents.length === 0 ? (

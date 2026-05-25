@@ -383,6 +383,34 @@ export async function updateContractItem(
 
   await recalculateContractTotals(item.contract_id);
   revalidatePath(`/contratos/${item.contract_id}`);
+  revalidatePath("/calendario");
+  revalidatePath("/contratos");
+  return { ok: true };
+}
+
+/**
+ * Soft-delete de un contract_item (entrega). Recalcula totales del contrato
+ * padre y revalida calendario/contratos para que la UI se refresque.
+ */
+export async function deleteContractItem(itemId: string) {
+  const supabase = await createClient();
+  const { data: item, error: getErr } = await supabase
+    .from("contract_items")
+    .select("contract_id")
+    .eq("id", itemId)
+    .single();
+  if (getErr) throw new Error(getErr.message);
+
+  const { error } = await supabase
+    .from("contract_items")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", itemId);
+  if (error) throw new Error(error.message);
+
+  await recalculateContractTotals(item.contract_id);
+  revalidatePath(`/contratos/${item.contract_id}`);
+  revalidatePath("/calendario");
+  revalidatePath("/contratos");
   return { ok: true };
 }
 
