@@ -30,7 +30,8 @@ type ResolvedPeriod = {
   key: PeriodKey;
   year: number;
   months: number[] | null; // null = año completo
-  label: string;           // texto humano para el header del mapa
+  label: string;           // texto humano detallado (header del card)
+  shortLabel: string;      // texto corto para KPI ("este mes", "2026"…)
 };
 
 /**
@@ -49,24 +50,29 @@ function resolvePeriod(value: string | undefined): ResolvedPeriod {
       : "this-month";
 
   if (key === "this-month") {
-    return { key, year: y, months: [m], label: `${MONTHS_ES[m - 1]} ${y}` };
+    return {
+      key, year: y, months: [m],
+      label: `${MONTHS_ES[m - 1]} ${y}`,
+      shortLabel: "este mes",
+    };
   }
   if (key === "next-3") {
     const months = [0, 1, 2].map((i) => ((m - 1 + i) % 12) + 1);
-    // Si los meses cruzan año, mostramos solo el año del primer mes
-    // (caso límite Nov-Dic-Ene); el mapa filtra contract_items.delivery_year
-    // por `year` actual, así que enero del próximo año NO entraría con
-    // este modelo. Decisión: mantenemos el año actual y aceptamos el corte
-    // — es un dashboard, no contabilidad.
     const last = months[months.length - 1];
-    const labelRange = `${MONTHS_ES[months[0] - 1]} – ${MONTHS_ES[last - 1]} ${y}`;
-    return { key, year: y, months, label: labelRange };
+    return {
+      key, year: y, months,
+      label: `${MONTHS_ES[months[0] - 1]} – ${MONTHS_ES[last - 1]} ${y}`,
+      shortLabel: "próx. 3 meses",
+    };
   }
   if (key === "year") {
-    return { key, year: y, months: null, label: `${y}` };
+    return { key, year: y, months: null, label: `${y}`, shortLabel: `${y}` };
   }
   // next-year
-  return { key, year: y + 1, months: null, label: `${y + 1}` };
+  return {
+    key, year: y + 1, months: null,
+    label: `${y + 1}`, shortLabel: `${y + 1}`,
+  };
 }
 
 export default async function DashboardPage({
@@ -121,49 +127,30 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
     year: period.year,
     months: period.months,
   });
-  const { statusCounts, currentYearCommitments, nextYearCommitments, mapData } =
-    summary;
+  const { statusCounts, mapData } = summary;
+
+  // Total dinámico — suma de plantas del grid de países, refleja el
+  // filtro de período activo (mes / 3 meses / año).
+  const totalPlants = mapData.reduce((acc, d) => acc + d.plantsCommitted, 0);
+  const totalLabel = `Total ${period.shortLabel}`;
+  const totalValue = formatNumber(totalPlants, totalPlants >= 10_000);
 
   return (
     <>
-      {/* KPI — mobile: strips compactos (sin Card chrome) que toman
-          poco vertical. Desktop: KpiCards completos en grid 3→5. */}
-      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
+      {/* KPI — desktop: KpiCards en grid de 4 cols (3 status + 1 total). */}
+      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Firmados" value={formatNumber(statusCounts.firmados)} icon={CheckCircle2} tone="positive" />
         <KpiCard label="Por firmar" value={formatNumber(statusCounts.porFirmar)} icon={FileSignature} />
         <KpiCard label="Cancelados" value={formatNumber(statusCounts.cancelados)} icon={XCircle} tone="muted" />
-        <KpiCard
-          label={`Plantas ${currentYearCommitments.year}`}
-          value={formatNumber(currentYearCommitments.plants, currentYearCommitments.plants >= 10_000)}
-          icon={Sprout}
-        />
-        <KpiCard
-          label={`Plantas ${nextYearCommitments.year}`}
-          value={formatNumber(nextYearCommitments.plants, nextYearCommitments.plants >= 10_000)}
-          icon={Sprout}
-          tone="muted"
-        />
+        <KpiCard label={totalLabel} value={totalValue} icon={Sprout} />
       </div>
 
-      {/* Mobile only: KPI strips inline — máxima densidad para dejar
-          espacio al grid de países. */}
+      {/* Mobile: strips compactos — 4 filas. */}
       <div className="mt-3 grid grid-cols-1 gap-1.5 md:hidden">
         <KpiStrip icon={CheckCircle2} label="Firmados" value={formatNumber(statusCounts.firmados)} tone="positive" />
         <KpiStrip icon={FileSignature} label="Por firmar" value={formatNumber(statusCounts.porFirmar)} />
         <KpiStrip icon={XCircle} label="Cancelados" value={formatNumber(statusCounts.cancelados)} tone="muted" />
-        <div className="grid grid-cols-2 gap-1.5">
-          <KpiStrip
-            icon={Sprout}
-            label={`Plantas ${currentYearCommitments.year}`}
-            value={formatNumber(currentYearCommitments.plants, currentYearCommitments.plants >= 10_000)}
-          />
-          <KpiStrip
-            icon={Sprout}
-            label={`Plantas ${nextYearCommitments.year}`}
-            value={formatNumber(nextYearCommitments.plants, nextYearCommitments.plants >= 10_000)}
-            tone="muted"
-          />
-        </div>
+        <KpiStrip icon={Sprout} label={totalLabel} value={totalValue} />
       </div>
 
       {/* Grid de países — natural height (no flex-1) hasta máximo 3
@@ -235,21 +222,17 @@ function KpiStrip({
 function DashboardSkeleton() {
   return (
     <>
-      {/* Desktop KPIs skeleton */}
-      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-3 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, i) => (
+      {/* Desktop KPIs skeleton — 4 cards */}
+      <div className="mt-3 hidden gap-3 md:grid md:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-[78px] w-full rounded-lg" />
         ))}
       </div>
-      {/* Mobile KPI strips skeleton */}
+      {/* Mobile KPI strips skeleton — 4 strips */}
       <div className="mt-3 grid grid-cols-1 gap-1.5 md:hidden">
-        {Array.from({ length: 3 }).map((_, i) => (
+        {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-[36px] w-full rounded-md" />
         ))}
-        <div className="grid grid-cols-2 gap-1.5">
-          <Skeleton className="h-[36px] w-full rounded-md" />
-          <Skeleton className="h-[36px] w-full rounded-md" />
-        </div>
       </div>
       <Skeleton className="mt-4 h-[280px] w-full rounded-lg md:h-[360px]" />
     </>
