@@ -30,8 +30,11 @@ export function CountryGrid({ data }: Props) {
   if (sorted.length === 0) return null;
 
   return (
-    <div className="h-full overflow-y-auto p-3">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+    <div className="h-full overflow-y-auto p-3 md:p-4">
+      {/* Mobile: 2 cols compactos. Desktop: auto-fit con min 240px →
+          cards grandes que crecen para llenar el espacio sin dejar
+          huecos cuando hay pocos países. */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
         {sorted.map((d, idx) => (
           <CountryCard key={d.countryId} datum={d} rank={idx + 1} />
         ))}

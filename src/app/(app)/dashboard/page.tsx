@@ -90,7 +90,6 @@ export default async function DashboardPage({
     >
       <PageHeader
         title="Dashboard"
-        description="Visión general por período. Para detalle por semana → calendario."
         actions={
           <Button
             size="sm"
@@ -127,8 +126,13 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
 
   return (
     <>
-      {/* KPI Row — mobile: scroll horizontal; desktop: grid 3→5. */}
-      <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[160px] md:mx-0 md:grid md:grid-cols-3 md:px-0 md:overflow-visible md:[&>*]:min-w-0 xl:grid-cols-5">
+      {/* KPI Row — mobile 2 cols (compactos), desktop 3→5. Override
+          height en mobile vía [&_[data-slot=card]] para evitar wrapping
+          de labels largos. */}
+      {/* Mobile: 6-col grid con span manual → fila 1 (status x3, span-2)
+          + fila 2 (año x2, span-3). Total 2 filas en mobile, label completo
+          sin wrap. Desktop: grid normal 3→5 cols. */}
+      <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-3 md:gap-3 xl:grid-cols-5 [&>*]:col-span-2 md:[&>*]:col-span-1 [&>*:nth-child(n+4)]:col-span-3 md:[&>*:nth-child(n+4)]:col-span-1">
         <KpiCard
           label="Firmados"
           value={formatNumber(statusCounts.firmados)}
@@ -203,7 +207,10 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
 function DashboardSkeleton() {
   return (
     <>
-      <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[160px] md:mx-0 md:grid md:grid-cols-3 md:px-0 md:overflow-visible md:[&>*]:min-w-0 xl:grid-cols-5">
+      {/* Mobile: 6-col grid con span manual → fila 1 (status x3, span-2)
+          + fila 2 (año x2, span-3). Total 2 filas en mobile, label completo
+          sin wrap. Desktop: grid normal 3→5 cols. */}
+      <div className="mt-4 grid grid-cols-6 gap-2 md:grid-cols-3 md:gap-3 xl:grid-cols-5 [&>*]:col-span-2 md:[&>*]:col-span-1 [&>*:nth-child(n+4)]:col-span-3 md:[&>*:nth-child(n+4)]:col-span-1">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-[88px] w-full rounded-lg" />
         ))}

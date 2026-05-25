@@ -43,7 +43,11 @@ export function PeriodFilter({ selected }: Props) {
     <div
       role="tablist"
       aria-label="Período"
-      className="flex flex-wrap items-center gap-1.5 px-2 py-2"
+      // Padding mirror del dashboard (px-4 mobile, px-6 desktop) para
+      // que los chips queden alineados con los KPI cards y el
+      // PageHeader. El bg-card/border-y del wrapper exterior llega al
+      // edge del viewport.
+      className="flex flex-wrap items-center gap-1.5 px-4 py-2 md:px-6"
     >
       {ITEMS.map((it) => {
         const active = selected === it.key;
