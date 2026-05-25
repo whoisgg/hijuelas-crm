@@ -220,7 +220,7 @@ export function WorldMap({ data, includeOpportunities, projectionConfig }: Props
                     fill: "var(--foreground)",
                   }}
                 >
-                  {formatNumber(d.plantsCommitted)}
+                  {formatNumber(d.plantsCommitted, d.plantsCommitted >= 1000)}
                 </text>
                 <text
                   textAnchor="middle"
@@ -232,7 +232,7 @@ export function WorldMap({ data, includeOpportunities, projectionConfig }: Props
                     fill: "var(--foreground)",
                   }}
                 >
-                  {formatUsd(d.revenueUsd, d.revenueUsd >= 100_000)}
+                  {formatUsd(d.revenueUsd, d.revenueUsd >= 10_000)}
                 </text>
               </g>
             </Marker>
