@@ -45,7 +45,10 @@ export function Topbar({ userEmail }: TopbarProps) {
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <AppLauncher />
+      {/* AppLauncher solo en desktop — en mobile el BottomNav cubre los módulos */}
+      <div className="hidden md:block">
+        <AppLauncher />
+      </div>
       <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
         <Sprout className="h-5 w-5 text-primary" />
         <span className="hidden sm:inline">{APP_NAME}</span>
