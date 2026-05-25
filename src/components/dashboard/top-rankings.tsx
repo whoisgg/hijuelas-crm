@@ -4,7 +4,6 @@ import { Building2, Globe2, Sprout } from "lucide-react";
 import type { TopRankings as TopRankingsData, TopRankingItem } from "@/lib/actions/analytics";
 import { Card } from "@/components/ui/card";
 import { formatUsd } from "@/lib/format";
-import { cn } from "@/lib/utils";
 
 type Props = {
   data: TopRankingsData;
@@ -73,7 +72,6 @@ function RankingCard({
               name={it.name}
               usd={it.totalUsd}
               share={it.share}
-              isFirst={idx === 0}
             />
           ))}
         </ul>
@@ -87,30 +85,20 @@ function RankingRow({
   name,
   usd,
   share,
-  isFirst,
 }: {
   rank: number;
   name: string;
   usd: number;
   share: number;
-  isFirst: boolean;
 }) {
-  // Barra visual relativa al líder (siempre 100% para #1).
+  // Barra de share como background — mismo tinte para todos los ranks.
+  // El ancho de la barra ya comunica visualmente quién es #1.
   const widthPct = Math.max(2, Math.round(share * 100));
   return (
-    <li
-      className={cn(
-        "relative flex items-center gap-2 border-b px-3 py-2 text-xs last:border-b-0",
-        isFirst && "bg-primary/5",
-      )}
-    >
-      {/* Barra de share como background */}
+    <li className="relative flex items-center gap-2 border-b px-3 py-2 text-xs last:border-b-0">
       <div
         aria-hidden
-        className={cn(
-          "absolute inset-y-0 left-0 transition-[width]",
-          isFirst ? "bg-primary/15" : "bg-muted/40",
-        )}
+        className="absolute inset-y-0 left-0 bg-primary/10 transition-[width]"
         style={{ width: `${widthPct}%` }}
       />
       <span className="relative z-10 w-5 shrink-0 text-[10px] tabular-nums text-muted-foreground">
