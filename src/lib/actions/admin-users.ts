@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/database.types";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
@@ -20,97 +19,38 @@ export type AdminUserRow = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Guard                                                                       */
+/* Check rápido (no-throw) usado por layout y nav para mostrar/ocultar.       */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Bloquea cualquier acción de admin si el caller no es admin.
- * Throw error → server action devuelve { ok: false, message }.
- */
-async function requireAdmin(): Promise<{ id: string }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado.");
-
-  const { data: appUser, error } = await supabase
-    .from("app_users")
-    .select("id, role, is_active, deleted_at")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!appUser || appUser.deleted_at || !appUser.is_active) {
-    throw new Error("Usuario no encontrado o inactivo.");
-  }
-  if (appUser.role !== "admin") {
-    throw new Error("Solo administradores pueden acceder al panel.");
-  }
-  return { id: user.id };
-}
-
-/** Para checks server-side en page.tsx (no-throw). */
 export async function isCurrentUserAdmin(): Promise<boolean> {
   try {
-    await requireAdmin();
-    return true;
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { data } = await supabase
+      .from("app_users")
+      .select("role, is_active, deleted_at")
+      .eq("id", user.id)
+      .maybeSingle();
+    return data?.role === "admin" && data?.is_active === true && !data?.deleted_at;
   } catch {
     return false;
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/* Listar                                                                      */
+/* RPCs — toda la lógica de admin vive en funciones Postgres SECURITY        */
+/* DEFINER. No se necesita SUPABASE_SERVICE_ROLE_KEY.                        */
 /* -------------------------------------------------------------------------- */
 
 export async function listAdminUsers(): Promise<AdminUserRow[]> {
-  await requireAdmin();
-  const admin = createAdminClient();
-
-  const { data: appUsers, error } = await admin
-    .from("app_users")
-    .select("id, full_name, email, role, is_active, created_at")
-    .is("deleted_at", null)
-    .order("full_name", { ascending: true });
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_list_users");
   if (error) throw new Error(error.message);
-
-  // Traer last_sign_in_at desde auth.users en batch
-  const ids = (appUsers ?? []).map((u) => u.id);
-  const lastSigninMap = new Map<string, string | null>();
-  if (ids.length > 0) {
-    // listUsers no soporta filtro por id; paginamos hasta cubrir todos
-    let page = 1;
-    const perPage = 200;
-    const wanted = new Set(ids);
-    while (wanted.size > 0) {
-      const { data, error: err } = await admin.auth.admin.listUsers({ page, perPage });
-      if (err) break;
-      for (const u of data.users) {
-        if (wanted.has(u.id)) {
-          lastSigninMap.set(u.id, u.last_sign_in_at ?? null);
-          wanted.delete(u.id);
-        }
-      }
-      if (data.users.length < perPage) break;
-      page += 1;
-      if (page > 50) break; // safety
-    }
-  }
-
-  return (appUsers ?? []).map((u) => ({
-    id: u.id,
-    full_name: u.full_name,
-    email: u.email,
-    role: u.role,
-    is_active: u.is_active ?? true,
-    created_at: u.created_at,
-    last_sign_in_at: lastSigninMap.get(u.id) ?? null,
-  }));
+  return (data ?? []) as AdminUserRow[];
 }
 
-/* -------------------------------------------------------------------------- */
-/* Crear                                                                       */
-/* -------------------------------------------------------------------------- */
+/* ---- Crear ---- */
 
 const ROLE_VALUES = ["admin", "sales", "finance", "viewer"] as const;
 
@@ -127,45 +67,23 @@ export async function createAdminUser(
   input: CreateUserInput,
 ): Promise<{ ok: true; id: string } | { ok: false; message: string }> {
   try {
-    await requireAdmin();
     const parsed = createSchema.parse(input);
-    const admin = createAdminClient();
-
-    // 1) Crear en auth.users con email confirmado
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email: parsed.email,
-      password: parsed.password,
-      email_confirm: true,
-      user_metadata: { full_name: parsed.full_name },
+    const supabase = await createClient();
+    const { data, error } = await supabase.rpc("admin_create_user", {
+      p_full_name: parsed.full_name,
+      p_email: parsed.email,
+      p_password: parsed.password,
+      p_role: parsed.role,
     });
-    if (createErr || !created.user) {
-      return { ok: false, message: createErr?.message ?? "No se pudo crear el usuario." };
-    }
-
-    // 2) Crear fila en public.app_users (PK = auth.users.id)
-    const { error: insertErr } = await admin.from("app_users").insert({
-      id: created.user.id,
-      full_name: parsed.full_name,
-      email: parsed.email,
-      role: parsed.role,
-      is_active: true,
-    });
-    if (insertErr) {
-      // Rollback: borrar el auth user
-      await admin.auth.admin.deleteUser(created.user.id);
-      return { ok: false, message: `Error en app_users: ${insertErr.message}` };
-    }
-
+    if (error) return { ok: false, message: error.message };
     revalidatePath("/admin/usuarios");
-    return { ok: true, id: created.user.id };
+    return { ok: true, id: data as string };
   } catch (e) {
     return { ok: false, message: e instanceof Error ? e.message : "Error desconocido" };
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Editar                                                                      */
-/* -------------------------------------------------------------------------- */
+/* ---- Editar ---- */
 
 const updateSchema = z.object({
   id: z.string().uuid(),
@@ -173,8 +91,12 @@ const updateSchema = z.object({
   email: z.string().email(),
   role: z.enum(ROLE_VALUES),
   is_active: z.boolean(),
-  /** Opcional: si se pasa, resetea password */
-  password: z.string().min(8).max(72).optional().or(z.literal("").transform(() => undefined)),
+  password: z
+    .string()
+    .min(8)
+    .max(72)
+    .optional()
+    .or(z.literal("").transform(() => undefined)),
 });
 
 export type UpdateUserInput = z.input<typeof updateSchema>;
@@ -183,34 +105,17 @@ export async function updateAdminUser(
   input: UpdateUserInput,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    await requireAdmin();
     const parsed = updateSchema.parse(input);
-    const admin = createAdminClient();
-
-    // 1) Update auth.users (email + password si se pasó)
-    const authPayload: { email?: string; password?: string } = {
-      email: parsed.email,
-    };
-    if (parsed.password) authPayload.password = parsed.password;
-    const { error: authErr } = await admin.auth.admin.updateUserById(
-      parsed.id,
-      authPayload,
-    );
-    if (authErr) return { ok: false, message: `Auth: ${authErr.message}` };
-
-    // 2) Update public.app_users
-    const { error: appErr } = await admin
-      .from("app_users")
-      .update({
-        full_name: parsed.full_name,
-        email: parsed.email,
-        role: parsed.role,
-        is_active: parsed.is_active,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", parsed.id);
-    if (appErr) return { ok: false, message: `app_users: ${appErr.message}` };
-
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("admin_update_user", {
+      p_id: parsed.id,
+      p_full_name: parsed.full_name,
+      p_email: parsed.email,
+      p_role: parsed.role,
+      p_is_active: parsed.is_active,
+      p_password: parsed.password ?? null,
+    });
+    if (error) return { ok: false, message: error.message };
     revalidatePath("/admin/usuarios");
     return { ok: true };
   } catch (e) {
@@ -218,37 +123,15 @@ export async function updateAdminUser(
   }
 }
 
-/* -------------------------------------------------------------------------- */
-/* Eliminar (soft + ban en auth)                                              */
-/* -------------------------------------------------------------------------- */
+/* ---- Eliminar (soft) ---- */
 
 export async function deleteAdminUser(
   id: string,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
-    const caller = await requireAdmin();
-    if (caller.id === id) {
-      return { ok: false, message: "No podés eliminar tu propio usuario." };
-    }
-    const admin = createAdminClient();
-
-    // Soft delete en app_users
-    const { error: appErr } = await admin
-      .from("app_users")
-      .update({
-        deleted_at: new Date().toISOString(),
-        is_active: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id);
-    if (appErr) return { ok: false, message: `app_users: ${appErr.message}` };
-
-    // Ban en auth — no podrá iniciar sesión
-    const { error: banErr } = await admin.auth.admin.updateUserById(id, {
-      ban_duration: "876000h", // 100 años
-    });
-    if (banErr) return { ok: false, message: `Auth ban: ${banErr.message}` };
-
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("admin_delete_user", { p_id: id });
+    if (error) return { ok: false, message: error.message };
     revalidatePath("/admin/usuarios");
     return { ok: true };
   } catch (e) {
