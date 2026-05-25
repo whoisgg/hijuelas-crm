@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Search,
   Sigma,
+  SlidersHorizontal,
   Sparkles,
   Building2,
 } from "lucide-react";
@@ -21,7 +22,8 @@ import {
   matchesKamStatuses,
   type KamStatusKey,
 } from "@/lib/kam-status";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,6 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -503,7 +511,7 @@ export function CalendarGrid({
   // necesario para que el header quede SIEMPRE bajo el toolbar (en
   // viewport position = 56 topbar + altura toolbar). Escribe a una CSS
   // variable para no disparar re-renders.
-  React.useLayoutEffect(() => {
+  React.useEffect(() => {
     const target = 56 + toolbarH;
     const wrapper = gridContainerRef.current;
     if (!wrapper) return;
@@ -543,6 +551,24 @@ export function CalendarGrid({
   const isCurrentWeek = (w: { year: number; week: number }) =>
     w.year === today.year && w.week === today.week;
 
+  // Count active filters (non-default state) for the Filtros badge.
+  const activeFilterCount = React.useMemo(() => {
+    let n = 0;
+    if (speciesId !== "all") n++;
+    const isDefaultStatuses =
+      contractStatuses.size === 2 &&
+      contractStatuses.has("activos") &&
+      contractStatuses.has("por_firmar");
+    if (!isDefaultStatuses) n++;
+    if (includeOpps) n++;
+    if (hiddenConditions.size > 0) n++;
+    return n;
+  }, [speciesId, contractStatuses, includeOpps, hiddenConditions]);
+
+  // Inline KPI compact: total + año actual (si existe en kpis.years).
+  const currentYear = today.year;
+  const currentYearKpi = kpis.years.find((y) => y.year === currentYear);
+
   // Group weeks by month for the band header
   const monthBand = React.useMemo(() => {
     const segments: { month: string; span: number; startIdx: number }[] = [];
@@ -581,7 +607,9 @@ export function CalendarGrid({
         ref={toolbarBlockRef}
         className="sticky top-14 z-30 -mx-6 bg-background px-6 pb-2"
       >
-      {/* Toolbar */}
+      {/* Toolbar compacto: nav · vista · search · KPI inline · Filtros (popover).
+          Filtros que antes ocupaban 2-3 filas (especies/status/opps/leyenda)
+          ahora viven dentro del popover, con badge mostrando el conteo. */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2">
         {/* Nav buttons */}
         <div className="flex items-center gap-0.5">
@@ -664,148 +692,216 @@ export function CalendarGrid({
           />
         </div>
 
-        <Select value={speciesId} onValueChange={(v) => setSpeciesId(String(v ?? "all"))}>
-          <SelectTrigger className="h-8 w-40">
-            {speciesId === "all" ? (
-              <span className="text-muted-foreground">Todas las especies</span>
-            ) : (
-              <SelectValue placeholder="Especie" />
-            )}
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas las especies</SelectItem>
-            {species.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {/* Status filter — solo aplica a contratos. Default: Activos. */}
-        <div className="inline-flex flex-wrap items-center gap-1">
-          {KAM_STATUS_GROUPS.map((g) => {
-            const active = contractStatuses.has(g.key);
-            return (
-              <label
-                key={g.key}
-                className={
-                  "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors " +
-                  (active
-                    ? "border-primary/40 bg-primary/10 text-primary"
-                    : "border-border text-muted-foreground hover:bg-muted")
-                }
-              >
-                <input
-                  type="checkbox"
-                  className="accent-primary"
-                  checked={active}
-                  onChange={() => {
-                    setContractStatuses((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g.key)) next.delete(g.key);
-                      else next.add(g.key);
-                      return next;
-                    });
-                  }}
-                />
-                {g.label}
-              </label>
-            );
-          })}
-        </div>
-
-        <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1 text-xs">
-          <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground">Oportunidades</span>
-          <Switch checked={includeOpps} onCheckedChange={setIncludeOpps} />
-        </div>
-
-        {includeOpps ? (
-          <Select value={String(minProb)} onValueChange={(v) => setMinProb(Number(v))}>
-            <SelectTrigger className="h-8 w-32">
-              <SelectValue placeholder="Prob. mínima" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="0">Prob. ≥ 0%</SelectItem>
-              <SelectItem value="25">Prob. ≥ 25%</SelectItem>
-              <SelectItem value="50">Prob. ≥ 50%</SelectItem>
-              <SelectItem value="70">Prob. ≥ 70%</SelectItem>
-              <SelectItem value="90">Prob. ≥ 90%</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* KPI inline compacto — solo total + año actual. Oculto en mobile. */}
+        {kpis.total > 0 ? (
+          <div
+            className="hidden items-baseline gap-1.5 whitespace-nowrap px-1 text-xs md:inline-flex"
+            title={`Total ${numFmt.format(kpis.total)} plantas · ${kpis.years.map((y) => `${y.year}: ${numFmt.format(y.plants)}`).join(" · ")}`}
+          >
+            <span className="text-muted-foreground">Total</span>
+            <span className="font-semibold tabular-nums">{formatCompact(kpis.total)}</span>
+            {currentYearKpi ? (
+              <>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-muted-foreground">{currentYear}</span>
+                <span className="font-semibold tabular-nums">{formatCompact(currentYearKpi.plants)}</span>
+              </>
+            ) : null}
+          </div>
         ) : null}
+
+        {/* Botón Filtros — popover con especie, status, oportunidades, leyenda.
+            Base-ui Popover.Trigger ya renderiza un <button>; no envolvemos
+            con <Button> (sería nested-button hydration error). En cambio,
+            aplicamos buttonVariants directo al trigger. */}
+        <Popover>
+          <PopoverTrigger
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "h-8 gap-1.5",
+            )}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Filtros</span>
+            {activeFilterCount > 0 ? (
+              <Badge
+                variant="secondary"
+                className="ml-0.5 h-4 min-w-4 rounded-full px-1 text-[10px] font-semibold tabular-nums"
+              >
+                {activeFilterCount}
+              </Badge>
+            ) : null}
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-[20rem] p-0">
+            <div className="flex flex-col gap-3 p-3">
+              {/* Mostrar: leyenda clickeable para ocultar/mostrar tipos */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Mostrar
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  <LegendDot
+                    label="Venta"
+                    colorClass="bg-primary/10 text-primary"
+                    active={!hiddenConditions.has("venta")}
+                    onClick={() =>
+                      setHiddenConditions((prev) => {
+                        const next = new Set(prev);
+                        if (next.has("venta")) next.delete("venta");
+                        else next.add("venta");
+                        return next;
+                      })
+                    }
+                  />
+                  <LegendDot
+                    label="Muestra"
+                    colorClass="bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    active={!hiddenConditions.has("muestra")}
+                    onClick={() =>
+                      setHiddenConditions((prev) => {
+                        const next = new Set(prev);
+                        if (next.has("muestra")) next.delete("muestra");
+                        else next.add("muestra");
+                        return next;
+                      })
+                    }
+                  />
+                  <LegendDot
+                    label="Reposición"
+                    colorClass="bg-sky-500/10 text-sky-700 dark:text-sky-300"
+                    active={!hiddenConditions.has("reposicion")}
+                    onClick={() =>
+                      setHiddenConditions((prev) => {
+                        const next = new Set(prev);
+                        if (next.has("reposicion")) next.delete("reposicion");
+                        else next.add("reposicion");
+                        return next;
+                      })
+                    }
+                  />
+                  <LegendDot
+                    label="Oportunidad"
+                    colorClass="border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+                    active={!hiddenConditions.has("opp") && includeOpps}
+                    onClick={() => {
+                      // Click sobre oportunidad → toggle del switch principal
+                      setIncludeOpps((v) => !v);
+                      setHiddenConditions((prev) => {
+                        const next = new Set(prev);
+                        next.delete("opp");
+                        return next;
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Filtros: especie · status · oportunidades · prob mínima */}
+              <div className="space-y-2.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Filtros
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">Especie</label>
+                  <Select
+                    value={speciesId}
+                    onValueChange={(v) => setSpeciesId(String(v ?? "all"))}
+                  >
+                    <SelectTrigger className="h-8 w-full">
+                      {speciesId === "all" ? (
+                        <span className="text-muted-foreground">Todas las especies</span>
+                      ) : (
+                        <SelectValue placeholder="Especie" />
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas las especies</SelectItem>
+                      {species.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-medium text-muted-foreground">
+                    Estado de contratos
+                  </label>
+                  <div className="flex flex-wrap gap-1">
+                    {KAM_STATUS_GROUPS.map((g) => {
+                      const active = contractStatuses.has(g.key);
+                      return (
+                        <label
+                          key={g.key}
+                          className={
+                            "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors " +
+                            (active
+                              ? "border-primary/40 bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:bg-muted")
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-primary"
+                            checked={active}
+                            onChange={() => {
+                              setContractStatuses((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(g.key)) next.delete(g.key);
+                                else next.add(g.key);
+                                return next;
+                              });
+                            }}
+                          />
+                          {g.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border px-2 py-1.5 text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Oportunidades
+                  </span>
+                  <Switch checked={includeOpps} onCheckedChange={setIncludeOpps} />
+                </div>
+
+                {includeOpps ? (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-medium text-muted-foreground">
+                      Probabilidad mínima
+                    </label>
+                    <Select
+                      value={String(minProb)}
+                      onValueChange={(v) => setMinProb(Number(v))}
+                    >
+                      <SelectTrigger className="h-8 w-full">
+                        <SelectValue placeholder="Prob. mínima" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Prob. ≥ 0%</SelectItem>
+                        <SelectItem value="25">Prob. ≥ 25%</SelectItem>
+                        <SelectItem value="50">Prob. ≥ 50%</SelectItem>
+                        <SelectItem value="70">Prob. ≥ 70%</SelectItem>
+                        <SelectItem value="90">Prob. ≥ 90%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
       </div>
       {/* /Toolbar sticky */}
-
-      {/* KPIs — total entregas y breakdown por año (respetan los filtros).
-          Ocultos en mobile para dar espacio al grid. */}
-      {kpis.years.length > 0 ? (
-        <div className="hidden flex-wrap items-stretch gap-2 rounded-lg border bg-card px-3 py-2 md:flex">
-          <KpiCard label="Total entregas" plants={kpis.total} accent />
-          {kpis.years.map((y) => (
-            <KpiCard key={y.year} label={String(y.year)} plants={y.plants} />
-          ))}
-        </div>
-      ) : null}
-
-      {/* Leyenda — clickeable para ocultar/mostrar tipos */}
-      <div className="flex flex-wrap items-center gap-2 px-1 text-[10px]">
-        <LegendDot
-          label="Venta"
-          colorClass="bg-primary/10 text-primary"
-          active={!hiddenConditions.has("venta")}
-          onClick={() =>
-            setHiddenConditions((prev) => {
-              const next = new Set(prev);
-              if (next.has("venta")) next.delete("venta");
-              else next.add("venta");
-              return next;
-            })
-          }
-        />
-        <LegendDot
-          label="Muestra"
-          colorClass="bg-amber-500/10 text-amber-700 dark:text-amber-300"
-          active={!hiddenConditions.has("muestra")}
-          onClick={() =>
-            setHiddenConditions((prev) => {
-              const next = new Set(prev);
-              if (next.has("muestra")) next.delete("muestra");
-              else next.add("muestra");
-              return next;
-            })
-          }
-        />
-        <LegendDot
-          label="Reposición"
-          colorClass="bg-sky-500/10 text-sky-700 dark:text-sky-300"
-          active={!hiddenConditions.has("reposicion")}
-          onClick={() =>
-            setHiddenConditions((prev) => {
-              const next = new Set(prev);
-              if (next.has("reposicion")) next.delete("reposicion");
-              else next.add("reposicion");
-              return next;
-            })
-          }
-        />
-        <LegendDot
-          label="Oportunidad"
-          colorClass="border border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
-          active={!hiddenConditions.has("opp") && includeOpps}
-          onClick={() => {
-            // Click sobre oportunidad → toggle del switch principal
-            setIncludeOpps((v) => !v);
-            setHiddenConditions((prev) => {
-              const next = new Set(prev);
-              next.delete("opp");
-              return next;
-            });
-          }}
-        />
-      </div>
 
       {/* Grid TRANSPUESTO: filas = periodos, columnas = países.
           UN SOLO grid — header y body comparten gridTemplateColumns por
@@ -1349,44 +1445,3 @@ function LegendDot({
   );
 }
 
-function KpiCard({
-  label,
-  plants,
-  accent,
-}: {
-  label: string;
-  plants: number;
-  accent?: boolean;
-}) {
-  return (
-    <div
-      className={
-        "min-w-[110px] flex-1 rounded-md border px-3 py-1.5 " +
-        (accent
-          ? "border-primary/40 bg-primary/5"
-          : "border-border bg-background/40")
-      }
-      title={`${numFmt.format(plants)} plantas`}
-    >
-      <div
-        className={
-          "text-[10px] font-medium uppercase tracking-wider " +
-          (accent ? "text-primary" : "text-muted-foreground")
-        }
-      >
-        {label}
-      </div>
-      <div
-        className={
-          "font-mono text-base font-bold tabular-nums " +
-          (accent ? "text-foreground" : "text-foreground")
-        }
-      >
-        {numFmt.format(plants)}{" "}
-        <span className="text-[10px] font-normal text-muted-foreground">
-          plantas
-        </span>
-      </div>
-    </div>
-  );
-}
