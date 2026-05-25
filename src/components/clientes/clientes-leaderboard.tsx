@@ -269,8 +269,7 @@ function ClientCard({
         !client.isActive && "opacity-60",
       )}
     >
-      <div className="flex items-start gap-2.5">
-        <Avatar name={client.name} />
+      <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-1.5">
             <h3 className="truncate text-sm font-semibold text-foreground group-hover:text-primary">
@@ -285,11 +284,7 @@ function ClientCard({
               <MiniAvatar name={client.kam.name} />
               <span className="truncate">{client.kam.name}</span>
             </div>
-          ) : (
-            <span className="mt-0.5 inline-block text-[11px] text-muted-foreground/60">
-              Sin KAM
-            </span>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -328,24 +323,6 @@ function ClientCard({
         </Badge>
       ) : null}
     </Link>
-  );
-}
-
-/**
- * Avatar circular con iniciales y color OKLCH estable derivado del
- * hash del nombre.
- */
-function Avatar({ name }: { name: string }) {
-  const initials = React.useMemo(() => getInitials(name), [name]);
-  const color = React.useMemo(() => hashToColor(name), [name]);
-  return (
-    <div
-      aria-hidden
-      className="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm ring-1 ring-black/10"
-      style={{ backgroundColor: color }}
-    >
-      {initials}
-    </div>
   );
 }
 
