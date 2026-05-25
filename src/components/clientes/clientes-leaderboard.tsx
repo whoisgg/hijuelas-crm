@@ -96,12 +96,12 @@ export function ClientesLeaderboard({ rows }: Props) {
     });
   }, [filtered]);
 
-  // Defaults: primeros 2 países expandidos, resto colapsado. Al
-  // buscar/filtrar expandimos todo para que se vea el match.
+  // Default: todos colapsados. Al buscar/filtrar por KAM auto-expandimos
+  // los países que tienen matches para no esconder resultados.
   const isSearching = search.trim().length > 0 || kamFilter !== "all";
   const defaultExpanded = React.useMemo(() => {
     if (isSearching) return new Set(groups.map((g) => g.iso2));
-    return new Set(groups.slice(0, 2).map((g) => g.iso2));
+    return new Set<string>();
   }, [groups, isSearching]);
 
   const [expanded, setExpanded] = React.useState<Set<string>>(defaultExpanded);
