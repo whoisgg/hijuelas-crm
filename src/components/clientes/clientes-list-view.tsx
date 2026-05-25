@@ -422,7 +422,14 @@ function FilterSelect({
       <SelectTrigger size="sm" className="min-w-[140px]">
         <span className="flex items-center gap-1.5 text-xs">
           <Filter className="h-3.5 w-3.5 text-muted-foreground" />
-          <SelectValue placeholder={placeholder} />
+          {/* base-ui SelectValue muestra el value crudo si no se le pasa
+              children function. Acá mapeamos value→label de las options. */}
+          <SelectValue placeholder={placeholder}>
+            {(v) => {
+              const key = v === SENTINEL || v == null ? "" : String(v);
+              return options.find((o) => o.value === key)?.label ?? placeholder;
+            }}
+          </SelectValue>
         </span>
       </SelectTrigger>
       <SelectContent>
