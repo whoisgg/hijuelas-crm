@@ -699,9 +699,10 @@ export function CalendarGrid({
         ) : null}
       </div>
 
-      {/* KPIs — total entregas y breakdown por año (respetan los filtros) */}
+      {/* KPIs — total entregas y breakdown por año (respetan los filtros).
+          Ocultos en mobile para dar espacio al grid. */}
       {kpis.years.length > 0 ? (
-        <div className="flex flex-wrap items-stretch gap-2 rounded-lg border bg-card px-3 py-2">
+        <div className="hidden flex-wrap items-stretch gap-2 rounded-lg border bg-card px-3 py-2 md:flex">
           <KpiCard label="Total entregas" plants={kpis.total} accent />
           {kpis.years.map((y) => (
             <KpiCard key={y.year} label={String(y.year)} plants={y.plants} />
@@ -813,7 +814,7 @@ export function CalendarGrid({
           className="grid"
           style={{
             gridTemplateColumns: isMobile
-              ? `5rem 1fr 4rem`
+              ? `4.5rem minmax(0, 1fr) 3.5rem`
               : `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
             minWidth: isMobile
               ? "auto"
@@ -1025,7 +1026,7 @@ export function CalendarGrid({
                           })
                         }
                         className={
-                          "group flex flex-col gap-1 border-b border-r p-1.5 text-left hover:bg-muted/30 " +
+                          "group flex min-w-0 flex-col gap-1 overflow-hidden border-b border-r p-1.5 text-left hover:bg-muted/30 " +
                           (isCur ? "bg-primary/[0.04]" : "")
                         }
                       >
