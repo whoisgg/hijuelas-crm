@@ -237,12 +237,17 @@ function LoginPageInner() {
               label="Contraseña"
               htmlFor="password"
               trailing={
-                <Link
-                  href="/reset-password"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode("magic");
+                    setStatus("idle");
+                    setErrorMessage(null);
+                  }}
                   className="text-[12px] font-medium text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
                 >
-                  ¿Olvidaste?
-                </Link>
+                  ¿Olvidaste? Enviar enlace mágico
+                </button>
               }
             >
               <Input
@@ -277,6 +282,14 @@ function LoginPageInner() {
           </form>
         ) : (
           <form onSubmit={onMagicSubmit} className="space-y-4">
+            <div className="rounded-2xl border border-border/70 bg-card/30 p-3 text-[12px] leading-relaxed text-muted-foreground">
+              Ingresá tu correo{" "}
+              <code className="rounded bg-muted/60 px-1 py-0.5 font-mono text-[11px]">
+                @{HIJUELAS_DOMAIN}
+              </code>{" "}
+              y te enviamos un enlace para iniciar sesión sin contraseña.
+            </div>
+
             <AuthField label="Correo" htmlFor="email-magic">
               <Input
                 id="email-magic"
@@ -314,21 +327,21 @@ function LoginPageInner() {
           </form>
         )}
 
-        <div className="pt-1 text-center">
-          <button
-            type="button"
-            className="text-[13px] text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
-            onClick={() => {
-              setMode(mode === "password" ? "magic" : "password");
-              setStatus("idle");
-              setErrorMessage(null);
-            }}
-          >
-            {mode === "password"
-              ? "¿Sin contraseña? Enviar enlace mágico"
-              : "Usar contraseña"}
-          </button>
-        </div>
+        {mode === "magic" ? (
+          <div className="pt-1 text-center">
+            <button
+              type="button"
+              className="text-[13px] text-muted-foreground underline-offset-4 hover:text-primary hover:underline"
+              onClick={() => {
+                setMode("password");
+                setStatus("idle");
+                setErrorMessage(null);
+              }}
+            >
+              ← Volver a contraseña
+            </button>
+          </div>
+        ) : null}
       </div>
     </AuthCard>
   );
