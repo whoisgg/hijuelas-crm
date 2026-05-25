@@ -54,12 +54,12 @@ function RankingCard({
 }) {
   return (
     <Card className="flex flex-col overflow-hidden p-0">
-      <div className="flex shrink-0 items-center justify-between border-b px-3 py-2 text-xs">
-        <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-          <Icon className="size-3.5 text-muted-foreground" />
+      <div className="flex shrink-0 items-center justify-between bg-primary px-3 py-2 text-xs text-white">
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          <Icon className="size-3.5 text-white/80" />
           {title}
         </span>
-        <span className="tabular-nums text-muted-foreground">{periodLabel}</span>
+        <span className="tabular-nums text-white/80">{periodLabel}</span>
       </div>
       {items.length === 0 ? (
         <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">

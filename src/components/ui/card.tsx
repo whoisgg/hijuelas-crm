@@ -25,7 +25,12 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "group/card-header @container/card-header grid auto-rows-min items-start gap-1 rounded-t-xl px-4 group-data-[size=sm]/card:px-3 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto] [.border-b]:pb-4 group-data-[size=sm]/card:[.border-b]:pb-3",
+        // Estilo nuevo: fondo primary + texto white para destacar los
+        // títulos de sección de manera consistente en toda la app.
+        // -mt-4 y -mx-4 cancelan el padding del Card padre para que el
+        // header llegue al borde (rounded-t-xl mantiene esquinas).
+        // En size=sm la cancelación usa los valores correspondientes.
+        "group/card-header @container/card-header -mt-4 -mx-4 grid auto-rows-min items-start gap-1 rounded-t-xl bg-primary px-4 py-3 text-white group-data-[size=sm]/card:-mt-3 group-data-[size=sm]/card:-mx-3 group-data-[size=sm]/card:px-3 group-data-[size=sm]/card:py-2.5 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
         className
       )}
       {...props}

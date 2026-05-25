@@ -40,11 +40,11 @@ export function KpiCard({ label, value, helper, delta, icon: Icon, tone = "defau
 
   return (
     <Card size="sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle className="text-xs font-medium uppercase tracking-wide">
           {label}
         </CardTitle>
-        {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}
+        {Icon ? <Icon className="size-4 text-primary-foreground/80" /> : null}
       </CardHeader>
       <CardContent className="space-y-1">
         <div className={cn("text-2xl font-semibold tabular-nums", TONE_CLASSES[tone])}>
