@@ -11,11 +11,11 @@ type Props = {
   selected: PeriodKey;
 };
 
-const ITEMS: { key: PeriodKey; label: string }[] = [
-  { key: "this-month", label: "Este mes" },
-  { key: "next-3", label: "Próximos 3 meses" },
-  { key: "year", label: "Año actual" },
-  { key: "next-year", label: "Próximo año" },
+const ITEMS: { key: PeriodKey; label: string; short: string }[] = [
+  { key: "this-month", label: "Este mes", short: "Mes" },
+  { key: "next-3", label: "Próximos 3 meses", short: "3 meses" },
+  { key: "year", label: "Año actual", short: "Año" },
+  { key: "next-year", label: "Próximo año", short: "Próx. año" },
 ];
 
 /**
@@ -58,14 +58,17 @@ export function PeriodFilter({ selected }: Props) {
             role="tab"
             aria-selected={active}
             onClick={() => update(it.key)}
+            title={it.label}
             className={cn(
-              "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+              "whitespace-nowrap rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
               active
                 ? "border-primary bg-primary text-primary-foreground shadow-sm"
                 : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
-            {it.label}
+            {/* Label corto en mobile, completo en sm+ */}
+            <span className="sm:hidden">{it.short}</span>
+            <span className="hidden sm:inline">{it.label}</span>
           </button>
         );
       })}
