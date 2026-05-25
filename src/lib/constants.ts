@@ -6,7 +6,6 @@ import {
   Briefcase,
   Calendar,
   Sprout,
-  BarChart3,
   Share2,
   UserCheck,
 } from "lucide-react";
@@ -23,60 +22,14 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    comingSoon: "Sprint 6",
-  },
-  {
-    label: "Clientes",
-    href: "/clientes",
-    icon: Users,
-    comingSoon: "Sprint 2",
-  },
-  {
-    label: "Contratos",
-    href: "/contratos",
-    icon: FileText,
-    comingSoon: "Sprint 3",
-  },
-  {
-    label: "Oportunidades",
-    href: "/oportunidades",
-    icon: Briefcase,
-    comingSoon: "Sprint 5",
-  },
-  {
-    label: "KAM",
-    href: "/kam",
-    icon: UserCheck,
-    comingSoon: "Sprint 7",
-  },
-  {
-    label: "Calendario",
-    href: "/calendario",
-    icon: Calendar,
-    comingSoon: "Sprint 6",
-  },
-  {
-    label: "Catálogo",
-    href: "/catalogo",
-    icon: Sprout,
-    comingSoon: "Sprint 1",
-  },
-  {
-    label: "Reportes",
-    href: "/reportes",
-    icon: BarChart3,
-    comingSoon: "Sprint 6",
-  },
-  {
-    label: "Compartir",
-    href: "/compartir",
-    icon: Share2,
-    comingSoon: "Sprint 7",
-  },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Calendario", href: "/calendario", icon: Calendar },
+  { label: "Oportunidades", href: "/oportunidades", icon: Briefcase },
+  { label: "Contratos", href: "/contratos", icon: FileText },
+  { label: "KAM", href: "/kam", icon: UserCheck },
+  { label: "Clientes", href: "/clientes", icon: Users },
+  { label: "Catálogo", href: "/catalogo", icon: Sprout },
+  { label: "Compartir", href: "/compartir", icon: Share2 },
 ];
 
 export type QuickCreateItem = {
