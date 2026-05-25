@@ -188,7 +188,21 @@ export type CatalogStats = {
   plantsDeliveredYtd: number;
   plantsPipeline: number;
   topClients: Array<{ id: string; name: string; qtyPlants: number }>;
+  topCountries: Array<{ iso2: string | null; name: string; qtyPlants: number }>;
   yearlyTrend: Array<{ year: number; qtyPlants: number; revenueUsd: number }>;
+};
+
+export type CatalogOverview = {
+  speciesCount: number;
+  programsCount: number;
+  varietiesCount: number;
+  plantsCommittedYtd: number;       // suma de qty_plants items del año
+  topVarietiesYtd: Array<{
+    varietyId: string;
+    name: string;
+    speciesName: string | null;
+    qtyPlants: number;
+  }>;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -1075,24 +1089,31 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
 
   if (!variety.data) return null;
 
-  // Contract items por año
+  // Contract items por año (incluye country del cliente para topCountries)
   const itemsRes = await supabase
     .from("contract_items")
     .select(
-      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts(client_id, clients(id, name), total_neto_usd)",
+      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts(client_id, clients(id, name, country:countries(iso2, name_es)), total_neto_usd)",
     )
     .eq("variety_id", varietyId)
     .is("deleted_at", null);
 
   type ItemRow = NonNullable<typeof itemsRes.data>[number];
+  type CountryRel = { iso2: string | null; name_es: string };
+  type ClientRel = {
+    id: string;
+    name: string;
+    country: CountryRel | CountryRel[] | null;
+  };
   type ContractRel = {
     client_id: string | null;
-    clients: { id: string; name: string } | { id: string; name: string }[] | null;
+    clients: ClientRel | ClientRel[] | null;
     total_neto_usd: number;
   };
 
   const byYear = new Map<number, { qty: number; revenue: number }>();
   const byClient = new Map<string, { id: string; name: string; qtyPlants: number }>();
+  const byCountry = new Map<string, { iso2: string | null; name: string; qtyPlants: number }>();
   let plantsCommittedYtd = 0;
   let plantsDeliveredYtd = 0;
 
@@ -1114,12 +1135,22 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
 
       const contractRel = row.contracts as ContractRel | ContractRel[] | null;
       const contract = Array.isArray(contractRel) ? contractRel[0] : contractRel;
-      const clientRel = contract?.clients as { id: string; name: string } | { id: string; name: string }[] | null | undefined;
+      const clientRel = contract?.clients as ClientRel | ClientRel[] | null | undefined;
       const client = Array.isArray(clientRel) ? clientRel[0] : clientRel;
       if (client) {
         const ex = byClient.get(client.id);
         if (ex) ex.qtyPlants += qty;
         else byClient.set(client.id, { id: client.id, name: client.name, qtyPlants: qty });
+
+        // Country aggregation
+        const countryRel = client.country as CountryRel | CountryRel[] | null;
+        const country = Array.isArray(countryRel) ? countryRel[0] : countryRel;
+        if (country) {
+          const key = country.iso2 ?? country.name_es;
+          const exC = byCountry.get(key);
+          if (exC) exC.qtyPlants += qty;
+          else byCountry.set(key, { iso2: country.iso2, name: country.name_es, qtyPlants: qty });
+        }
       }
     }
   }
@@ -1167,6 +1198,7 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
     plantsDeliveredYtd,
     plantsPipeline,
     topClients: [...byClient.values()].sort((a, b) => b.qtyPlants - a.qtyPlants).slice(0, 5),
+    topCountries: [...byCountry.values()].sort((a, b) => b.qtyPlants - a.qtyPlants).slice(0, 5),
     yearlyTrend: [...byYear.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([y, v]) => ({ year: y, qtyPlants: v.qty, revenueUsd: v.revenue })),
@@ -1596,5 +1628,77 @@ export async function getTopRankings(params: {
     ),
     clients: buildTop(byClient),
     countries: buildTop(byCountry),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Catalogo Overview — landing del /catalogo (sin variedad seleccionada)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Overview del catálogo: cards de stats globales + top 10 variedades
+ * del año actual. Se muestra como landing cuando no hay variety en URL.
+ */
+export async function getCatalogOverview(): Promise<CatalogOverview> {
+  const supabase = await createClient();
+  const year = currentYear();
+
+  // Counts globales
+  const [speciesRes, programsRes, varietiesRes] = await Promise.all([
+    supabase.from("species").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    supabase.from("genetic_programs").select("id", { count: "exact", head: true }).is("deleted_at", null),
+    supabase.from("varieties").select("id", { count: "exact", head: true }).is("deleted_at", null),
+  ]);
+
+  // Items del año por variedad
+  const itemsRes = await supabase
+    .from("contract_items")
+    .select("qty_plants, delivery_year, variety_id, varieties(id, name, species(name))")
+    .eq("delivery_year", year)
+    .is("deleted_at", null);
+
+  type ItemRow = NonNullable<typeof itemsRes.data>[number];
+  type VarietyRel = {
+    id: string;
+    name: string;
+    species: { name: string } | { name: string }[] | null;
+  };
+
+  type Acc = { varietyId: string; name: string; speciesName: string | null; qtyPlants: number };
+  const byVariety = new Map<string, Acc>();
+  let plantsCommittedYtd = 0;
+
+  for (const item of itemsRes.data ?? []) {
+    const row = item as ItemRow;
+    const qty = Number(row.qty_plants ?? 0);
+    plantsCommittedYtd += qty;
+
+    const varietyRel = row.varieties as VarietyRel | VarietyRel[] | null;
+    const variety = Array.isArray(varietyRel) ? varietyRel[0] : varietyRel;
+    if (!variety) continue;
+    const speciesRel = variety.species as { name: string } | { name: string }[] | null;
+    const species = Array.isArray(speciesRel) ? speciesRel[0] : speciesRel;
+
+    const ex = byVariety.get(variety.id);
+    if (ex) ex.qtyPlants += qty;
+    else
+      byVariety.set(variety.id, {
+        varietyId: variety.id,
+        name: variety.name,
+        speciesName: species?.name ?? null,
+        qtyPlants: qty,
+      });
+  }
+
+  const topVarietiesYtd = [...byVariety.values()]
+    .sort((a, b) => b.qtyPlants - a.qtyPlants)
+    .slice(0, 10);
+
+  return {
+    speciesCount: speciesRes.count ?? 0,
+    programsCount: programsRes.count ?? 0,
+    varietiesCount: varietiesRes.count ?? 0,
+    plantsCommittedYtd,
+    topVarietiesYtd,
   };
 }

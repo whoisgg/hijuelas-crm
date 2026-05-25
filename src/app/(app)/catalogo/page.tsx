@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   ChevronRight,
   Coins,
+  Globe2,
   Plus,
   Sprout,
   Target,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 
 import {
+  getCatalogOverview,
   getCatalogStats,
   getCatalogTree,
   type CatalogStats,
@@ -22,7 +24,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { CatalogTree } from "@/components/catalogo/catalog-tree";
-import { VarietyTrendChart } from "@/components/charts/variety-trend-chart";
+import { CatalogOverview } from "@/components/catalogo/catalog-overview";
+import { CountryFlag } from "@/components/clientes/country-flag";
 import { EmptyState } from "@/components/dashboard/empty-state";
 
 export const metadata = { title: "Catálogo" };
@@ -39,8 +42,10 @@ export default async function CatalogoPage({
 }) {
   const params = await searchParams;
   const tree = await getCatalogTree();
-  const selectedVarietyId =
-    params.variety ?? tree[0]?.programs[0]?.varieties[0]?.id ?? null;
+  // Default: NO auto-seleccionamos la primera variedad. Mostramos un
+  // overview del catálogo. Sólo si el user pasa ?variety=ID se muestra
+  // el detalle de esa variedad.
+  const selectedVarietyId = params.variety ?? null;
 
   return (
     <div className="mx-auto w-full max-w-7xl p-6">
@@ -67,16 +72,30 @@ export default async function CatalogoPage({
               <VarietyDetail varietyId={selectedVarietyId} />
             </Suspense>
           ) : (
-            <Card className="p-10">
-              <EmptyState
-                icon={Sprout}
-                title="Catálogo vacío"
-                description="Aún no hay variedades cargadas."
-              />
-            </Card>
+            <Suspense fallback={<OverviewSkeleton />}>
+              <OverviewBody />
+            </Suspense>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+async function OverviewBody() {
+  const data = await getCatalogOverview();
+  return <CatalogOverview data={data} />;
+}
+
+function OverviewSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-20 w-full" />
+        ))}
+      </div>
+      <Skeleton className="h-[440px] w-full" />
     </div>
   );
 }
@@ -196,12 +215,31 @@ function VarietyDetailView({ stats }: { stats: CatalogStats }) {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm">
-              <TrendingUp className="size-4 text-primary" />
-              Tendencia anual
+              <Globe2 className="size-4 text-primary" />
+              Top 5 países (year actual)
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <VarietyTrendChart data={stats.yearlyTrend} />
+            {stats.topCountries.length === 0 ? (
+              <EmptyState description="Sin países este año." />
+            ) : (
+              <ul className="space-y-2">
+                {stats.topCountries.map((c) => (
+                  <li
+                    key={c.iso2 ?? c.name}
+                    className="flex items-center justify-between gap-2 rounded-md border bg-card px-3 py-2"
+                  >
+                    <span className="inline-flex flex-1 items-center gap-1.5 text-xs font-medium">
+                      <CountryFlag iso2={c.iso2} size="xs" showName={false} />
+                      {c.name}
+                    </span>
+                    <span className="text-xs font-medium tabular-nums">
+                      {formatNumber(c.qtyPlants)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       </div>
