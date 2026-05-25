@@ -772,10 +772,11 @@ export function CalendarGrid({
           el sticky correctamente). Body en wrapper con overflow-x-auto.
           Scroll horizontal sincronizado via JS entre header y body. */}
       <div className="rounded-lg border bg-card">
-        {/* Sticky header: solo countries, scroll horizontal sincronizado */}
+        {/* Sticky header: solo countries, scroll horizontal sincronizado.
+            Mobile (3 cols fit): overflow-x-hidden — sin drag. */}
         <div
           ref={headerScrollRef}
-          className="sticky top-14 z-20 overflow-x-auto border-b bg-card"
+          className="sticky top-14 z-20 overflow-x-hidden md:overflow-x-auto border-b bg-card"
         >
           <div
             className="grid"
@@ -808,8 +809,12 @@ export function CalendarGrid({
           </div>
         </div>
 
-        {/* Body: scroll horizontal independiente, sync via JS con el header */}
-        <div ref={bodyScrollRef} className="overflow-x-auto">
+        {/* Body: scroll horizontal independiente, sync via JS con el header.
+            Mobile (3 cols fit): overflow-x-hidden — sin drag. */}
+        <div
+          ref={bodyScrollRef}
+          className="overflow-x-hidden md:overflow-x-auto"
+        >
         <div
           className="grid"
           style={{
