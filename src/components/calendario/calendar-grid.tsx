@@ -835,6 +835,9 @@ export function CalendarGrid({
               // idx=0 — así Wk22 (current) tiene la misma altura que el resto y
               // el año queda claro al inicio del calendario también.
               const showYearDivider = isFirstOfYear;
+              // Padding-top extra para la primera fila bajo el year-divider,
+              // así el contenido respira de la línea del banner.
+              const firstRowTopPad = isFirstOfYear ? "pt-3" : "";
 
               return (
                 <React.Fragment key={periodKey}>
@@ -855,6 +858,7 @@ export function CalendarGrid({
                   <div
                     className={
                       "sticky left-0 z-[5] flex min-w-0 flex-col justify-start gap-0.5 border-b border-r px-2 py-2 md:px-3 " +
+                      firstRowTopPad + " " +
                       (isCur
                         ? "bg-primary/10 border-l-2 border-l-primary"
                         : "bg-card")
@@ -923,6 +927,7 @@ export function CalendarGrid({
                           key={`${periodKey}-${country.iso2}`}
                           className={
                             "border-b border-r " +
+                            firstRowTopPad + " " +
                             (isCur ? "bg-primary/[0.03]" : "")
                           }
                         />
@@ -982,6 +987,7 @@ export function CalendarGrid({
                         }
                         className={
                           "group flex min-w-0 flex-col gap-1 overflow-hidden border-b border-r p-1.5 text-left hover:bg-muted/30 " +
+                          firstRowTopPad + " " +
                           (isCur ? "bg-primary/[0.04]" : "")
                         }
                       >
@@ -1053,6 +1059,7 @@ export function CalendarGrid({
                   <div
                     className={
                       "min-w-0 overflow-hidden border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
+                      firstRowTopPad + " " +
                       (isCur
                         ? "bg-primary/10 text-primary"
                         : "bg-muted/30 text-foreground")
