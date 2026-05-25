@@ -9,21 +9,67 @@ digitalizar el flujo end-to-end sin pagar DocuSign. Chile permite **Firma
 Electrónica Simple (FES)** para contratos privados — alcanza para los
 contratos de Viveros Hijuelas.
 
-## Marco legal (Ley 19.799)
+## Marco legal — Chile / Perú / México
 
-| Tipo | Requisitos | Validez | Cuándo usar |
-|---|---|---|---|
-| **Firma Electrónica Simple (FES)** | Datos electrónicos vinculados al firmante + intención clara | Mismo valor probatorio que firma manuscrita en **contratos privados** | Contratos comerciales, NDAs, propuestas |
-| **Firma Electrónica Avanzada (FEA)** | Certificado de prestador acreditado + dispositivo seguro | Escrituras públicas, actos ante notario | Solo si lo exige la ley |
+Hijuelas vende a clientes en los 3 países. La solución debe ser válida
+en cada jurisdicción para contratos comerciales privados.
 
-**Nuestros contratos = FES.** No requieren notario.
+### 🇨🇱 Chile — Ley 19.799
 
-Requisitos mínimos FES para validez probatoria:
+| Tipo | Requisitos | Cuándo usar |
+|---|---|---|
+| **Firma Electrónica Simple (FES)** | Datos electrónicos vinculados + intención clara | Contratos comerciales, NDAs, propuestas |
+| **Firma Electrónica Avanzada (FEA)** | Certificado de prestador acreditado + dispositivo seguro | Escrituras públicas, actos ante notario |
 
-- ✅ Vínculo claro firmante ↔ documento (email/RUT/teléfono verificado)
-- ✅ Integridad del documento (hash SHA256 del PDF)
-- ✅ Trazabilidad (timestamp UTC, IP, user-agent, log de aceptación)
-- ✅ Manifestación clara de voluntad ("Acepto y firmo")
+FES tiene mismo valor probatorio que firma manuscrita en contratos privados.
+**Nuestros contratos = FES.**
+
+### 🇵🇪 Perú — Ley 27269 (Firmas y Certificados Digitales) + DL 681
+
+| Tipo | Requisitos | Cuándo usar |
+|---|---|---|
+| **Firma Electrónica** | Aceptada entre partes que consienten el medio | Contratos comerciales privados |
+| **Firma Digital / Avanzada** | Certificado de entidad acreditada por INDECOPI (IOFE) | Actos sometidos a registro público, trámites estatales |
+
+Art. 1 Ley 27269: la firma electrónica que cumpla con los requisitos
+mínimos (identificación + integridad + voluntad) tiene mismo valor
+probatorio. **Nuestros contratos = FE simple.**
+
+### 🇲🇽 México — Código de Comercio (Art. 89-114) + NOM-151-SCFI-2016
+
+| Tipo | Requisitos | Cuándo usar |
+|---|---|---|
+| **Firma Electrónica** | Datos en mensaje de datos atribuible al firmante | Contratos mercantiles entre privados |
+| **Firma Electrónica Avanzada (FIEL / eFirma)** | Emitida por SAT (autoridad fiscal) | Trámites con autoridades, facturación |
+
+Art. 97 CCo: cualquier firma electrónica es válida si garantiza
+fiabilidad apropiada para el fin. NOM-151 regula la conservación de
+mensajes de datos (timestamp confiable — usar NTP server + log audit).
+**Nuestros contratos = FE simple (Art. 89-bis CCo).**
+
+### Cumplimiento universal (FES válida en los 3)
+
+Los 3 marcos coinciden en los **requisitos mínimos** que debe cumplir
+nuestro flujo:
+
+- ✅ **Identificación del firmante** — email + OTP verificado (link a RUT/RFC opcional)
+- ✅ **Integridad del documento** — hash SHA256 del PDF al momento de firmar
+- ✅ **Trazabilidad / no-repudio** — timestamp UTC (NTP), IP, user-agent, log inmutable de aceptación
+- ✅ **Manifestación clara de voluntad** — checkbox + texto "Acepto y firmo electrónicamente"
+- ✅ **Conservación** — PDF firmado + audit trail almacenados por el plazo legal (5 años Chile, 10 años Perú/México para fines tributarios)
+
+Una implementación que cumpla los 5 puntos es válida en los 3 países
+para contratos comerciales privados como los nuestros (sin requisito
+de FEA / firma digital).
+
+### Recomendación para escalamiento
+
+Si en algún momento se necesita firma con mayor peso probatorio (en
+juicio, por ejemplo), opciones:
+
+- **🇨🇱 Chile:** integrar con e-Sign / Acepta (proveedores acreditados FEA)
+- **🇵🇪 Perú:** integrar con Llama.pe / Camerfirma Perú (entidades IOFE)
+- **🇲🇽 México:** habilitar firma con FIEL del SAT (cliente firma con su eFirma)
 
 ## Plan en 3 fases
 

@@ -100,11 +100,14 @@ export default async function DashboardPage({
 }
 
 async function DashboardContent({ period }: { period: ResolvedPeriod }) {
-  // En paralelo: summary (KPIs + país grid) + top rankings, ambos
-  // filtrados por el período activo.
+  // En paralelo: summary (KPIs + país grid) + top rankings.
+  // Los rankings solo respetan el AÑO del período activo, NO los meses:
+  //   - "Este mes" / "Próximos 3 meses" / "Año actual" → year actual
+  //   - "Próximo año" → year + 1
+  // Esto evita que cambien con cada chip mensual y deja contexto estable.
   const [summary, topRankings] = await Promise.all([
     getDashboardSummary({ year: period.year, months: period.months }),
-    getTopRankings({ year: period.year, months: period.months }),
+    getTopRankings({ year: period.year }),
   ]);
   const { statusCounts, mapData } = summary;
 
@@ -158,10 +161,11 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
         </div>
       </Card>
 
-      {/* Rankings — top 5 programas genéticos / clientes / países por
-          USD comprometido en el período activo (cambia con el chip). */}
+      {/* Rankings — top 5 programas / clientes / países por USD del
+          año activo. Solo cambian al togglear entre "Año actual" y
+          "Próximo año" (no con los chips mensuales). */}
       <div className="mt-4">
-        <TopRankings data={topRankings} periodLabel={period.shortLabel} />
+        <TopRankings data={topRankings} periodLabel={String(period.year)} />
       </div>
     </>
   );
