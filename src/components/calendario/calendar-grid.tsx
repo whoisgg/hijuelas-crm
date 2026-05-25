@@ -784,25 +784,25 @@ export function CalendarGrid({
               minWidth: `${7 + allCountries.length * 8 + 5.5}rem`,
             }}
           >
-            <div className="border-r px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="min-w-0 overflow-hidden border-r px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               Período
             </div>
             {isMobile ? (
-              <div className="border-r px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <div className="min-w-0 overflow-hidden border-r px-2 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 Entregas
               </div>
             ) : (
               allCountries.map((c) => (
                 <div
                   key={`hdr-${c.iso2}`}
-                  className="flex items-center gap-1.5 border-r px-2 py-2 text-xs"
+                  className="flex min-w-0 items-center gap-1.5 overflow-hidden border-r px-2 py-2 text-xs"
                 >
                   <CountryFlag iso2={c.iso2} size="sm" />
                   <span className="truncate font-medium">{c.name}</span>
                 </div>
               ))
             )}
-            <div className="border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <div className="min-w-0 overflow-hidden border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
               Total
             </div>
           </div>
@@ -889,7 +889,7 @@ export function CalendarGrid({
                   {/* Period label cell — sticky left. Year inline en la fecha. */}
                   <div
                     className={
-                      "sticky left-0 z-[5] flex flex-col justify-center border-b border-r px-3 py-2 " +
+                      "sticky left-0 z-[5] flex min-w-0 flex-col justify-center overflow-hidden border-b border-r px-3 py-2 " +
                       (isCur
                         ? "bg-primary/10 border-l-2 border-l-primary"
                         : "bg-card") +
@@ -1086,7 +1086,7 @@ export function CalendarGrid({
                   {/* Row total */}
                   <div
                     className={
-                      "border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
+                      "min-w-0 overflow-hidden border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
                       (isCur
                         ? "bg-primary/10 text-primary"
                         : "bg-muted/30 text-foreground")

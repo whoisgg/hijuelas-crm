@@ -46,7 +46,9 @@ export function GlobalSearch() {
       >
         <span className="flex items-center gap-2">
           <Search className="h-4 w-4" />
-          <span>Buscar clientes, contratos, oportunidades...</span>
+          <span className="hidden sm:inline">
+            Buscar clientes, contratos, oportunidades...
+          </span>
         </span>
         <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
           <span className="text-xs">⌘</span>K
