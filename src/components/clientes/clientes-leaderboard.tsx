@@ -39,17 +39,7 @@ export function ClientesLeaderboard({ rows }: Props) {
   const params = useSearchParams();
 
   const [search, setSearch] = React.useState("");
-  const [kamFilter, setKamFilter] = React.useState<string>("all");
   const [activeOnly, setActiveOnly] = React.useState(false);
-
-  // KAMs únicos para chips de filtro
-  const kams = React.useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of rows) if (r.kam) map.set(r.kam.id, r.kam.name);
-    return Array.from(map.entries())
-      .map(([id, name]) => ({ id, name }))
-      .sort((a, b) => a.name.localeCompare(b.name, "es"));
-  }, [rows]);
 
   // Filtro client-side
   const filtered = React.useMemo(() => {
@@ -62,11 +52,10 @@ export function ClientesLeaderboard({ rows }: Props) {
           (r.kam?.name ?? "").toLowerCase().includes(q);
         if (!hay) return false;
       }
-      if (kamFilter !== "all" && r.kam?.id !== kamFilter) return false;
       if (activeOnly && !r.isActive) return false;
       return true;
     });
-  }, [rows, search, kamFilter, activeOnly]);
+  }, [rows, search, activeOnly]);
 
   // Agrupar por país, sort countries por totalUsd desc, clients dentro
   // de cada país también por totalUsd desc.
@@ -96,9 +85,9 @@ export function ClientesLeaderboard({ rows }: Props) {
     });
   }, [filtered]);
 
-  // Default: todos colapsados. Al buscar/filtrar por KAM auto-expandimos
-  // los países que tienen matches para no esconder resultados.
-  const isSearching = search.trim().length > 0 || kamFilter !== "all";
+  // Default: todos colapsados. Al buscar auto-expandimos los países que
+  // tienen matches para no esconder resultados.
+  const isSearching = search.trim().length > 0;
   const defaultExpanded = React.useMemo(() => {
     if (isSearching) return new Set(groups.map((g) => g.iso2));
     return new Set<string>();
@@ -141,24 +130,6 @@ export function ClientesLeaderboard({ rows }: Props) {
             placeholder="Buscar cliente, país o KAM..."
             className="pl-7"
           />
-        </div>
-
-        <div className="inline-flex flex-wrap items-center gap-1">
-          <FilterChip
-            active={kamFilter === "all"}
-            onClick={() => setKamFilter("all")}
-          >
-            Todos los KAM
-          </FilterChip>
-          {kams.map((k) => (
-            <FilterChip
-              key={k.id}
-              active={kamFilter === k.id}
-              onClick={() => setKamFilter(k.id)}
-            >
-              {k.name}
-            </FilterChip>
-          ))}
         </div>
 
         <label
@@ -278,31 +249,6 @@ export function ClientesLeaderboard({ rows }: Props) {
         </div>
       )}
     </div>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 items-center rounded-md border px-2 text-[11px] font-medium transition-colors",
-        active
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-border text-muted-foreground hover:bg-muted",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

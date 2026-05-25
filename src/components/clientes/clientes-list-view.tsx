@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  LayoutGrid,
   Plus,
   Search,
   Users,
@@ -286,10 +287,25 @@ export function ClientesListView({
           ) : null}
         </div>
 
-        <Button render={<Link href="/clientes/nuevo">
-          <Plus className="h-4 w-4" />
-          Nuevo cliente
-        </Link>} />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            render={
+              <Link href="/clientes">
+                <LayoutGrid className="h-4 w-4" />
+                <span className="hidden sm:inline">Vista cards</span>
+              </Link>
+            }
+          />
+          <Button
+            render={
+              <Link href="/clientes/nuevo">
+                <Plus className="h-4 w-4" />
+                Nuevo cliente
+              </Link>
+            }
+          />
+        </div>
       </div>
 
       {/* Resultados */}
