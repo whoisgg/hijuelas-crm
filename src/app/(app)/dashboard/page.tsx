@@ -135,11 +135,11 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
       {/* Grid de países — natural height (no flex-1) hasta máximo 3
           filas. Debajo queda espacio reservado para widgets futuros. */}
       <Card className="mt-4 flex flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between bg-primary px-4 py-2.5 text-xs text-white">
-          <span className="font-medium">
-            Entregas comprometidas — <span className="font-semibold">{period.label}</span>
+        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs">
+          <span className="font-medium text-muted-foreground">
+            Entregas comprometidas — <span className="text-foreground">{period.label}</span>
           </span>
-          <span className="tabular-nums text-white/80">
+          <span className="tabular-nums text-muted-foreground">
             {mapData.length} {mapData.length === 1 ? "país" : "países"} con actividad
           </span>
         </div>

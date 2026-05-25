@@ -29,7 +29,9 @@ export function PageHeader({
     >
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+          <h1 className="text-primary text-2xl font-semibold tracking-tight">
+            {title}
+          </h1>
           {badge ? (
             <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               {badge}
