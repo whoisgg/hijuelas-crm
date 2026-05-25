@@ -838,7 +838,7 @@ export function CalendarGrid({
               // Margin-top extra para la primera fila bajo el year-divider —
               // crea un gap real (bg del grid container) entre el banner y la
               // fila, en lugar de solo padding interno.
-              const firstRowMt = isFirstOfYear ? "mt-2" : "";
+              const firstRowMt = isFirstOfYear ? "mt-4" : "";
 
               return (
                 <React.Fragment key={periodKey}>
