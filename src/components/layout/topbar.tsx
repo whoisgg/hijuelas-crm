@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Plus, Sprout, User } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +20,7 @@ import { APP_NAME, QUICK_CREATE_ITEMS } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import { GlobalSearch } from "./global-search";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { cn } from "@/lib/utils";
 
 type TopbarProps = {
   userEmail: string | null;
@@ -53,33 +54,35 @@ export function Topbar({ userEmail }: TopbarProps) {
         <GlobalSearch />
       </div>
 
+      {/* Nuevo dropdown — trigger estilizado directo (no render={<Button>})
+          para evitar nested-button hydration bug de base-ui. */}
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={
-            <Button size="sm" className="gap-1">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Nuevo</span>
-              <ChevronDown className="h-3 w-3 opacity-70" />
-            </Button>
-          }
-        />
+          className={cn(
+            buttonVariants({ size: "sm" }),
+            "gap-1",
+          )}
+        >
+          <Plus className="h-4 w-4" />
+          <span className="hidden sm:inline">Nuevo</span>
+          <ChevronDown className="h-3 w-3 opacity-70" />
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuLabel>Crear nuevo</DropdownMenuLabel>
           <DropdownMenuSeparator />
           {QUICK_CREATE_ITEMS.map((item) => (
             <DropdownMenuItem
               key={item.href}
-              render={
-                <Link href={item.href} className="flex items-center justify-between">
-                  <span>{item.label}</span>
-                  {item.shortcut ? (
-                    <kbd className="ml-4 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono">
-                      {item.shortcut}
-                    </kbd>
-                  ) : null}
-                </Link>
-              }
-            />
+              onClick={() => router.push(item.href)}
+              className="flex items-center justify-between gap-4"
+            >
+              <span>{item.label}</span>
+              {item.shortcut ? (
+                <kbd className="ml-4 rounded border bg-muted px-1.5 py-0.5 text-[10px] font-mono">
+                  {item.shortcut}
+                </kbd>
+              ) : null}
+            </DropdownMenuItem>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
@@ -95,16 +98,18 @@ export function Topbar({ userEmail }: TopbarProps) {
 
       <ThemeToggle />
 
+      {/* Avatar menu — mismo patrón sin render={<Button>}. */}
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={
-            <Button variant="ghost" size="icon" aria-label="Menú de usuario">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="text-xs">{initial}</AvatarFallback>
-              </Avatar>
-            </Button>
-          }
-        />
+          aria-label="Menú de usuario"
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "icon" }),
+          )}
+        >
+          <Avatar className="h-7 w-7">
+            <AvatarFallback className="text-xs">{initial}</AvatarFallback>
+          </Avatar>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col">
@@ -116,16 +121,15 @@ export function Topbar({ userEmail }: TopbarProps) {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            render={
-              <Link href="/perfil">
-                <User className="mr-2 h-4 w-4" />
-                Perfil
-              </Link>
-            }
-          />
+            onClick={() => router.push("/perfil")}
+            className="gap-2"
+          >
+            <User className="h-4 w-4" />
+            Perfil
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleSignOut}>
-            <LogOut className="mr-2 h-4 w-4" />
+          <DropdownMenuItem onClick={handleSignOut} className="gap-2">
+            <LogOut className="h-4 w-4" />
             Cerrar sesión
           </DropdownMenuItem>
         </DropdownMenuContent>

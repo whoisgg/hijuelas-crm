@@ -5,7 +5,6 @@ import {
   FileText,
   Briefcase,
   Calendar,
-  Map,
   Sprout,
   BarChart3,
   Share2,
@@ -58,12 +57,6 @@ export const NAV_ITEMS: NavItem[] = [
     label: "Calendario",
     href: "/calendario",
     icon: Calendar,
-    comingSoon: "Sprint 6",
-  },
-  {
-    label: "Mapa",
-    href: "/mapa",
-    icon: Map,
     comingSoon: "Sprint 6",
   },
   {

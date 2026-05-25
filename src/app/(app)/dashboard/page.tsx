@@ -1,10 +1,8 @@
 import { Suspense } from "react";
-import Link from "next/link";
-import { CheckCircle2, FileSignature, Globe2, Plus, Sprout, XCircle } from "lucide-react";
+import { CheckCircle2, FileSignature, Globe2, Sprout, XCircle } from "lucide-react";
 
 import { getDashboardSummary } from "@/lib/actions/analytics";
 import { PageHeader } from "@/components/page-header";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
@@ -94,20 +92,7 @@ export default async function DashboardPage({
         "h-[calc(100dvh-3.5rem-4rem-env(safe-area-inset-bottom))] md:h-[calc(100dvh-3.5rem)]"
       }
     >
-      <PageHeader
-        title="Dashboard"
-        actions={
-          <Button
-            size="sm"
-            render={
-              <Link href="/contratos/nuevo">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nuevo contrato</span>
-              </Link>
-            }
-          />
-        }
-      />
+      <PageHeader title="Dashboard" />
 
       {/* Período rápido — 4 chips. Diferencia el dashboard del calendario
           detallado (allá se navega semana por semana). */}
