@@ -175,19 +175,104 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             </p>
           </section>
 
-          {/* OPCIÓN A — drag-and-drop (for dummies) */}
+          {/* OPCIÓN A — claude.ai web (multi-device, account-level) */}
           <section className="space-y-3 rounded-lg border-2 border-primary/40 bg-primary/5 p-4">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                 A
               </span>
               <h3 className="text-base font-semibold">
-                Claude Desktop — la vía fácil (recomendado)
+                claude.ai (web) — recomendado · funciona en celular + PC
               </h3>
             </div>
             <p className="text-muted-foreground">
-              Descargar un archivo y arrastrarlo a Claude. <strong>No requiere
-              tocar código.</strong>
+              Agregalo <strong>una vez en tu cuenta</strong> desde claude.ai y
+              queda disponible en web, Claude Desktop y móvil sin volver a
+              configurar.
+            </p>
+            <ol className="ml-0 space-y-3 text-foreground">
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  1
+                </span>
+                <div>
+                  <strong>Generar tu token</strong> en la sección de arriba (botón <em>Nuevo token</em>) y copialo.
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  2
+                </span>
+                <div>
+                  Abrir <a href="https://claude.ai/settings/connectors" target="_blank" rel="noopener noreferrer" className="text-primary underline">claude.ai/settings/connectors</a> (logueado con tu cuenta de Claude).
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  3
+                </span>
+                <div>
+                  Click <strong>&ldquo;Add custom connector&rdquo;</strong>.
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  4
+                </span>
+                <div className="space-y-1">
+                  <div>Completar el formulario:</div>
+                  <ul className="ml-4 list-disc space-y-1 text-sm text-muted-foreground">
+                    <li><strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code></li>
+                    <li>
+                      <strong>Remote MCP server URL</strong>:
+                      <code className="ml-1 break-all rounded bg-muted px-1">
+                        {mcpUrl}?token=TU_TOKEN
+                      </code>
+                    </li>
+                    <li>OAuth Client ID / Secret: <strong>dejar vacíos</strong></li>
+                  </ul>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  5
+                </span>
+                <div>Click <strong>Add</strong>. Listo — el connector ya está sincronizado con tu cuenta.</div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  6
+                </span>
+                <div>
+                  Probá en cualquier chat (web, Desktop o móvil):{" "}
+                  <em>&ldquo;Listame los KAMs del CRM Hijuelas&rdquo;</em>.
+                </div>
+              </li>
+            </ol>
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs">
+              <strong>Trade-off:</strong> el token queda visible en la URL del
+              connector. Si compartes tu sesión de claude.ai con alguien o el
+              dispositivo se pierde, revoca el token en{" "}
+              <code className="rounded bg-muted px-1">Tokens MCP</code> arriba y
+              genera uno nuevo.
+            </div>
+          </section>
+
+          {/* OPCIÓN B — drag-and-drop .mcpb (single machine, sin token en URL) */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                B
+              </span>
+              <h3 className="text-base font-semibold">
+                Claude Desktop — instalador local (solo esta máquina)
+              </h3>
+            </div>
+            <p className="text-muted-foreground">
+              Si usas Claude solo en este equipo y prefieres que el token{" "}
+              <strong>no quede en la URL</strong> sino en archivo cifrado:
+              descarga el <code className="rounded bg-muted px-1">.mcpb</code>{" "}
+              y arrastralo. No sincroniza con otros dispositivos.
             </p>
 
             <ol className="ml-0 space-y-3 text-foreground">
@@ -322,11 +407,11 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             </div>
           </section>
 
-          {/* OPCIÓN B — Claude Code (técnico) */}
+          {/* OPCIÓN C — Claude Code (técnico) */}
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
-                B
+                C
               </span>
               <h3 className="text-base font-semibold">
                 Claude Code (CLI) — para técnicos
@@ -374,21 +459,20 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             </Button>
           </section>
 
-          {/* OPCIÓN C — fallback manual */}
+          {/* OPCIÓN D — fallback: Claude Desktop nativo sin .mcpb */}
           <section className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
-                C
+                D
               </span>
               <h3 className="text-base font-semibold">
-                Sin Node.js — fallback manual
+                Claude Desktop nativo — sin Node.js (fallback)
               </h3>
             </div>
             <p className="text-muted-foreground">
-              Si la Opción A falla porque no tienes Node y no quieres
-              instalarlo, usa la UI nativa de Claude Desktop con el token en
-              la URL. <strong>Trade-off:</strong> el token queda visible en
-              archivos de config local.
+              Si la Opción B falla porque no tienes Node, también podés agregar
+              el connector directamente en Claude Desktop (sin pasar por
+              claude.ai web). Solo esta máquina. Mismos parámetros que la Opción A.
             </p>
             <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
               <li>Settings → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
