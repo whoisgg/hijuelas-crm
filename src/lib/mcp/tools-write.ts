@@ -255,6 +255,64 @@ export function registerWriteTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "create_contract_draft",
+    {
+      title: "Crear borrador de contrato",
+      description:
+        "Crea un contrato nuevo en status 'borrador' con sus items. El KAM lo termina de armar después en la web. Auto-genera el número con formato {PREFIX}-{YEAR}-MCP{epoch}. organization_id se resuelve del caller. total_neto se calcula como SUM(qty_plants * unit_price). Requiere admin o mcp_editor.",
+      inputSchema: {
+        client_id: z.string().uuid(),
+        currency: z.string().describe("USD, CLP, EUR, etc."),
+        items: z.array(z.object({
+          variety_id: z.string().uuid(),
+          qty_plants: z.number().int().min(1),
+          unit_price: z.number().optional(),
+          delivery_year: z.number().int().optional(),
+          delivery_week: z.number().int().min(1).max(53).optional(),
+          delivery_month: z.number().int().min(1).max(12).optional(),
+          format: z.string().optional().describe("Ej: 'vitro', 'maceta 1L'"),
+          material_type: z.string().optional(),
+          notes: z.string().optional(),
+        })).min(1).describe("Al menos 1 item con variety_id y qty_plants"),
+        sale_type: z.string().optional().describe("Ej: 'exportacion', 'mercado_interno'"),
+        condition: z.string().optional().describe("'venta' (default), 'muestra', 'reposicion'"),
+        incoterm: z.string().optional().describe("Ej: 'EXW', 'FOB', 'CIF'"),
+        notes: z.string().optional(),
+        organization_id: z.string().uuid().optional().describe("Si null, usa la del caller"),
+      },
+    },
+    (async (
+      args: {
+        client_id: string;
+        currency: string;
+        items: unknown[];
+        sale_type?: string;
+        condition?: string;
+        incoterm?: string;
+        notes?: string;
+        organization_id?: string;
+      },
+      extra: ToolExtra,
+    ) => {
+      const { error: authErr, auth } = authedWriter(extra);
+      if (authErr || !auth) return errorContent(authErr ?? "No auth");
+      const { data, error } = await rpc("mcp_create_contract_draft", {
+        p_user_id: auth.userId,
+        p_client_id: args.client_id,
+        p_currency: args.currency,
+        p_items: args.items,
+        p_sale_type: args.sale_type ?? null,
+        p_condition: args.condition ?? "venta",
+        p_incoterm: args.incoterm ?? null,
+        p_notes: args.notes ?? null,
+        p_organization_id: args.organization_id ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "update_contract",
     {
       title: "Actualizar contrato",

@@ -413,6 +413,133 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "clients_with_unpaid",
+    {
+      title: "Clientes con pagos pendientes o vencidos",
+      description:
+        "Lista clientes con saldos por cobrar. Cada fila incluye pending_amount, overdue_amount, overdue_count, next_due_date y el KAM. Default ordenado por monto pendiente descendente.",
+      inputSchema: {
+        only_overdue: z
+          .boolean()
+          .optional()
+          .describe("Si true, solo clientes con al menos 1 pago vencido. Default false."),
+        limit: z.number().int().min(1).max(200).optional().describe("Default 50"),
+      },
+    },
+    (async (args: { only_overdue?: boolean; limit?: number }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_clients_with_unpaid", {
+        p_user_id: auth.userId,
+        p_only_overdue: args.only_overdue ?? false,
+        p_limit: args.limit ?? 50,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "upcoming_payments",
+    {
+      title: "Próximos vencimientos",
+      description:
+        "Pagos cuyo due_date cae en los próximos N días (default 30). Incluye vencidos por default. Útil para 'a quién le toca pagar ahora' o 'qué cobranzas hay esta semana'.",
+      inputSchema: {
+        days_ahead: z.number().int().min(1).max(365).optional().describe("Default 30"),
+        include_overdue: z
+          .boolean()
+          .optional()
+          .describe("Incluir también los ya vencidos. Default true."),
+        limit: z.number().int().min(1).max(500).optional().describe("Default 100"),
+      },
+    },
+    (async (
+      args: { days_ahead?: number; include_overdue?: boolean; limit?: number },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_upcoming_payments", {
+        p_user_id: auth.userId,
+        p_days_ahead: args.days_ahead ?? 30,
+        p_include_overdue: args.include_overdue ?? true,
+        p_limit: args.limit ?? 100,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "top_varieties",
+    {
+      title: "Ranking de variedades",
+      description:
+        "Top variedades por plantas comprometidas / contratos / clientes. Filtro opcional por año (signed_at o delivery_year).",
+      inputSchema: {
+        metric: z
+          .enum(["plants", "contracts", "clients"])
+          .optional()
+          .describe("Default 'plants'"),
+        year: z.number().int().optional(),
+        limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+      },
+    },
+    (async (
+      args: { metric?: "plants" | "contracts" | "clients"; year?: number; limit?: number },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_top_varieties", {
+        p_user_id: auth.userId,
+        p_metric: args.metric ?? "plants",
+        p_year: args.year ?? null,
+        p_limit: args.limit ?? 20,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "top_countries",
+    {
+      title: "Ranking de países",
+      description:
+        "Top países por USD / # contratos / # clientes / plantas. Filtro opcional por año.",
+      inputSchema: {
+        metric: z
+          .enum(["usd", "contracts", "clients", "plants"])
+          .optional()
+          .describe("Default 'usd'"),
+        year: z.number().int().optional(),
+        limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+      },
+    },
+    (async (
+      args: {
+        metric?: "usd" | "contracts" | "clients" | "plants";
+        year?: number;
+        limit?: number;
+      },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_top_countries", {
+        p_user_id: auth.userId,
+        p_metric: args.metric ?? "usd",
+        p_year: args.year ?? null,
+        p_limit: args.limit ?? 20,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "deliveries_overview",
     {
       title: "Resumen de entregas por ventana de tiempo",
