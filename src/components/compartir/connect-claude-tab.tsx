@@ -212,32 +212,70 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
                   3
                 </span>
                 <div>
-                  Click <strong>&ldquo;Add custom connector&rdquo;</strong>.
+                  Click el botón{" "}
+                  <strong>&ldquo;Add custom connector&rdquo;</strong> (o{" "}
+                  <strong>&ldquo;Agregar conector personalizado&rdquo;</strong>{" "}
+                  si tu Claude está en español).
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                   4
                 </span>
-                <div className="space-y-1">
-                  <div>Completar el formulario:</div>
-                  <ul className="ml-4 list-disc space-y-1 text-sm text-muted-foreground">
-                    <li><strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code></li>
-                    <li>
-                      <strong>Remote MCP server URL</strong>:
-                      <code className="ml-1 break-all rounded bg-muted px-1">
-                        {mcpUrl}?token=TU_TOKEN
-                      </code>
-                    </li>
-                    <li>OAuth Client ID / Secret: <strong>dejar vacíos</strong></li>
-                  </ul>
+                <div className="space-y-3">
+                  <div>
+                    Se abre un dialog. Llenar <strong>solo 2 campos</strong>:
+                  </div>
+                  <div className="rounded-md border bg-background p-3 text-sm">
+                    <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-2">
+                      <div className="font-semibold whitespace-nowrap">
+                        Nombre
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        (en inglés: <em>Name</em>)
+                      </div>
+                      <div className="col-span-2 -mt-1.5">
+                        <code className="block rounded bg-muted px-2 py-1 text-sm">
+                          Hijuelas CRM
+                        </code>
+                      </div>
+                    </div>
+                    <hr className="my-3 border-muted" />
+                    <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-2">
+                      <div className="font-semibold whitespace-nowrap">
+                        URL del servidor MCP remoto
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        (<em>Remote MCP server URL</em>)
+                      </div>
+                      <div className="col-span-2 -mt-1.5 space-y-1">
+                        <code className="block break-all rounded bg-muted px-2 py-1 text-xs">
+                          {mcpUrl}?token=TU_TOKEN
+                        </code>
+                        <div className="text-xs text-muted-foreground">
+                          Reemplaza <code className="rounded bg-muted px-1">TU_TOKEN</code> por el token completo que copiaste en el paso 1
+                          (incluye el prefijo <code className="rounded bg-muted px-1">hjc_</code>).
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-md bg-muted/50 p-2.5 text-xs text-muted-foreground">
+                    ⚠️ <strong>NO toques</strong> &ldquo;Configuración avanzada
+                    / Advanced settings&rdquo;. Los campos{" "}
+                    <em>OAuth Client ID</em> y <em>Secreto del cliente OAuth</em>{" "}
+                    deben quedar <strong>vacíos</strong>.
+                  </div>
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                   5
                 </span>
-                <div>Click <strong>Add</strong>. Listo — el connector ya está sincronizado con tu cuenta.</div>
+                <div>
+                  Click <strong>&ldquo;Agregar&rdquo;</strong> /{" "}
+                  <strong>&ldquo;Add&rdquo;</strong>. El connector ya está
+                  sincronizado con tu cuenta.
+                </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
@@ -245,7 +283,8 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
                 </span>
                 <div>
                   Probá en cualquier chat (web, Desktop o móvil):{" "}
-                  <em>&ldquo;Listame los KAMs del CRM Hijuelas&rdquo;</em>.
+                  <em>&ldquo;Listame los KAMs del CRM Hijuelas&rdquo;</em> o{" "}
+                  <em>&ldquo;Top 5 clientes por USD&rdquo;</em>.
                 </div>
               </li>
             </ol>
