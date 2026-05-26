@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, X } from "lucide-react";
 
 import { updateClientAction } from "@/lib/actions/clientes";
 import type {
@@ -21,25 +21,42 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+type Initial = {
+  name: string;
+  legal_name: string | null;
+  tax_id: string | null;
+  giro: string | null;
+  country_id: string | null;
+  region: string | null;
+  notes: string | null;
+};
+
 type Props = {
   clientId: string;
-  initial: {
-    name: string;
-    legal_name: string | null;
-    tax_id: string | null;
-    giro: string | null;
-    country_id: string | null;
-    region: string | null;
-    notes: string | null;
-  };
+  initial: Initial;
   countries: CountryOption[];
+  editing: boolean;
+  onCancel: () => void;
+  onSaved: () => void;
 };
 
 const NONE = "__none__";
 
-export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
+export function ClienteDetallesForm({
+  clientId,
+  initial,
+  countries,
+  editing,
+  onCancel,
+  onSaved,
+}: Props) {
   const [state, setState] = React.useState(initial);
   const [pending, startTransition] = React.useTransition();
+
+  // Si el caller cancela (o cambia de cliente), revertir cambios locales.
+  React.useEffect(() => {
+    if (!editing) setState(initial);
+  }, [editing, initial]);
 
   const handleChange = <K extends keyof typeof state>(
     key: K,
@@ -62,11 +79,14 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
       const res = await updateClientAction(clientId, payload);
       if (res.ok) {
         toast.success("Cliente actualizado");
+        onSaved();
       } else {
         toast.error(res.error);
       }
     });
   };
+
+  const disabled = !editing;
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -77,6 +97,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             value={state.name}
             onChange={(e) => handleChange("name", e.target.value)}
             required
+            disabled={disabled}
           />
         </FormField>
 
@@ -87,6 +108,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             onChange={(e) =>
               handleChange("legal_name", e.target.value || null)
             }
+            disabled={disabled}
           />
         </FormField>
 
@@ -96,6 +118,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             value={state.tax_id ?? ""}
             onChange={(e) => handleChange("tax_id", e.target.value || null)}
             className="font-mono"
+            disabled={disabled}
           />
         </FormField>
 
@@ -104,6 +127,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             id="giro"
             value={state.giro ?? ""}
             onChange={(e) => handleChange("giro", e.target.value || null)}
+            disabled={disabled}
           />
         </FormField>
 
@@ -113,6 +137,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             onValueChange={(v) =>
               handleChange("country_id", v === NONE ? null : String(v))
             }
+            disabled={disabled}
           >
             <SelectTrigger id="country" className="w-full">
               <SelectValue placeholder="Seleccionar país" />
@@ -133,6 +158,7 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
             id="region"
             value={state.region ?? ""}
             onChange={(e) => handleChange("region", e.target.value || null)}
+            disabled={disabled}
           />
         </FormField>
       </div>
@@ -144,19 +170,26 @@ export function ClienteDetallesForm({ clientId, initial, countries }: Props) {
           value={state.notes ?? ""}
           onChange={(e) => handleChange("notes", e.target.value || null)}
           placeholder="Información interna del cliente..."
+          disabled={disabled}
         />
       </FormField>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>
-          {pending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Guardar cambios
-        </Button>
-      </div>
+      {editing ? (
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
+            <X className="h-4 w-4" />
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            Guardar cambios
+          </Button>
+        </div>
+      ) : null}
     </form>
   );
 }

@@ -82,6 +82,9 @@ export function ClienteDetailView({ detail, countries }: Props) {
   const { client, counts, contacts, addresses, contracts, opportunities, activity } =
     detail;
 
+  // Default = view-only. Click "Editar" en el header → activa edit mode en el form.
+  const [editing, setEditing] = React.useState(false);
+
   // TODO: replace with <HighlightsPanel> — usando ya el DS HighlightsPanel.
   const highlights = (
     <HighlightsPanel
@@ -154,6 +157,9 @@ export function ClienteDetailView({ detail, countries }: Props) {
         notes: client.notes,
       }}
       countries={countries}
+      editing={editing}
+      onCancel={() => setEditing(false)}
+      onSaved={() => setEditing(false)}
     />
   );
 
@@ -360,7 +366,10 @@ export function ClienteDetailView({ detail, countries }: Props) {
         <BreadcrumbBack />
         <ClienteHeaderActions
           clientId={client.id}
-          onEdit={() => router.push(`/clientes/${client.id}?tab=detalles`)}
+          onEdit={() => {
+            router.replace(`/clientes/${client.id}?tab=detalles`, { scroll: false });
+            setEditing(true);
+          }}
         />
       </div>
       <RecordPageShell tabs={tabs} highlights={highlights} defaultTab="detalles" />
