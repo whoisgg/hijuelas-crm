@@ -48,12 +48,15 @@ DECLARE
   caller_role public.user_role;
   v_token text;
   v_expires timestamptz;
+  v_id uuid;
 BEGIN
+  -- Variables locales para evitar el "column reference is ambiguous" entre los
+  -- OUT params del RETURNS TABLE y las columnas de client_share_links.
   IF caller_id IS NULL THEN RAISE EXCEPTION 'No autenticado.' USING ERRCODE = '42501'; END IF;
   SELECT role INTO caller_role FROM public.app_users
-    WHERE id = caller_id AND deleted_at IS NULL AND is_active = true;
+    WHERE app_users.id = caller_id AND deleted_at IS NULL AND is_active = true;
   IF caller_role IS NULL THEN RAISE EXCEPTION 'Usuario no activo.' USING ERRCODE = '42501'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.clients WHERE id = p_client_id AND deleted_at IS NULL) THEN
+  IF NOT EXISTS (SELECT 1 FROM public.clients WHERE clients.id = p_client_id AND deleted_at IS NULL) THEN
     RAISE EXCEPTION 'Cliente no encontrado.' USING ERRCODE = '42704';
   END IF;
   v_token := replace(replace(encode(gen_random_bytes(24), 'base64'), '+', '-'), '/', '_');
@@ -64,9 +67,8 @@ BEGIN
   END;
   INSERT INTO public.client_share_links (client_id, token, expires_at, created_by)
     VALUES (p_client_id, v_token, v_expires, caller_id)
-    RETURNING client_share_links.id, client_share_links.token, client_share_links.expires_at
-    INTO id, token, expires_at;
-  RETURN NEXT;
+    RETURNING client_share_links.id INTO v_id;
+  RETURN QUERY SELECT v_id, v_token, v_expires;
 END; $$;
 
 REVOKE ALL ON FUNCTION public.create_client_share_link(uuid, integer) FROM PUBLIC;

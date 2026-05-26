@@ -67,7 +67,6 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
   }
 
   const activeTokens = tokens.filter((t) => !t.revoked_at);
-  const revokedTokens = tokens.filter((t) => t.revoked_at);
 
   return (
     <div className="space-y-6">
@@ -87,9 +86,9 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
           <CreateMcpTokenDialog />
         </CardHeader>
         <CardContent>
-          {tokens.length === 0 ? (
+          {activeTokens.length === 0 ? (
             <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
-              No tienes tokens todavía. Crea uno para conectar Claude.
+              No tienes tokens activos. Crea uno para conectar Claude.
             </div>
           ) : (
             <Table>
@@ -126,21 +125,6 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </TableCell>
-                  </TableRow>
-                ))}
-                {revokedTokens.map((t) => (
-                  <TableRow key={t.id} className="opacity-50">
-                    <TableCell className="font-medium line-through">{t.name}</TableCell>
-                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
-                      {formatDate(t.created_at)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
-                      {formatDate(t.last_used_at)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">Revocado</Badge>
-                    </TableCell>
-                    <TableCell />
                   </TableRow>
                 ))}
               </TableBody>
