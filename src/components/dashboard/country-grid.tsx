@@ -60,7 +60,6 @@ function CountryCard({
       href={`/clientes?country=${datum.iso2}`}
       className={cn(
         "group flex flex-col gap-2 rounded-lg border bg-card p-3 transition-colors hover:border-primary/40 hover:bg-muted/40",
-        rank === 1 && "border-primary/30 bg-primary/5",
       )}
       title={`${datum.nameEs} · ${formatNumber(datum.plantsCommitted)} plantas · ${formatUsd(datum.revenueUsd)}`}
     >

@@ -172,6 +172,8 @@ export type CalendarEvent = CalendarEventRow & {
   ownerName: string | null;
   /** Contract ID padre (solo cuando source_type='contract'). */
   contract_id: string | null;
+  /** Número del contrato padre (ej. VHSA-2026-0001). NULL para opportunities. */
+  contract_number: string | null;
   /** Contract status padre (firmado/borrador/etc). NULL para opportunities. */
   contract_status: string | null;
   /** Condition del contrato (venta/muestra/reposicion). NULL para opportunities. */
@@ -1036,11 +1038,32 @@ export async function getCalendarEvents(
   const orgById = new Map((orgsRes.data ?? []).map((o) => [o.id, o.name]));
   const ownerById = new Map((ownersRes.data ?? []).map((u) => [u.id, u.full_name ?? null]));
 
+  // Batch-query contract numbers (solo para events que son de contratos).
+  const contractIds = [
+    ...new Set(
+      events
+        .map(
+          (e) =>
+            (e as typeof e & { contract_id?: string | null }).contract_id ??
+            null,
+        )
+        .filter((x): x is string => !!x),
+    ),
+  ];
+  const contractNumberById = new Map<string, string>();
+  if (contractIds.length) {
+    const cRes = await supabase
+      .from("contracts")
+      .select("id, number")
+      .in("id", contractIds);
+    for (const c of cRes.data ?? []) {
+      contractNumberById.set(c.id, c.number);
+    }
+  }
+
   let enriched: CalendarEvent[] = events.map((e) => {
     const variety = e.variety_id ? varietyById.get(e.variety_id) : null;
     const client = e.client_id ? clientById.get(e.client_id) : null;
-    // Cast: contract_id/contract_status fueron agregados al view tras la
-    // generación de types. SELECT * los trae OK en runtime.
     const raw = e as typeof e & {
       contract_id?: string | null;
       contract_status?: string | null;
@@ -1058,6 +1081,7 @@ export async function getCalendarEvents(
       organizationName: e.organization_id ? orgById.get(e.organization_id) ?? null : null,
       ownerName: e.owner_id ? ownerById.get(e.owner_id) ?? null : null,
       contract_id: raw.contract_id ?? null,
+      contract_number: raw.contract_id ? (contractNumberById.get(raw.contract_id) ?? null) : null,
       contract_status: raw.contract_status ?? null,
       contract_condition: raw.contract_condition ?? null,
     };

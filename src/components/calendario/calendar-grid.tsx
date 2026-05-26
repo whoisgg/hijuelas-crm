@@ -43,6 +43,15 @@ import {
 } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -345,23 +354,105 @@ export function CalendarGrid({
     today,
   ]);
 
-  // Export a Excel — respeta los filtros y la ventana visible.
+  // Export a Excel — diálogo de período + 2 hojas (semanas + meses).
   const [isExporting, setIsExporting] = React.useState(false);
-  const handleExport = React.useCallback(async () => {
-    if (filtered.length === 0) {
-      toast.error("No hay nada que exportar con los filtros actuales");
+  const [exportOpen, setExportOpen] = React.useState(false);
+  // Preset por defecto: "visible" = lo que actualmente se ve en el grid.
+  const [exportPreset, setExportPreset] = React.useState<
+    "visible" | "12w" | "26w" | "52w" | "year" | "next_year"
+  >("visible");
+
+  const runExport = React.useCallback(async () => {
+    // Aplicar todos los filtros del usuario (search, especie, status,
+    // condiciones, opps, minProb, country) — pero NO el límite de ventana
+    // visible, sino el período que eligió en el diálogo.
+    const q = search.trim().toLowerCase();
+    const yearNow = new Date().getFullYear();
+
+    // Resolver ventana [fromYear/fromWeek .. toYear/toWeek]
+    let fromYear = today.year;
+    let fromWeek = today.week;
+    let toYear = today.year;
+    let toWeek = today.week;
+
+    if (exportPreset === "12w") {
+      const e = addWeeks(today.year, today.week, 12);
+      toYear = e.year; toWeek = e.week;
+    } else if (exportPreset === "26w") {
+      const e = addWeeks(today.year, today.week, 26);
+      toYear = e.year; toWeek = e.week;
+    } else if (exportPreset === "52w") {
+      const e = addWeeks(today.year, today.week, 52);
+      toYear = e.year; toWeek = e.week;
+    } else if (exportPreset === "year") {
+      fromYear = yearNow; fromWeek = 1;
+      toYear = yearNow; toWeek = 53;
+    } else if (exportPreset === "next_year") {
+      fromYear = yearNow + 1; fromWeek = 1;
+      toYear = yearNow + 1; toWeek = 53;
+    } else {
+      // visible — usar el rango actual del grid
+      const start = weekKeys[0] ?? weekKey(today.year, today.week);
+      const end = weekKeys[weekKeys.length - 1] ?? weekKey(today.year, today.week);
+      fromYear = Math.floor(start / 100); fromWeek = start % 100;
+      toYear = Math.floor(end / 100); toWeek = end % 100;
+    }
+    const fromKey = fromYear * 100 + fromWeek;
+    const toKey = toYear * 100 + toWeek;
+
+    // Filtrado igual que `filtered`/`eventsAllPeriods` pero con ventana exportable.
+    const eventsForExport = events.filter((e) => {
+      if (!includeOpps && e.source_type !== "contract") return false;
+      if (
+        e.source_type === "contract" &&
+        !matchesKamStatuses(e.contract_status, contractStatuses)
+      )
+        return false;
+      if (
+        e.source_type === "contract" &&
+        hiddenConditions.has(e.contract_condition ?? "venta")
+      )
+        return false;
+      if (e.source_type === "opportunity" && hiddenConditions.has("opp"))
+        return false;
+      if (speciesId !== "all" && e.speciesId !== speciesId) return false;
+      if (countryIso !== "all" && (e.countryIso2 ?? "??") !== countryIso) return false;
+      if (
+        includeOpps &&
+        e.source_type === "opportunity" &&
+        minProb > 0 &&
+        (e.probability_pct ?? 0) < minProb
+      )
+        return false;
+      if (q.length > 0) {
+        const hit =
+          (e.clientName ?? "").toLowerCase().includes(q) ||
+          (e.countryName ?? "").toLowerCase().includes(q) ||
+          (e.varietyName ?? "").toLowerCase().includes(q) ||
+          (e.speciesName ?? "").toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (e.year == null || e.week == null) return false;
+      const k = e.year * 100 + e.week;
+      if (k < fromKey || k > toKey) return false;
+      return true;
+    });
+
+    if (eventsForExport.length === 0) {
+      toast.error("No hay entregas en el período/filtros elegidos");
       return;
     }
+
     setIsExporting(true);
     try {
       const { utils, writeFile } = await import("xlsx");
-      type Row = Record<string, string | number | null>;
-      const rows: Row[] = filtered.map((e) => ({
-        Tipo: e.source_type === "contract" ? "Contrato" : "Oportunidad",
+
+      // Hoja 1 — Por semanas (1 fila por item)
+      const weekRows = eventsForExport.map((e) => ({
+        Contrato: e.contract_number ?? "",
         Año: e.year ?? null,
         Semana: e.week ?? null,
         País: e.countryName ?? null,
-        ISO: e.countryIso2 ?? null,
         Cliente: e.clientName ?? null,
         Especie: e.speciesName ?? null,
         Variedad: e.varietyName ?? null,
@@ -369,34 +460,87 @@ export function CalendarGrid({
         Condición:
           e.contract_condition ??
           (e.source_type === "opportunity" ? "oportunidad" : null),
-        "Status contrato": e.contract_status ?? null,
+        Status: e.contract_status ?? "",
         KAM: e.ownerName ?? null,
-        "Prob %":
-          e.source_type === "opportunity" ? (e.probability_pct ?? null) : null,
       }));
-      const ws = utils.json_to_sheet(rows);
-      // Anchos sugeridos por columna (caracteres).
-      ws["!cols"] = [
-        { wch: 11 }, // Tipo
-        { wch: 6 },  // Año
-        { wch: 6 },  // Semana
-        { wch: 18 }, // País
-        { wch: 4 },  // ISO
-        { wch: 32 }, // Cliente
-        { wch: 14 }, // Especie
-        { wch: 22 }, // Variedad
-        { wch: 12 }, // Plantas
-        { wch: 12 }, // Condición
-        { wch: 14 }, // Status
-        { wch: 22 }, // KAM
-        { wch: 8 },  // Prob
+      const wsWeek = utils.json_to_sheet(weekRows);
+      wsWeek["!cols"] = [
+        { wch: 20 }, { wch: 6 }, { wch: 7 }, { wch: 18 }, { wch: 32 },
+        { wch: 14 }, { wch: 22 }, { wch: 12 }, { wch: 13 }, { wch: 14 }, { wch: 22 },
       ];
+
+      // Hoja 2 — Por meses (agregado SUM plantas por mes/país/cliente/variedad)
+      type MonthAggKey = string;
+      const monthAgg = new Map<
+        MonthAggKey,
+        {
+          year: number;
+          month: number;
+          country: string | null;
+          client: string | null;
+          species: string | null;
+          variety: string | null;
+          plants: number;
+        }
+      >();
+      for (const e of eventsForExport) {
+        if (e.year == null || e.week == null) continue;
+        // Mes 0-11 derivado del lunes ISO de la semana.
+        const month = isoWeekToMonday(e.year, e.week).getUTCMonth();
+        const key = [
+          e.year, month, e.countryIso2 ?? "", e.client_id ?? "", e.variety_id ?? "",
+        ].join("|");
+        const cur = monthAgg.get(key);
+        if (cur) {
+          cur.plants += Number(e.qty ?? 0);
+        } else {
+          monthAgg.set(key, {
+            year: e.year,
+            month,
+            country: e.countryName ?? null,
+            client: e.clientName ?? null,
+            species: e.speciesName ?? null,
+            variety: e.varietyName ?? null,
+            plants: Number(e.qty ?? 0),
+          });
+        }
+      }
+      const monthRows = Array.from(monthAgg.values())
+        .sort((a, b) =>
+          a.year !== b.year
+            ? a.year - b.year
+            : a.month !== b.month
+              ? a.month - b.month
+              : (a.country ?? "").localeCompare(b.country ?? ""),
+        )
+        .map((r) => ({
+          Año: r.year,
+          Mes: MONTHS_ES[r.month] ?? String(r.month + 1),
+          País: r.country,
+          Cliente: r.client,
+          Especie: r.species,
+          Variedad: r.variety,
+          Plantas: r.plants,
+        }));
+      const wsMonth = utils.json_to_sheet(monthRows);
+      wsMonth["!cols"] = [
+        { wch: 6 }, { wch: 12 }, { wch: 18 }, { wch: 32 },
+        { wch: 14 }, { wch: 22 }, { wch: 12 },
+      ];
+
       const wb = utils.book_new();
-      utils.book_append_sheet(wb, ws, "Calendario");
+      utils.book_append_sheet(wb, wsWeek, "Por semanas");
+      utils.book_append_sheet(wb, wsMonth, "Por meses");
+
       const today = new Date().toISOString().slice(0, 10);
-      const view = viewMode === "month" ? "meses" : "semanas";
-      writeFile(wb, `hijuelas-calendario-${view}-${today}.xlsx`);
-      toast.success(`Exportadas ${rows.length} entregas`);
+      writeFile(
+        wb,
+        `hijuelas-calendario-${fromYear}W${String(fromWeek).padStart(2, "0")}-${toYear}W${String(toWeek).padStart(2, "0")}-${today}.xlsx`,
+      );
+      toast.success(
+        `Exportadas ${weekRows.length} entregas (${monthRows.length} agregadas por mes)`,
+      );
+      setExportOpen(false);
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : "No se pudo generar el archivo",
@@ -404,7 +548,19 @@ export function CalendarGrid({
     } finally {
       setIsExporting(false);
     }
-  }, [filtered, viewMode]);
+  }, [
+    events,
+    search,
+    speciesId,
+    countryIso,
+    includeOpps,
+    minProb,
+    contractStatuses,
+    hiddenConditions,
+    today,
+    weekKeys,
+    exportPreset,
+  ]);
 
   // KPIs por año (total entregas + plantas por año).
   const kpis = React.useMemo(() => {
@@ -769,7 +925,9 @@ export function CalendarGrid({
               {countryIso === "all" ? (
                 <span className="text-muted-foreground">Todos los países</span>
               ) : (
-                <SelectValue placeholder="País" />
+                <span className="truncate">
+                  {allCountries.find((c) => c.iso2 === countryIso)?.name ?? countryIso}
+                </span>
               )}
             </SelectTrigger>
             <SelectContent>
@@ -801,20 +959,67 @@ export function CalendarGrid({
           </div>
         ) : null}
 
-        {/* Export a Excel — respeta los presets activos */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleExport}
-          disabled={isExporting || filtered.length === 0}
-          className="h-8 gap-1.5"
-          title="Exportar a Excel con los filtros aplicados"
-        >
-          <Download className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">
-            {isExporting ? "Generando…" : "Excel"}
-          </span>
-        </Button>
+        {/* Export a Excel — diálogo de período + 2 hojas */}
+        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+          <DialogTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1.5"
+                title="Exportar a Excel con los filtros aplicados"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Excel</span>
+              </Button>
+            }
+          />
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Exportar calendario a Excel</DialogTitle>
+              <DialogDescription>
+                Se genera un archivo con dos hojas: <strong>Por semanas</strong>{" "}
+                (detalle item por item) y <strong>Por meses</strong> (agregado por
+                mes / país / cliente / variedad). Respeta los filtros aplicados.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Período a exportar
+                </label>
+                <Select
+                  value={exportPreset}
+                  onValueChange={(v) => v && setExportPreset(v as typeof exportPreset)}
+                >
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="visible">Lo que muestra el calendario ahora</SelectItem>
+                    <SelectItem value="12w">Próximas 12 semanas</SelectItem>
+                    <SelectItem value="26w">Próximas 26 semanas (~6 meses)</SelectItem>
+                    <SelectItem value="52w">Próximas 52 semanas (1 año)</SelectItem>
+                    <SelectItem value="year">Año actual completo</SelectItem>
+                    <SelectItem value="next_year">Año próximo completo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => setExportOpen(false)}
+                disabled={isExporting}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={runExport} disabled={isExporting}>
+                {isExporting ? "Generando…" : "Descargar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Botón Filtros — popover con especie, status, oportunidades, leyenda.
             Base-ui Popover.Trigger ya renderiza un <button>; no envolvemos
