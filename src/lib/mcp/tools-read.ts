@@ -277,6 +277,167 @@ export function registerReadTools(server: McpServer): void {
     }) as ToolHandler,
   );
 
+  // ============================================================
+  // Aggregation tools — totales y rankings en 1 call
+  // ============================================================
+
+  server.registerTool(
+    "kam_summary",
+    {
+      title: "Resumen de un KAM",
+      description:
+        "Panorama completo de un KAM en una sola llamada: total USD, contratos por status, top 10 clientes y top países. Útil cuando preguntan 'cuánto vendió X' o 'qué hace fulano'. Opcional: filtrar por año.",
+      inputSchema: {
+        kam_id: z.string().uuid(),
+        year: z.number().int().optional().describe("Año de firma del contrato (opcional)"),
+      },
+    },
+    (async (args: { kam_id: string; year?: number }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_kam_summary", {
+        p_user_id: auth.userId,
+        p_kam_id: args.kam_id,
+        p_year: args.year ?? null,
+      });
+      if (error) return errorContent(error.message);
+      if (!data) return errorContent("KAM no encontrado");
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "top_kams",
+    {
+      title: "Ranking de KAMs",
+      description:
+        "Top N KAMs ordenados por USD facturado / # contratos / plantas vendidas. Una sola call agrega todos los contratos — no requiere paginar.",
+      inputSchema: {
+        metric: z.enum(["usd", "contracts", "plants"]).optional().describe("Default 'usd'"),
+        year: z.number().int().optional(),
+        limit: z.number().int().min(1).max(50).optional().describe("Default 10"),
+      },
+    },
+    (async (
+      args: { metric?: "usd" | "contracts" | "plants"; year?: number; limit?: number },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_top_kams", {
+        p_user_id: auth.userId,
+        p_metric: args.metric ?? "usd",
+        p_year: args.year ?? null,
+        p_limit: args.limit ?? 10,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "top_clients",
+    {
+      title: "Ranking de clientes",
+      description:
+        "Top N clientes por USD / # contratos / plantas. Mejor que paginar list_contracts cuando se busca ranking. Filtros opcionales: año y status (ej. 'firmado' para excluir borrador).",
+      inputSchema: {
+        metric: z.enum(["usd", "contracts", "plants"]).optional().describe("Default 'usd'"),
+        year: z.number().int().optional(),
+        status: z.string().optional().describe("Ej. 'firmado' para solo contratos firmados"),
+        limit: z.number().int().min(1).max(100).optional().describe("Default 10"),
+      },
+    },
+    (async (
+      args: { metric?: "usd" | "contracts" | "plants"; year?: number; status?: string; limit?: number },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_top_clients", {
+        p_user_id: auth.userId,
+        p_metric: args.metric ?? "usd",
+        p_year: args.year ?? null,
+        p_status: args.status ?? null,
+        p_limit: args.limit ?? 10,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "pipeline_summary",
+    {
+      title: "Resumen del pipeline de oportunidades",
+      description:
+        "Oportunidades agregadas por stage: count, total USD estimado, weighted USD (estimado * probability/100). Útil para forecast. Filtros: año del expected_close_date, owner_id.",
+      inputSchema: {
+        year: z.number().int().optional(),
+        owner_id: z.string().uuid().optional(),
+      },
+    },
+    (async (args: { year?: number; owner_id?: string }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_pipeline_summary", {
+        p_user_id: auth.userId,
+        p_year: args.year ?? null,
+        p_owner_id: args.owner_id ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "contracts_overview",
+    {
+      title: "Resumen general de contratos",
+      description:
+        "Totales agregados de contratos + breakdown por status, condition, sale_type y año. Ideal para preguntas tipo 'cuánto firmamos este año' o 'cuántos contratos hay por status'.",
+      inputSchema: {
+        year: z.number().int().optional(),
+      },
+    },
+    (async (args: { year?: number }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_contracts_overview", {
+        p_user_id: auth.userId,
+        p_year: args.year ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
+    "payments_overview",
+    {
+      title: "Resumen de pagos",
+      description:
+        "Total cobrado vs pendiente vs vencido. Breakdown por moneda. Filtro opcional por año (paid_at o due_date).",
+      inputSchema: {
+        year: z.number().int().optional(),
+      },
+    },
+    (async (args: { year?: number }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_payments_overview", {
+        p_user_id: auth.userId,
+        p_year: args.year ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  // ============================================================
+  // Listing tools (existentes desde 00014 + list_kams)
+  // ============================================================
+
   server.registerTool(
     "list_kams",
     {
