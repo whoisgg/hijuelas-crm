@@ -33,13 +33,18 @@ export async function GET(req: Request): Promise<Response> {
       entry_point: "server/index.js",
       mcp_config: {
         command: "npx",
+        // Workaround Claude Desktop (Windows): no meter espacios dentro de
+        // args — Bearer va por env y se interpola en mcp-remote a runtime.
         args: [
           "-y",
           "mcp-remote",
           mcpUrl,
           "--header",
-          "Authorization:Bearer ${user_config.token}",
+          "Authorization:${AUTH_HEADER}",
         ],
+        env: {
+          AUTH_HEADER: "Bearer ${user_config.token}",
+        },
       },
     },
     user_config: {
