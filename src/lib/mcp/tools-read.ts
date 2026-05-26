@@ -413,6 +413,57 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "deliveries_overview",
+    {
+      title: "Resumen de entregas por ventana de tiempo",
+      description:
+        "Agrega plantas a entregar (cross-contract) por año + mes/rango-de-semanas + filtros (país, KAM, cliente). Responde 'cuántas plantas entregamos en junio 2026' o 'qué le debemos a Agroberries este Q3' en 1 call sin abrir contratos uno por uno. Devuelve totals + breakdown por variety/client/country/week + items detallados (cap 100).",
+      inputSchema: {
+        year: z.number().int().describe("Año de entrega (obligatorio)"),
+        month: z.number().int().min(1).max(12).optional().describe("Mes 1-12"),
+        week_from: z.number().int().min(1).max(53).optional().describe("Semana ISO inicio"),
+        week_to: z.number().int().min(1).max(53).optional().describe("Semana ISO fin"),
+        country_id: z.string().uuid().optional(),
+        kam_id: z.string().uuid().optional(),
+        client_id: z.string().uuid().optional(),
+        only_pending: z
+          .boolean()
+          .optional()
+          .describe("Si true, solo items con plantas todavía no entregadas. Default false."),
+      },
+    },
+    (async (
+      args: {
+        year: number;
+        month?: number;
+        week_from?: number;
+        week_to?: number;
+        country_id?: string;
+        kam_id?: string;
+        client_id?: string;
+        only_pending?: boolean;
+      },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_deliveries_overview", {
+        p_user_id: auth.userId,
+        p_year: args.year,
+        p_month: args.month ?? null,
+        p_week_from: args.week_from ?? null,
+        p_week_to: args.week_to ?? null,
+        p_country_id: args.country_id ?? null,
+        p_kam_id: args.kam_id ?? null,
+        p_client_id: args.client_id ?? null,
+        p_only_pending: args.only_pending ?? false,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "payments_overview",
     {
       title: "Resumen de pagos",
