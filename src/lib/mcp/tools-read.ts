@@ -290,15 +290,17 @@ export function registerReadTools(server: McpServer): void {
       inputSchema: {
         kam_id: z.string().uuid(),
         year: z.number().int().optional().describe("Año de firma del contrato (opcional)"),
+        status_filter: z.string().optional().describe("'signed' (firmados), 'pending' (por firmar), 'active' (default, excluye cancelados), 'all', o un enum literal como 'firmado'/'borrador'"),
       },
     },
-    (async (args: { kam_id: string; year?: number }, extra: ToolExtra) => {
+    (async (args: { kam_id: string; year?: number; status_filter?: string }, extra: ToolExtra) => {
       const auth = getAuthExtra(extra?.authInfo);
       if (!auth) return notAuthed();
       const { data, error } = await rpc("mcp_kam_summary", {
         p_user_id: auth.userId,
         p_kam_id: args.kam_id,
         p_year: args.year ?? null,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       if (!data) return errorContent("KAM no encontrado");
@@ -316,10 +318,11 @@ export function registerReadTools(server: McpServer): void {
         metric: z.enum(["usd", "contracts", "plants"]).optional().describe("Default 'usd'"),
         year: z.number().int().optional(),
         limit: z.number().int().min(1).max(50).optional().describe("Default 10"),
+        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
       },
     },
     (async (
-      args: { metric?: "usd" | "contracts" | "plants"; year?: number; limit?: number },
+      args: { metric?: "usd" | "contracts" | "plants"; year?: number; limit?: number; status_filter?: string },
       extra: ToolExtra,
     ) => {
       const auth = getAuthExtra(extra?.authInfo);
@@ -329,6 +332,7 @@ export function registerReadTools(server: McpServer): void {
         p_metric: args.metric ?? "usd",
         p_year: args.year ?? null,
         p_limit: args.limit ?? 10,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
@@ -344,7 +348,7 @@ export function registerReadTools(server: McpServer): void {
       inputSchema: {
         metric: z.enum(["usd", "contracts", "plants"]).optional().describe("Default 'usd'"),
         year: z.number().int().optional(),
-        status: z.string().optional().describe("Ej. 'firmado' para solo contratos firmados"),
+        status: z.string().optional().describe("'signed' (firmados), 'pending' (por firmar), 'active' (default), 'all', o enum literal ('firmado','borrador',...)"),
         limit: z.number().int().min(1).max(100).optional().describe("Default 10"),
       },
     },
@@ -395,17 +399,19 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Resumen general de contratos",
       description:
-        "Totales agregados de contratos + breakdown por status, condition, sale_type y año. Ideal para preguntas tipo 'cuánto firmamos este año' o 'cuántos contratos hay por status'.",
+        "Totales agregados de contratos + breakdown por status, condition, sale_type y año. Ideal para preguntas tipo 'cuánto firmamos este año' o 'cuántos por firmar'. Filtro status_filter útil: 'signed' = firmados, 'pending' = por firmar.",
       inputSchema: {
         year: z.number().int().optional(),
+        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
       },
     },
-    (async (args: { year?: number }, extra: ToolExtra) => {
+    (async (args: { year?: number; status_filter?: string }, extra: ToolExtra) => {
       const auth = getAuthExtra(extra?.authInfo);
       if (!auth) return notAuthed();
       const { data, error } = await rpc("mcp_contracts_overview", {
         p_user_id: auth.userId,
         p_year: args.year ?? null,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
@@ -484,10 +490,11 @@ export function registerReadTools(server: McpServer): void {
           .describe("Default 'plants'"),
         year: z.number().int().optional(),
         limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
       },
     },
     (async (
-      args: { metric?: "plants" | "contracts" | "clients"; year?: number; limit?: number },
+      args: { metric?: "plants" | "contracts" | "clients"; year?: number; limit?: number; status_filter?: string },
       extra: ToolExtra,
     ) => {
       const auth = getAuthExtra(extra?.authInfo);
@@ -497,6 +504,7 @@ export function registerReadTools(server: McpServer): void {
         p_metric: args.metric ?? "plants",
         p_year: args.year ?? null,
         p_limit: args.limit ?? 20,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
@@ -516,6 +524,7 @@ export function registerReadTools(server: McpServer): void {
           .describe("Default 'usd'"),
         year: z.number().int().optional(),
         limit: z.number().int().min(1).max(100).optional().describe("Default 20"),
+        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
       },
     },
     (async (
@@ -523,6 +532,7 @@ export function registerReadTools(server: McpServer): void {
         metric?: "usd" | "contracts" | "clients" | "plants";
         year?: number;
         limit?: number;
+        status_filter?: string;
       },
       extra: ToolExtra,
     ) => {
@@ -533,6 +543,7 @@ export function registerReadTools(server: McpServer): void {
         p_metric: args.metric ?? "usd",
         p_year: args.year ?? null,
         p_limit: args.limit ?? 20,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
@@ -557,6 +568,7 @@ export function registerReadTools(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Si true, solo items con plantas todavía no entregadas. Default false."),
+        status_filter: z.string().optional().describe("Filtra por status del contrato: 'signed' (firmados), 'pending' (por firmar), 'active' (default, excluye cancelados), 'all', o enum literal"),
       },
     },
     (async (
@@ -569,6 +581,7 @@ export function registerReadTools(server: McpServer): void {
         kam_id?: string;
         client_id?: string;
         only_pending?: boolean;
+        status_filter?: string;
       },
       extra: ToolExtra,
     ) => {
@@ -584,6 +597,7 @@ export function registerReadTools(server: McpServer): void {
         p_kam_id: args.kam_id ?? null,
         p_client_id: args.client_id ?? null,
         p_only_pending: args.only_pending ?? false,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
@@ -595,17 +609,19 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Resumen de pagos",
       description:
-        "Total cobrado vs pendiente vs vencido. Breakdown por moneda. Filtro opcional por año (paid_at o due_date).",
+        "Total cobrado vs pendiente vs vencido. Breakdown por moneda. Filtros opcionales: año (paid_at o due_date) y status del contrato asociado.",
       inputSchema: {
         year: z.number().int().optional(),
+        status_filter: z.string().optional().describe("Filtra por status del contrato dueño: 'signed', 'pending', 'active' (default), 'all', o enum literal"),
       },
     },
-    (async (args: { year?: number }, extra: ToolExtra) => {
+    (async (args: { year?: number; status_filter?: string }, extra: ToolExtra) => {
       const auth = getAuthExtra(extra?.authInfo);
       if (!auth) return notAuthed();
       const { data, error } = await rpc("mcp_payments_overview", {
         p_user_id: auth.userId,
         p_year: args.year ?? null,
+        p_status_filter: args.status_filter ?? null,
       });
       if (error) return errorContent(error.message);
       return jsonContent(data);
