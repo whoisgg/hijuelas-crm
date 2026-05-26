@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Copy, KeyRound, Trash2 } from "lucide-react";
+import { Copy, Download, KeyRound, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -220,25 +220,54 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
           </section>
 
           <section className="space-y-3">
-            <h3 className="font-semibold">Opción B — Claude Desktop</h3>
+            <h3 className="font-semibold">Opción B — Claude Desktop (instalador)</h3>
             <p className="text-muted-foreground">
-              El dialog <strong>Add custom connector</strong> de Claude Desktop solo
-              acepta OAuth, no permite setear un Bearer header. Workaround: pega el
-              token en el query string de la URL.
+              Descarga el archivo <code className="rounded bg-muted px-1">.mcpb</code> y ábrelo —
+              Claude Desktop preguntará por tu token y dejará el connector listo.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="/api/install/claude-desktop"
+                download="hijuelas-crm.mcpb"
+                className={buttonVariants()}
+              >
+                <Download className="mr-1.5 h-4 w-4" />
+                Descargar hijuelas-crm.mcpb
+              </a>
+              <a
+                href="https://claude.ai/download"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-muted-foreground underline hover:text-foreground"
+              >
+                ¿Aún no tienes Claude Desktop?
+              </a>
+            </div>
+            <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
+              <li>Genera un token arriba y copialo.</li>
+              <li>Click el botón → se descarga <code className="rounded bg-muted px-1">hijuelas-crm.mcpb</code>.</li>
+              <li>Abre el archivo (doble-click) — Claude Desktop muestra dialog <strong>&ldquo;Install Hijuelas CRM&rdquo;</strong>.</li>
+              <li>Pega tu token en el campo <strong>Token MCP</strong> y confirma instalación.</li>
+            </ol>
+            <p className="text-xs text-muted-foreground">
+              Prerequisito: Node.js instalado (<code className="rounded bg-muted px-1">npx</code> debe estar disponible).
+              Internamente usa <code className="rounded bg-muted px-1">mcp-remote</code> como proxy stdio→HTTP.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="font-semibold">Opción C — Claude Desktop sin Node (manual)</h3>
+            <p className="text-muted-foreground">
+              Si no tienes Node.js o el instalador falla: usa la UI nativa de
+              Claude Desktop con el token embebido en la URL. <strong>Trade-off:</strong> el
+              token queda visible en archivos de config local.
             </p>
             <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
-              <li>Descarga Claude Desktop desde <code className="rounded bg-muted px-1">claude.ai/download</code>.</li>
               <li>Settings (⌘+,) → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
-              <li>En <strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code>.</li>
-              <li>En <strong>Remote MCP server URL</strong>: pega <code className="rounded bg-muted px-1">{mcpUrl}?token=TU_TOKEN</code> (deja vacío OAuth Client ID/Secret).</li>
-              <li>Click <strong>Add</strong>. Debería listar las tools (whoami, list_contracts, list_clients, etc).</li>
+              <li><strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code>.</li>
+              <li><strong>Remote MCP server URL</strong>: <code className="rounded bg-muted px-1">{mcpUrl}?token=TU_TOKEN</code> (deja vacío OAuth Client ID/Secret).</li>
+              <li>Click <strong>Add</strong>.</li>
             </ol>
-            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs">
-              <strong>Heads up:</strong> el token va visible en la URL del config
-              (no en el tráfico HTTP — viaja en query string TLS-encriptado, pero
-              queda en archivos y logs de Claude Desktop). Úsalo solo en
-              dispositivos de confianza. Si lo expones, revoca el token y crea otro.
-            </div>
           </section>
 
           <section className="space-y-2">
