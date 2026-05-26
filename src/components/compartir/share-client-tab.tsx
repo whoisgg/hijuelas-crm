@@ -124,10 +124,10 @@ export function ShareClientTab({ shareLinks, clients, siteUrl }: Props) {
                         </span>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {formatDate(s.created_at)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {s.expires_at ? formatDate(s.expires_at) : "Sin expiración"}
                     </TableCell>
                     <TableCell>

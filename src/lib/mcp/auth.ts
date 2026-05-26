@@ -20,10 +20,22 @@ export function supabaseAnonClient() {
 }
 
 export async function verifyMcpBearerToken(
-  _req: Request,
+  req: Request,
   bearerToken?: string,
 ): Promise<AuthInfo | undefined> {
-  if (!bearerToken) return undefined;
+  // Fallback: clientes como Claude Desktop que no permiten setear el header
+  // Authorization vía la UI del connector pueden pasar el token en el query
+  // string. Token visible en logs/historial; usar solo desde dispositivos
+  // de confianza. Claude Code y curl deben seguir usando Bearer header.
+  let token = bearerToken;
+  if (!token) {
+    try {
+      token = new URL(req.url).searchParams.get("token") ?? undefined;
+    } catch {
+      // ignore
+    }
+  }
+  if (!token) return undefined;
 
   type ValidateRow = {
     user_id: string;
@@ -38,7 +50,7 @@ export async function verifyMcpBearerToken(
     args: Record<string, unknown>,
   ) => Promise<{ data: ValidateRow[] | ValidateRow | null; error: { message: string } | null }>)(
     "mcp_validate_token",
-    { p_token: bearerToken },
+    { p_token: token },
   );
 
   if (result.error || !result.data) return undefined;
@@ -53,7 +65,7 @@ export async function verifyMcpBearerToken(
   };
 
   return {
-    token: bearerToken,
+    token,
     clientId: row.user_id,
     scopes: row.scopes ?? [],
     extra: extra as unknown as Record<string, unknown>,

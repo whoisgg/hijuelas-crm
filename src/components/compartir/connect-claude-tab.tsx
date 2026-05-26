@@ -106,10 +106,10 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
                 {activeTokens.map((t) => (
                   <TableRow key={t.id}>
                     <TableCell className="font-medium">{t.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {formatDate(t.created_at)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {formatDate(t.last_used_at)}
                     </TableCell>
                     <TableCell>
@@ -131,10 +131,10 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
                 {revokedTokens.map((t) => (
                   <TableRow key={t.id} className="opacity-50">
                     <TableCell className="font-medium line-through">{t.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {formatDate(t.created_at)}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
                       {formatDate(t.last_used_at)}
                     </TableCell>
                     <TableCell>
@@ -176,21 +176,11 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
           </section>
 
           <section className="space-y-3">
-            <h3 className="font-semibold">Opción A — Claude Desktop</h3>
-            <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
-              <li>Descarga Claude Desktop desde <code className="rounded bg-muted px-1">claude.ai/download</code>.</li>
-              <li>Abre Settings (⌘+,) → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
-              <li>Pega la URL <code className="rounded bg-muted px-1">{mcpUrl}</code>.</li>
-              <li>En el campo de autenticación elige <strong>Bearer token</strong> y pega tu token.</li>
-              <li>Guarda. El connector debería listar tools como <code className="rounded bg-muted px-1">list_contracts</code>, <code className="rounded bg-muted px-1">list_clients</code>, etc.</li>
-            </ol>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="font-semibold">Opción B — Claude Code (CLI)</h3>
+            <h3 className="font-semibold">Opción A — Claude Code (recomendado)</h3>
             <p className="text-muted-foreground">
               Agrega esto a <code className="rounded bg-muted px-1">~/.claude/settings.json</code> o
-              <code className="ml-1 rounded bg-muted px-1">.claude/settings.local.json</code> del proyecto:
+              <code className="ml-1 rounded bg-muted px-1">.claude/settings.local.json</code> del proyecto.
+              Reemplaza el token con el que generaste arriba:
             </p>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
 {`{
@@ -227,6 +217,28 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             >
               <Copy className="mr-1.5 h-3.5 w-3.5" /> Copiar JSON
             </Button>
+          </section>
+
+          <section className="space-y-3">
+            <h3 className="font-semibold">Opción B — Claude Desktop</h3>
+            <p className="text-muted-foreground">
+              El dialog <strong>Add custom connector</strong> de Claude Desktop solo
+              acepta OAuth, no permite setear un Bearer header. Workaround: pega el
+              token en el query string de la URL.
+            </p>
+            <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
+              <li>Descarga Claude Desktop desde <code className="rounded bg-muted px-1">claude.ai/download</code>.</li>
+              <li>Settings (⌘+,) → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
+              <li>En <strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code>.</li>
+              <li>En <strong>Remote MCP server URL</strong>: pega <code className="rounded bg-muted px-1">{mcpUrl}?token=TU_TOKEN</code> (deja vacío OAuth Client ID/Secret).</li>
+              <li>Click <strong>Add</strong>. Debería listar las tools (whoami, list_contracts, list_clients, etc).</li>
+            </ol>
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs">
+              <strong>Heads up:</strong> el token va visible en la URL del config
+              (no en el tráfico HTTP — viaja en query string TLS-encriptado, pero
+              queda en archivos y logs de Claude Desktop). Úsalo solo en
+              dispositivos de confianza. Si lo expones, revoca el token y crea otro.
+            </div>
           </section>
 
           <section className="space-y-2">
