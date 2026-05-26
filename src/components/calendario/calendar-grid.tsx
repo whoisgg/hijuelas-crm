@@ -127,6 +127,7 @@ export function CalendarGrid({
 }: Props) {
   // Filters
   const [search, setSearch] = React.useState("");
+  const [countryIso, setCountryIso] = React.useState<string>("all");
   const [speciesId, setSpeciesId] = React.useState<string>("all");
   const [includeOpps, setIncludeOpps] = React.useState<boolean>(initialIncludeOpps);
   const [minProb, setMinProb] = React.useState<number>(0);
@@ -239,6 +240,7 @@ export function CalendarGrid({
       if (e.source_type === "opportunity" && hiddenConditions.has("opp"))
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
+      if (countryIso !== "all" && (e.countryIso2 ?? "??") !== countryIso) return false;
       if (
         includeOpps &&
         e.source_type === "opportunity" &&
@@ -273,6 +275,7 @@ export function CalendarGrid({
     events,
     search,
     speciesId,
+    countryIso,
     includeOpps,
     minProb,
     viewMode,
@@ -304,6 +307,7 @@ export function CalendarGrid({
       if (e.source_type === "opportunity" && hiddenConditions.has("opp"))
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
+      if (countryIso !== "all" && (e.countryIso2 ?? "??") !== countryIso) return false;
       if (
         includeOpps &&
         e.source_type === "opportunity" &&
@@ -331,6 +335,7 @@ export function CalendarGrid({
     events,
     search,
     speciesId,
+    countryIso,
     includeOpps,
     minProb,
     contractStatuses,
@@ -682,7 +687,8 @@ export function CalendarGrid({
           </button>
         </div>
 
-        <div className="relative flex flex-1 min-w-[180px] items-center">
+        {/* Desktop: search libre. Mobile: country select. */}
+        <div className="relative hidden md:flex flex-1 min-w-[180px] items-center">
           <Search className="absolute left-2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
@@ -690,6 +696,28 @@ export function CalendarGrid({
             placeholder="Buscar país, cliente, variedad..."
             className="pl-7"
           />
+        </div>
+        <div className="order-last basis-full md:hidden">
+          <Select
+            value={countryIso}
+            onValueChange={(v) => setCountryIso(String(v ?? "all"))}
+          >
+            <SelectTrigger className="h-8 w-full">
+              {countryIso === "all" ? (
+                <span className="text-muted-foreground">Todos los países</span>
+              ) : (
+                <SelectValue placeholder="País" />
+              )}
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los países</SelectItem>
+              {allCountries.map((c) => (
+                <SelectItem key={c.iso2} value={c.iso2}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* KPI inline compacto — solo total + año actual. Oculto en mobile. */}
