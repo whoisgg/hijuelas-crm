@@ -175,12 +175,167 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             </p>
           </section>
 
-          <section className="space-y-3">
-            <h3 className="font-semibold">Opción A — Claude Code (recomendado)</h3>
+          {/* OPCIÓN A — drag-and-drop (for dummies) */}
+          <section className="space-y-3 rounded-lg border-2 border-primary/40 bg-primary/5 p-4">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                A
+              </span>
+              <h3 className="text-base font-semibold">
+                Claude Desktop — la vía fácil (recomendado)
+              </h3>
+            </div>
             <p className="text-muted-foreground">
-              Agrega esto a <code className="rounded bg-muted px-1">~/.claude/settings.json</code> o
-              <code className="ml-1 rounded bg-muted px-1">.claude/settings.local.json</code> del proyecto.
-              Reemplaza el token con el que generaste arriba:
+              Descargar un archivo y arrastrarlo a Claude. <strong>No requiere
+              tocar código.</strong>
+            </p>
+
+            <ol className="ml-0 space-y-3 text-foreground">
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  1
+                </span>
+                <div>
+                  <strong>Tener Claude Desktop instalado.</strong>{" "}
+                  <a
+                    href="https://claude.ai/download"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline"
+                  >
+                    Descargar acá
+                  </a>{" "}
+                  si todavía no lo tienes (Windows/Mac).
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  2
+                </span>
+                <div>
+                  <strong>Generar tu token</strong> en la sección de arriba
+                  (botón <em>Nuevo token</em>). Cópialo a un bloc de notas — lo
+                  vas a pegar en Claude.
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  3
+                </span>
+                <div className="space-y-2">
+                  <div>
+                    <strong>Descargar el instalador</strong>:
+                  </div>
+                  <a
+                    href="/api/install/claude-desktop"
+                    download="hijuelas-crm.mcpb"
+                    className={buttonVariants()}
+                  >
+                    <Download className="mr-1.5 h-4 w-4" />
+                    Descargar hijuelas-crm.mcpb
+                  </a>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  4
+                </span>
+                <div className="space-y-1.5">
+                  <div>
+                    <strong>Abrir Claude Desktop</strong> y ir a Settings (
+                    <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      Ctrl
+                    </kbd>{" "}
+                    +{" "}
+                    <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      ,
+                    </kbd>{" "}
+                    en Windows /{" "}
+                    <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      ⌘
+                    </kbd>{" "}
+                    +{" "}
+                    <kbd className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                      ,
+                    </kbd>{" "}
+                    en Mac) → click en <strong>Extensions</strong> en el menú
+                    lateral.
+                  </div>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  5
+                </span>
+                <div>
+                  <strong>Arrastrar el archivo</strong>{" "}
+                  <code className="rounded bg-muted px-1">
+                    hijuelas-crm.mcpb
+                  </code>{" "}
+                  desde tu carpeta de descargas <strong>directo a esa ventana
+                  de Extensions</strong>. Va a aparecer un dialog{" "}
+                  <strong>&ldquo;Install Hijuelas CRM&rdquo;</strong>.
+                  <div className="mt-1.5 text-xs italic text-muted-foreground">
+                    ⚠️ Doble-click sobre el archivo puede no funcionar en
+                    Windows (file association no se registra automáticamente).
+                    El drag-and-drop a la ventana de Extensions es la vía
+                    oficial.
+                  </div>
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  6
+                </span>
+                <div>
+                  En el dialog: <strong>pegar el token</strong> que generaste
+                  en el campo <strong>Token MCP</strong> → click{" "}
+                  <strong>Install</strong>.
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                  7
+                </span>
+                <div>
+                  Listo. Abre cualquier chat con Claude y prueba:{" "}
+                  <em>&ldquo;Listame los KAMs del CRM Hijuelas&rdquo;</em>.
+                </div>
+              </li>
+            </ol>
+
+            <div className="rounded-md border border-muted-foreground/20 bg-background/50 p-2.5 text-xs text-muted-foreground">
+              <strong>Requisitos invisibles:</strong> Claude Desktop ≥ 0.10
+              (versiones recientes traen Extensions) y Node.js en el sistema
+              para que <code className="rounded bg-muted px-1">npx</code> pueda
+              levantar el proxy <code className="rounded bg-muted px-1">mcp-remote</code>.
+              Si no tienes Node, instalalo en{" "}
+              <a
+                href="https://nodejs.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                nodejs.org
+              </a>{" "}
+              (versión LTS, &ldquo;Next&rdquo;, &ldquo;Next&rdquo; — listo).
+            </div>
+          </section>
+
+          {/* OPCIÓN B — Claude Code (técnico) */}
+          <section className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                B
+              </span>
+              <h3 className="text-base font-semibold">
+                Claude Code (CLI) — para técnicos
+              </h3>
+            </div>
+            <p className="text-muted-foreground">
+              Si usas Claude Code en terminal, pega esto en{" "}
+              <code className="rounded bg-muted px-1">~/.claude/settings.json</code> o
+              <code className="ml-1 rounded bg-muted px-1">.claude/settings.local.json</code> del proyecto:
             </p>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
 {`{
@@ -219,54 +374,24 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             </Button>
           </section>
 
+          {/* OPCIÓN C — fallback manual */}
           <section className="space-y-3">
-            <h3 className="font-semibold">Opción B — Claude Desktop (instalador)</h3>
-            <p className="text-muted-foreground">
-              Descarga el archivo <code className="rounded bg-muted px-1">.mcpb</code> y ábrelo —
-              Claude Desktop preguntará por tu token y dejará el connector listo.
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              <a
-                href="/api/install/claude-desktop"
-                download="hijuelas-crm.mcpb"
-                className={buttonVariants()}
-              >
-                <Download className="mr-1.5 h-4 w-4" />
-                Descargar hijuelas-crm.mcpb
-              </a>
-              <a
-                href="https://claude.ai/download"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted-foreground underline hover:text-foreground"
-              >
-                ¿Aún no tienes Claude Desktop?
-              </a>
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                C
+              </span>
+              <h3 className="text-base font-semibold">
+                Sin Node.js — fallback manual
+              </h3>
             </div>
-            <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
-              <li>Genera un token arriba y copialo.</li>
-              <li>Click el botón → se descarga <code className="rounded bg-muted px-1">hijuelas-crm.mcpb</code>.</li>
-              <li>Abre Claude Desktop → Settings → <strong>Extensions</strong> y <strong>arrastra el archivo</strong> a esa ventana (más confiable que doble-click).</li>
-              <li>Pega tu token en el campo <strong>Token MCP</strong> y confirma instalación.</li>
-            </ol>
-            <p className="text-xs text-muted-foreground">
-              Prerequisitos: Claude Desktop ≥ 0.10 (Extensions feature) y Node.js
-              en el PATH (<code className="rounded bg-muted px-1">npx</code> disponible).
-              Internamente usa <code className="rounded bg-muted px-1">mcp-remote</code> como proxy stdio→HTTP.
-              Si Claude Desktop no abre el archivo con doble-click, el drag-and-drop al panel
-              Extensions es la vía oficial.
-            </p>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="font-semibold">Opción C — Claude Desktop sin Node (manual)</h3>
             <p className="text-muted-foreground">
-              Si no tienes Node.js o el instalador falla: usa la UI nativa de
-              Claude Desktop con el token embebido en la URL. <strong>Trade-off:</strong> el
-              token queda visible en archivos de config local.
+              Si la Opción A falla porque no tienes Node y no quieres
+              instalarlo, usa la UI nativa de Claude Desktop con el token en
+              la URL. <strong>Trade-off:</strong> el token queda visible en
+              archivos de config local.
             </p>
             <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
-              <li>Settings (⌘+,) → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
+              <li>Settings → <strong>Connectors</strong> → <strong>Add custom connector</strong>.</li>
               <li><strong>Name</strong>: <code className="rounded bg-muted px-1">Hijuelas CRM</code>.</li>
               <li><strong>Remote MCP server URL</strong>: <code className="rounded bg-muted px-1">{mcpUrl}?token=TU_TOKEN</code> (deja vacío OAuth Client ID/Secret).</li>
               <li>Click <strong>Add</strong>.</li>

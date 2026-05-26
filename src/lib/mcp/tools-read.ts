@@ -278,6 +278,31 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "list_kams",
+    {
+      title: "Listar KAMs",
+      description:
+        "Devuelve los KAMs (Key Account Managers, rol sales) con su UUID, email, contacts_count y contracts_count. Usalo para descubrir qué kam_id pasar a list_clients/list_contracts/list_opportunities.",
+      inputSchema: {
+        include_support: z
+          .boolean()
+          .optional()
+          .describe("Si true, también incluye los sales_support. Default false."),
+      },
+    },
+    (async (args: { include_support?: boolean }, extra: ToolExtra) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_list_kams", {
+        p_user_id: auth.userId,
+        p_include_support: args.include_support ?? false,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "list_payments",
     {
       title: "Listar pagos",
