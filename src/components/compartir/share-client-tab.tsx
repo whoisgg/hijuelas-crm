@@ -61,6 +61,7 @@ function statusFor(row: ClientShareLinkRow): "Activo" | "Expirado" | "Revocado" 
 
 export function ShareClientTab({ shareLinks, clients, siteUrl }: Props) {
   const [isPending, startTransition] = React.useTransition();
+  const visibleLinks = shareLinks.filter((s) => !s.revoked_at);
 
   async function copyUrl(token: string) {
     try {
@@ -95,9 +96,9 @@ export function ShareClientTab({ shareLinks, clients, siteUrl }: Props) {
         <CreateShareLinkDialog clients={clients} siteUrl={siteUrl} />
       </CardHeader>
       <CardContent>
-        {shareLinks.length === 0 ? (
+        {visibleLinks.length === 0 ? (
           <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
-            No has creado links todavía.
+            No tienes links activos.
           </div>
         ) : (
           <Table>
@@ -112,7 +113,7 @@ export function ShareClientTab({ shareLinks, clients, siteUrl }: Props) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {shareLinks.map((s) => {
+              {visibleLinks.map((s) => {
                 const st = statusFor(s);
                 return (
                   <TableRow key={s.id} className={s.revoked_at ? "opacity-50" : ""}>
