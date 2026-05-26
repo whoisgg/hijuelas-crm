@@ -10,6 +10,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Download,
   ExternalLink,
   Search,
   Sigma,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   Building2,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   KAM_STATUS_GROUPS,
   matchesKamStatuses,
@@ -342,6 +344,67 @@ export function CalendarGrid({
     hiddenConditions,
     today,
   ]);
+
+  // Export a Excel — respeta los filtros y la ventana visible.
+  const [isExporting, setIsExporting] = React.useState(false);
+  const handleExport = React.useCallback(async () => {
+    if (filtered.length === 0) {
+      toast.error("No hay nada que exportar con los filtros actuales");
+      return;
+    }
+    setIsExporting(true);
+    try {
+      const { utils, writeFile } = await import("xlsx");
+      type Row = Record<string, string | number | null>;
+      const rows: Row[] = filtered.map((e) => ({
+        Tipo: e.source_type === "contract" ? "Contrato" : "Oportunidad",
+        Año: e.year ?? null,
+        Semana: e.week ?? null,
+        País: e.countryName ?? null,
+        ISO: e.countryIso2 ?? null,
+        Cliente: e.clientName ?? null,
+        Especie: e.speciesName ?? null,
+        Variedad: e.varietyName ?? null,
+        Plantas: e.qty ?? 0,
+        Condición:
+          e.contract_condition ??
+          (e.source_type === "opportunity" ? "oportunidad" : null),
+        "Status contrato": e.contract_status ?? null,
+        KAM: e.ownerName ?? null,
+        "Prob %":
+          e.source_type === "opportunity" ? (e.probability_pct ?? null) : null,
+      }));
+      const ws = utils.json_to_sheet(rows);
+      // Anchos sugeridos por columna (caracteres).
+      ws["!cols"] = [
+        { wch: 11 }, // Tipo
+        { wch: 6 },  // Año
+        { wch: 6 },  // Semana
+        { wch: 18 }, // País
+        { wch: 4 },  // ISO
+        { wch: 32 }, // Cliente
+        { wch: 14 }, // Especie
+        { wch: 22 }, // Variedad
+        { wch: 12 }, // Plantas
+        { wch: 12 }, // Condición
+        { wch: 14 }, // Status
+        { wch: 22 }, // KAM
+        { wch: 8 },  // Prob
+      ];
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Calendario");
+      const today = new Date().toISOString().slice(0, 10);
+      const view = viewMode === "month" ? "meses" : "semanas";
+      writeFile(wb, `hijuelas-calendario-${view}-${today}.xlsx`);
+      toast.success(`Exportadas ${rows.length} entregas`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "No se pudo generar el archivo",
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [filtered, viewMode]);
 
   // KPIs por año (total entregas + plantas por año).
   const kpis = React.useMemo(() => {
@@ -737,6 +800,21 @@ export function CalendarGrid({
             ) : null}
           </div>
         ) : null}
+
+        {/* Export a Excel — respeta los presets activos */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={isExporting || filtered.length === 0}
+          className="h-8 gap-1.5"
+          title="Exportar a Excel con los filtros aplicados"
+        >
+          <Download className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">
+            {isExporting ? "Generando…" : "Excel"}
+          </span>
+        </Button>
 
         {/* Botón Filtros — popover con especie, status, oportunidades, leyenda.
             Base-ui Popover.Trigger ya renderiza un <button>; no envolvemos
