@@ -246,12 +246,15 @@ export function ConnectClaudeTab({ tokens, siteUrl }: Props) {
             <ol className="ml-5 list-decimal space-y-1.5 text-muted-foreground">
               <li>Genera un token arriba y copialo.</li>
               <li>Click el botón → se descarga <code className="rounded bg-muted px-1">hijuelas-crm.mcpb</code>.</li>
-              <li>Abre el archivo (doble-click) — Claude Desktop muestra dialog <strong>&ldquo;Install Hijuelas CRM&rdquo;</strong>.</li>
+              <li>Abre Claude Desktop → Settings → <strong>Extensions</strong> y <strong>arrastra el archivo</strong> a esa ventana (más confiable que doble-click).</li>
               <li>Pega tu token en el campo <strong>Token MCP</strong> y confirma instalación.</li>
             </ol>
             <p className="text-xs text-muted-foreground">
-              Prerequisito: Node.js instalado (<code className="rounded bg-muted px-1">npx</code> debe estar disponible).
+              Prerequisitos: Claude Desktop ≥ 0.10 (Extensions feature) y Node.js
+              en el PATH (<code className="rounded bg-muted px-1">npx</code> disponible).
               Internamente usa <code className="rounded bg-muted px-1">mcp-remote</code> como proxy stdio→HTTP.
+              Si Claude Desktop no abre el archivo con doble-click, el drag-and-drop al panel
+              Extensions es la vía oficial.
             </p>
           </section>
 
