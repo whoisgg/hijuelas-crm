@@ -28,6 +28,10 @@ export type ForecastTotals = {
   billing_usd: number;
   pipeline_usd: number;
   pipeline_count: number;
+  /** Suma USD de anticipos (anticipo_1 + anticipo_2) pagados, datados por
+   *  COALESCE(paid_at, contract.signed_at, payments.created_at). */
+  anticipos_paid_usd: number;
+  anticipos_paid_count: number;
 };
 
 export type ForecastResult = {

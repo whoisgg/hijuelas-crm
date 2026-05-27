@@ -193,8 +193,18 @@ export function ForecastView({
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Kpi label={`Facturación ${year}`} value={usdFmt.format(totals.billing_usd)} highlight />
+        <Kpi
+          label={`Anticipos recibidos ${year}`}
+          value={usdFmt.format(totals.anticipos_paid_usd)}
+          sub={
+            totals.anticipos_paid_count > 0
+              ? `${totals.anticipos_paid_count} anticipos pagados`
+              : "Sin anticipos cobrados"
+          }
+          tone="cash"
+        />
         <Kpi label="Plantas comprometidas" value={fmtPlants(totals.plants_total)} />
         <Kpi label="Contratos" value={numFmt.format(totals.contracts_count)} />
         <Kpi label="Clientes" value={numFmt.format(totals.clients_count)} />
@@ -403,7 +413,7 @@ function Kpi({
   value: string;
   sub?: string;
   highlight?: boolean;
-  tone?: "warn";
+  tone?: "warn" | "cash";
 }) {
   return (
     <div
@@ -411,6 +421,7 @@ function Kpi({
         "rounded-lg border bg-card p-3",
         highlight && "border-primary/40 bg-primary/5",
         tone === "warn" && "border-amber-500/30 bg-amber-500/5",
+        tone === "cash" && "border-emerald-500/30 bg-emerald-500/5",
       )}
     >
       <div className="text-xs text-muted-foreground">{label}</div>
@@ -419,6 +430,7 @@ function Kpi({
           "mt-1 text-xl font-semibold tabular-nums",
           highlight && "text-primary",
           tone === "warn" && "text-amber-600 dark:text-amber-500",
+          tone === "cash" && "text-emerald-600 dark:text-emerald-500",
         )}
       >
         {value}
