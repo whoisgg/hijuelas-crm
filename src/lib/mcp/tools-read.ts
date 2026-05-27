@@ -555,27 +555,44 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Forecast de facturación por mes",
       description:
-        "Proyección mensual de facturación USD para un año dado. Excluye reposiciones/muestras e items sin precio (legacy). Devuelve totales + array 12 meses con plantas, # clientes, billing USD, y drill-down por cliente dentro de cada mes. Ideal para preguntas tipo 'cuánto facturamos en abril 2026' o 'qué meses pesan más en 2027'.",
+        "Proyección mensual de facturación USD para un año dado. Solo items pendientes (qty_delivered < qty_plants) — items 100% entregados ya están facturados. Excluye reposiciones/muestras e items legacy sin precio. Devuelve totales + array de meses con plantas, # clientes, billing USD, pipeline USD (si include_opportunities=true) y drill-down por cliente. Ideal para 'cuánto facturamos en abril 2026' o 'qué meses pesan más en 2027'.",
       inputSchema: {
-        year: z.number().int().describe("Año (>= 2026, los legacy 2025 sin precio se ignoran)"),
+        year: z.number().int().describe("Año (>= 2026)"),
         country_id: z.string().uuid().optional(),
         kam_id: z.string().uuid().optional(),
-        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
+        organization_id: z.string().uuid().optional().describe("Organización vendedora (VHSA, ZOE, NEF, etc.)"),
+        status_in: z.array(z.string()).optional().describe("Array de status del enum contract_status: borrador, por_revisar, firmado, en_proceso, finalizado, cancelado. Default: todos los activos + por firmar (sin cancelados)."),
+        include_opportunities: z.boolean().optional().describe("Si true, suma weighted pipeline (estimated_value_usd * probability_pct/100) de oportunidades no won/lost por expected_close_date."),
+        from_month: z.number().int().min(1).max(12).optional().describe("Mes inicial (1-12). UI lo setea a current_month en year actual."),
       },
     },
     (async (
-      args: { year: number; country_id?: string; kam_id?: string; status_filter?: string },
+      args: {
+        year: number;
+        country_id?: string;
+        kam_id?: string;
+        organization_id?: string;
+        status_in?: string[];
+        include_opportunities?: boolean;
+        from_month?: number;
+      },
       extra: ToolExtra,
     ) => {
       const auth = getAuthExtra(extra?.authInfo);
       if (!auth) return notAuthed();
-      const { data, error } = await rpc("mcp_forecast_by_month", {
+      const rpcArgs: Record<string, unknown> = {
         p_user_id: auth.userId,
         p_year: args.year,
         p_country_id: args.country_id ?? null,
         p_kam_id: args.kam_id ?? null,
-        p_status_filter: args.status_filter ?? null,
-      });
+        p_organization_id: args.organization_id ?? null,
+        p_include_opportunities: args.include_opportunities ?? false,
+        p_from_month: args.from_month ?? 1,
+      };
+      if (args.status_in && args.status_in.length > 0) {
+        rpcArgs.p_status_in = args.status_in;
+      }
+      const { data, error } = await rpc("mcp_forecast_by_month", rpcArgs);
       if (error) return errorContent(error.message);
       return jsonContent(data);
     }) as ToolHandler,
