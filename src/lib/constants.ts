@@ -7,6 +7,7 @@ import {
   Calendar,
   Sprout,
   Share2,
+  TrendingUp,
   UserCheck,
 } from "lucide-react";
 
@@ -26,6 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Calendario", href: "/calendario", icon: Calendar },
   { label: "Oportunidades", href: "/oportunidades", icon: Briefcase },
   { label: "Contratos", href: "/contratos", icon: FileText },
+  { label: "Forecast", href: "/forecast", icon: TrendingUp },
   { label: "KAM", href: "/kam", icon: UserCheck },
   { label: "Clientes", href: "/clientes", icon: Users },
   { label: "Catálogo", href: "/catalogo", icon: Sprout },

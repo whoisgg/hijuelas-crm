@@ -551,6 +551,37 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "forecast_by_month",
+    {
+      title: "Forecast de facturación por mes",
+      description:
+        "Proyección mensual de facturación USD para un año dado. Excluye reposiciones/muestras e items sin precio (legacy). Devuelve totales + array 12 meses con plantas, # clientes, billing USD, y drill-down por cliente dentro de cada mes. Ideal para preguntas tipo 'cuánto facturamos en abril 2026' o 'qué meses pesan más en 2027'.",
+      inputSchema: {
+        year: z.number().int().describe("Año (>= 2026, los legacy 2025 sin precio se ignoran)"),
+        country_id: z.string().uuid().optional(),
+        kam_id: z.string().uuid().optional(),
+        status_filter: z.string().optional().describe("'signed', 'pending', 'active' (default), 'all', o enum literal"),
+      },
+    },
+    (async (
+      args: { year: number; country_id?: string; kam_id?: string; status_filter?: string },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_forecast_by_month", {
+        p_user_id: auth.userId,
+        p_year: args.year,
+        p_country_id: args.country_id ?? null,
+        p_kam_id: args.kam_id ?? null,
+        p_status_filter: args.status_filter ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "deliveries_overview",
     {
       title: "Resumen de entregas por ventana de tiempo",
