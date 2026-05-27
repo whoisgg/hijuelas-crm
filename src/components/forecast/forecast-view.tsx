@@ -201,7 +201,7 @@ export function ForecastView({
                           ) : null}
                         </td>
                         <td className="px-3 py-2 font-medium">
-                          {MONTHS_ES[m.month - 1]} {year}
+                          {MONTHS_ES[m.month - 1]}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {hasData ? fmtPlants(m.plants) : "—"}
