@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Building2, Sprout, UserCircle2 } from "lucide-react";
+import { AlertTriangle, Building2, Sprout, UserCircle2 } from "lucide-react";
 
 import type { TopRankings as TopRankingsData, TopRankingItem } from "@/lib/actions/analytics";
 import { Card } from "@/components/ui/card";
@@ -37,7 +38,31 @@ export function TopRankings({ data, periodLabel }: Props) {
         icon={UserCircle2}
         periodLabel={periodLabel}
         items={data.kams}
+        header={
+          data.kamsUnassigned.usd > 0 ? (
+            <UnassignedKamBanner
+              usd={data.kamsUnassigned.usd}
+              share={data.kamsUnassigned.share}
+            />
+          ) : null
+        }
       />
+    </div>
+  );
+}
+
+function UnassignedKamBanner({ usd, share }: { usd: number; share: number }) {
+  return (
+    <div
+      className="flex items-center gap-2 border-b border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-400"
+      role="note"
+      aria-label="Indicador de calidad de dato: contratos sin KAM asignado"
+    >
+      <AlertTriangle className="size-3.5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">
+        <strong className="font-semibold">{formatUsd(usd, true)}</strong>{" "}
+        en contratos sin KAM ({Math.round(share * 100)}% del total)
+      </span>
     </div>
   );
 }
@@ -47,11 +72,15 @@ function RankingCard({
   icon: Icon,
   periodLabel,
   items,
+  header,
 }: {
   title: string;
   icon: LucideIcon;
   periodLabel: string;
   items: TopRankingItem[];
+  /** Slot opcional renderizado entre el header y la lista — sirve para
+   *  alertas de calidad de dato (ej. contratos sin KAM asignado). */
+  header?: ReactNode;
 }) {
   return (
     <Card className="flex flex-col overflow-hidden p-0">
@@ -62,6 +91,7 @@ function RankingCard({
         </span>
         <span className="tabular-nums text-muted-foreground">{periodLabel}</span>
       </div>
+      {header}
       {items.length === 0 ? (
         <div className="flex h-24 items-center justify-center text-xs text-muted-foreground">
           Sin datos para el año.

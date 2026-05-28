@@ -115,8 +115,17 @@ export type TopRankings = {
   programs: TopRankingItem[];
   clients: TopRankingItem[];
   countries: TopRankingItem[];
-  /** Top KAMs por USD comprometido del año (prorrateado por items del año). */
+  /** Top KAMs por USD comprometido del año (prorrateado por items del año).
+   *  EXCLUYE contratos sin kam_id — esos se reportan aparte en `kamsUnassigned`. */
   kams: TopRankingItem[];
+  /** USD comprometido del año en contratos sin KAM asignado. Es un
+   *  indicador de calidad de dato, no un KAM real. Renderizar como
+   *  alerta separada, no dentro del ranking. */
+  kamsUnassigned: {
+    usd: number;
+    /** Fracción del grandTotal — útil para "X% del total no tiene KAM". */
+    share: number;
+  };
 };
 
 export type MapCountryDatum = {
@@ -1667,6 +1676,14 @@ export async function getTopRankings(params: {
       .slice(0, 5);
   };
 
+  // Para el ranking de KAM excluimos el bucket "__sin_kam__" — es un
+  // indicador de calidad de dato, no un KAM real. Se reporta aparte.
+  const byKamAssigned = new Map<string, { usd: number }>();
+  for (const [k, v] of byKam) {
+    if (k !== "__sin_kam__") byKamAssigned.set(k, v);
+  }
+  const unassignedUsd = byKam.get("__sin_kam__")?.usd ?? 0;
+
   return {
     year,
     totalUsd: grandTotal,
@@ -1677,9 +1694,11 @@ export async function getTopRankings(params: {
     ),
     clients: buildTop(byClient),
     countries: buildTop(byCountry),
-    kams: buildTop(byKam, (id) =>
-      id === "__sin_kam__" ? "Sin KAM" : kamNames.get(id) ?? "—",
-    ),
+    kams: buildTop(byKamAssigned, (id) => kamNames.get(id) ?? "—"),
+    kamsUnassigned: {
+      usd: unassignedUsd,
+      share: grandTotal > 0 ? unassignedUsd / grandTotal : 0,
+    },
   };
 }
 
