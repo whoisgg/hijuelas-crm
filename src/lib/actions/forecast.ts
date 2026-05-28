@@ -32,8 +32,10 @@ export type ForecastTotals = {
   billing_usd: number;
   pipeline_usd: number;
   pipeline_count: number;
-  /** Suma USD de anticipos (anticipo_1 + anticipo_2) pagados, datados por
-   *  COALESCE(paid_at, contract.signed_at, payments.created_at). */
+  /** Suma USD de anticipos (anticipo_1 + anticipo_2) pagados de los contratos
+   *  ELEGIBLES para facturación del año (mismo subconjunto que `billing_usd`).
+   *  No filtra por fecha de cobro del anticipo — si el contrato califica para
+   *  facturar en p_year, todos sus anticipos pagados se cuentan acá. */
   anticipos_paid_usd: number;
   anticipos_paid_count: number;
 };

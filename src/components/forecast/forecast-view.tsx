@@ -196,12 +196,12 @@ export function ForecastView({
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <Kpi label={`Facturación ${year}`} value={usdFmt.format(totals.billing_usd)} highlight />
         <Kpi
-          label={`Anticipos recibidos ${year}`}
+          label={`Anticipos de contratos a facturar ${year}`}
           value={usdFmt.format(totals.anticipos_paid_usd)}
           sub={
             totals.anticipos_paid_count > 0
-              ? `${totals.anticipos_paid_count} anticipos pagados`
-              : "Sin anticipos cobrados"
+              ? `${totals.anticipos_paid_count} anticipos pagados (cualquier fecha)`
+              : "Sin anticipos asociados"
           }
           tone="cash"
         />
@@ -414,7 +414,9 @@ export function ForecastView({
         Regla de facturación: <strong>solo items pendientes</strong> (qty_delivered &lt; qty_plants);
         items ya entregados al 100% se consideran facturados y NO entran al forecast.
         Pipeline (opps) = estimated_value_usd × probability_pct / 100 con expected_close_date en el período.
-        <strong> Flujo de caja real</strong> (caja con anticipos) llega cuando los <code className="rounded bg-muted px-1">payments</code> tengan due_date + amount completos.
+        <strong> Anticipos</strong>: suma <em>todos</em> los anticipos pagados (anticipo_1 + anticipo_2)
+        de los contratos que componen el billing del año — no filtra por fecha de cobro del anticipo,
+        sino por elegibilidad del contrato para facturar en {year}.
       </div>
     </div>
   );
