@@ -115,17 +115,6 @@ export type TopRankings = {
   programs: TopRankingItem[];
   clients: TopRankingItem[];
   countries: TopRankingItem[];
-  /** Top KAMs por USD comprometido del año (prorrateado por items del año).
-   *  EXCLUYE contratos sin kam_id — esos se reportan aparte en `kamsUnassigned`. */
-  kams: TopRankingItem[];
-  /** USD comprometido del año en contratos sin KAM asignado. Es un
-   *  indicador de calidad de dato, no un KAM real. Renderizar como
-   *  alerta separada, no dentro del ranking. */
-  kamsUnassigned: {
-    usd: number;
-    /** Fracción del grandTotal — útil para "X% del total no tiene KAM". */
-    share: number;
-  };
 };
 
 export type MapCountryDatum = {
@@ -1514,11 +1503,11 @@ export async function getTopRankings(params: {
     return acc.size > 0 ? acc : null;
   })();
 
-  // Traemos contratos con sus items + datos de cliente/país + programas + kam.
+  // Traemos contratos con sus items + datos de cliente/país + programas.
   const { data: contracts } = await supabase
     .from("contracts")
     .select(
-      `id, total_neto_usd, status, client_id, kam_id,
+      `id, total_neto_usd, status, client_id,
        client:clients!inner ( id, name, country:countries ( id, name_es ) ),
        contract_items ( qty_plants, delivery_year, delivery_week, deleted_at, genetic_program_id )`,
     )
@@ -1554,7 +1543,6 @@ export async function getTopRankings(params: {
   const byClient = new Map<string, { name: string; usd: number }>();
   const byCountry = new Map<string, { name: string; usd: number }>();
   const byProgram = new Map<string, { usd: number }>(); // name se resuelve después
-  const byKam = new Map<string, { usd: number }>();    // name se resuelve después
 
   let grandTotal = 0;
 
@@ -1623,15 +1611,6 @@ export async function getTopRankings(params: {
         else byProgram.set(pgId, { usd: attributedUsd });
       }
     }
-
-    // KAM (owner del contrato): atribuye la usd del período entera al KAM
-    // del contrato. Contratos sin KAM caen en el bucket "__sin_kam__".
-    {
-      const kamKey = c.kam_id ?? "__sin_kam__";
-      const prev = byKam.get(kamKey);
-      if (prev) prev.usd += usd;
-      else byKam.set(kamKey, { usd });
-    }
   }
 
   // Resolver nombres de programas genéticos
@@ -1645,19 +1624,6 @@ export async function getTopRankings(params: {
       .select("id, name")
       .in("id", programIds);
     for (const pg of pgs ?? []) programNames.set(pg.id, pg.name);
-  }
-
-  // Resolver nombres de KAMs (app_users.full_name, fallback a email)
-  const kamIds = Array.from(byKam.keys()).filter((id) => id !== "__sin_kam__");
-  const kamNames = new Map<string, string>();
-  if (kamIds.length > 0) {
-    const { data: us } = await supabase
-      .from("app_users")
-      .select("id, full_name, email")
-      .in("id", kamIds);
-    for (const u of us ?? []) {
-      kamNames.set(u.id, u.full_name ?? u.email ?? "—");
-    }
   }
 
   const buildTop = <K extends string>(
@@ -1676,14 +1642,6 @@ export async function getTopRankings(params: {
       .slice(0, 5);
   };
 
-  // Para el ranking de KAM excluimos el bucket "__sin_kam__" — es un
-  // indicador de calidad de dato, no un KAM real. Se reporta aparte.
-  const byKamAssigned = new Map<string, { usd: number }>();
-  for (const [k, v] of byKam) {
-    if (k !== "__sin_kam__") byKamAssigned.set(k, v);
-  }
-  const unassignedUsd = byKam.get("__sin_kam__")?.usd ?? 0;
-
   return {
     year,
     totalUsd: grandTotal,
@@ -1694,11 +1652,6 @@ export async function getTopRankings(params: {
     ),
     clients: buildTop(byClient),
     countries: buildTop(byCountry),
-    kams: buildTop(byKamAssigned, (id) => kamNames.get(id) ?? "—"),
-    kamsUnassigned: {
-      usd: unassignedUsd,
-      share: grandTotal > 0 ? unassignedUsd / grandTotal : 0,
-    },
   };
 }
 
