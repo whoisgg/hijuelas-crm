@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronRight, Sparkles, TrendingUp } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Sparkles, TrendingUp, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -333,6 +333,7 @@ export function ForecastView({
                                     <th className="px-2 py-1 text-left">Cliente</th>
                                     <th className="px-2 py-1 text-left">País</th>
                                     <th className="px-2 py-1 text-left">Variedades</th>
+                                    <th className="px-2 py-1 text-center">Anticipo</th>
                                     <th className="px-2 py-1 text-right">Plantas</th>
                                     <th className="px-2 py-1 text-right">Facturación USD</th>
                                   </tr>
@@ -377,6 +378,35 @@ export function ForecastView({
                                           </div>
                                         ) : (
                                           <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-1.5 text-center">
+                                        {c.anticipos_count > 0 ? (
+                                          <span
+                                            className="inline-flex items-center gap-1 text-foreground"
+                                            title={`${c.anticipos_count} anticipo${c.anticipos_count === 1 ? "" : "s"} pagado${c.anticipos_count === 1 ? "" : "s"}`}
+                                          >
+                                            <Check
+                                              className="size-3.5"
+                                              strokeWidth={2.5}
+                                              aria-hidden
+                                            />
+                                            <span className="sr-only">
+                                              {c.anticipos_count} anticipos
+                                            </span>
+                                          </span>
+                                        ) : (
+                                          <span
+                                            className="inline-flex items-center text-muted-foreground/40"
+                                            title="Sin anticipo pagado"
+                                          >
+                                            <X
+                                              className="size-3.5"
+                                              strokeWidth={2.5}
+                                              aria-hidden
+                                            />
+                                            <span className="sr-only">Sin anticipo</span>
+                                          </span>
                                         )}
                                       </td>
                                       <td className="px-2 py-1.5 text-right tabular-nums">

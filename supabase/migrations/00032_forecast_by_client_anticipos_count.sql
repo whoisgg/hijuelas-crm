@@ -1,0 +1,23 @@
+-- ============================================================
+-- 00032_forecast_by_client_anticipos_count.sql
+--
+-- Agrega `anticipos_count int` por (cliente, mes) en el subarray
+-- `by_client` del jsonb de `mcp_forecast_by_month`.
+--
+-- Cuenta los payments con status='pagado', amount>0,
+-- type IN ('anticipo_1','anticipo_2'), de los contratos que componen
+-- el billing de esa fila específica del drill-down (mismos filtros
+-- atómicos: condition='venta', status_in, delivery_year=p_year,
+-- delivery_month=m.month, unit_price>0, qty_delivered<qty_plants,
+-- y los filtros país/KAM/org que aplican al cliente del row).
+--
+-- Sirve para que el drilldown del forecast muestre un ✓/✗ monocromático
+-- por cliente — "este cliente ya tiene anticipo pagado para este mes"
+-- vs "todavía no". Coincide con el contexto del KPI "Anticipos de
+-- contratos a facturar Y" pero a granularidad de cliente+mes.
+--
+-- Aplicado vía mcp__supabase-whoisgg__apply_migration con name
+-- 'forecast_by_client_anticipos_count'. Ver función en DB para el SQL.
+-- ============================================================
+
+NOTIFY pgrst, 'reload schema';
