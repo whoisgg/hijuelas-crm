@@ -257,14 +257,13 @@ export function ContratosListView({ rows, organizations }: Props) {
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Total plantas</TableHead>
               <TableHead className="text-right">Total USD</TableHead>
-              <TableHead>Firma</TableHead>
               <TableHead className="text-right">Items</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                   No hay contratos para los filtros seleccionados.
                 </TableCell>
               </TableRow>

@@ -319,6 +319,7 @@ export function ForecastView({
                                   <tr>
                                     <th className="px-2 py-1 text-left">Cliente</th>
                                     <th className="px-2 py-1 text-left">País</th>
+                                    <th className="px-2 py-1 text-left">Variedades</th>
                                     <th className="px-2 py-1 text-right">Plantas</th>
                                     <th className="px-2 py-1 text-right">Facturación USD</th>
                                   </tr>
@@ -346,6 +347,23 @@ export function ForecastView({
                                           </span>
                                         ) : (
                                           "—"
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        {c.varieties && c.varieties.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {c.varieties.map((v) => (
+                                              <Badge
+                                                key={v}
+                                                variant="outline"
+                                                className="text-[10px] font-normal"
+                                              >
+                                                {v}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
                                         )}
                                       </td>
                                       <td className="px-2 py-1.5 text-right tabular-nums">

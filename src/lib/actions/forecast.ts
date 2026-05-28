@@ -9,6 +9,10 @@ export type ForecastClientRow = {
   country_name: string | null;
   plants: number;
   billing_usd: number;
+  /** Variedades distintas del cliente para ese mes (ARRAY_AGG DISTINCT
+   *  desde contract_items.variety_id → varieties.name). Renderizado como
+   *  burbujas en el drill-down, mismo patrón que /kam. */
+  varieties: string[] | null;
 };
 
 export type ForecastMonth = {

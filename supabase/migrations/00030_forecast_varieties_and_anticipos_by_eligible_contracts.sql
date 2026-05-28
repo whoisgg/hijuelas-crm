@@ -1,0 +1,33 @@
+-- ============================================================
+-- 00030_forecast_varieties_and_anticipos_by_eligible_contracts.sql
+--
+-- Dos cambios sobre mcp_forecast_by_month:
+--
+-- 1) Anticipos pagados ahora se restringen a los CONTRATOS ELEGIBLES
+--    para la facturación del año (mismos filtros que el cálculo de
+--    billing_usd):
+--       condition = 'venta'
+--       status::text = ANY(p_status_in)
+--       delivery_year = p_year
+--       delivery_month >= v_from_month
+--       unit_price > 0
+--       qty_delivered < qty_plants
+--       country_id / kam_id / organization_id si corresponden
+--    Antes sumaba TODOS los anticipos pagados del universo filtrado por
+--    país/KAM/org sin importar si los contratos seguían siendo elegibles
+--    para facturar ese año (p.ej. contratos ya 100% entregados o de años
+--    distintos colaban su cash). Ahora el KPI realmente representa:
+--    "cuánto cash adelantado ya tengo en mano de los contratos que voy
+--    a facturar en p_year".
+--
+-- 2) by_client ahora incluye `varieties text[]` — ARRAY_AGG DISTINCT de
+--    los nombres de variedad del cliente en ese mes (joineando
+--    contract_items.variety_id → varieties.name). Para mostrar como
+--    burbujas en el desglose del Forecast, mismo patrón que /kam.
+--
+-- Aplicado vía mcp__supabase-whoisgg__apply_migration con name
+-- 'forecast_varieties_and_anticipos_by_eligible_contracts'. El SQL
+-- completo vive en la función mcp_forecast_by_month en DB.
+-- ============================================================
+
+NOTIFY pgrst, 'reload schema';
