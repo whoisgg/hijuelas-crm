@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { CountryFlag } from "@/components/clientes/country-flag";
 import { KAM_STATUS_GROUPS, type KamStatusKey } from "@/lib/kam-status";
 import type { ForecastResult } from "@/lib/actions/forecast";
+import { AnticiposDrilldownSheet } from "./anticipos-drilldown-sheet";
 
 type Kam = { id: string; label: string; role: string };
 type Org = { id: string; name: string; prefix: string | null };
@@ -72,6 +73,17 @@ export function ForecastView({
   const router = useRouter();
   const searchParams = useSearchParams();
   const [expanded, setExpanded] = React.useState<Set<number>>(new Set());
+  const [anticiposOpen, setAnticiposOpen] = React.useState(false);
+
+  // Mismo subconjunto que ya se pasó al RPC del forecast, para que
+  // el drilldown coincida 1:1 con el KPI.
+  const statusInForDrilldown = React.useMemo(() => {
+    const matches = new Set<string>();
+    for (const g of KAM_STATUS_GROUPS) {
+      if (statusKeys.has(g.key)) g.matches.forEach((m) => matches.add(m));
+    }
+    return Array.from(matches);
+  }, [statusKeys]);
 
   function pushParams(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams?.toString());
@@ -200,10 +212,11 @@ export function ForecastView({
           value={usdFmt.format(totals.anticipos_paid_usd)}
           sub={
             totals.anticipos_paid_count > 0
-              ? `${totals.anticipos_paid_count} anticipos pagados (cualquier fecha)`
-              : "Sin anticipos asociados"
+              ? `${totals.anticipos_paid_count} anticipos · click para detalle`
+              : "Sin anticipos asociados · click para detalle"
           }
           tone="cash"
+          onClick={() => setAnticiposOpen(true)}
         />
         <Kpi label="Plantas comprometidas" value={fmtPlants(totals.plants_total)} />
         <Kpi label="Contratos" value={numFmt.format(totals.contracts_count)} />
@@ -409,6 +422,17 @@ export function ForecastView({
         </CardContent>
       </Card>
 
+      <AnticiposDrilldownSheet
+        open={anticiposOpen}
+        onOpenChange={setAnticiposOpen}
+        year={year}
+        statusIn={statusInForDrilldown}
+        countryId={forecast.filter.country_id}
+        kamId={forecast.filter.kam_id}
+        organizationId={forecast.filter.organization_id}
+        fromMonth={forecast.filter.from_month}
+      />
+
       <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
         <Badge variant="outline" className="mr-1.5 text-[10px]">v2</Badge>
         Regla de facturación: <strong>solo items pendientes</strong> (qty_delivered &lt; qty_plants);
@@ -428,17 +452,25 @@ function Kpi({
   sub,
   highlight,
   tone,
+  onClick,
 }: {
   label: string;
   value: string;
   sub?: string;
   highlight?: boolean;
   tone?: "warn" | "cash";
+  onClick?: () => void;
 }) {
+  const clickable = Boolean(onClick);
+  const Component = clickable ? "button" : "div";
   return (
-    <div
+    <Component
+      type={clickable ? "button" : undefined}
+      onClick={onClick}
       className={cn(
-        "rounded-lg border bg-card p-3",
+        "rounded-lg border bg-card p-3 text-left transition-shadow",
+        clickable &&
+          "cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         highlight && "border-primary/40 bg-primary/5",
         tone === "warn" && "border-amber-500/30 bg-amber-500/5",
         tone === "cash" && "border-emerald-500/30 bg-emerald-500/5",
@@ -456,6 +488,6 @@ function Kpi({
         {value}
       </div>
       {sub ? <div className="mt-0.5 text-[10px] text-muted-foreground">{sub}</div> : null}
-    </div>
+    </Component>
   );
 }

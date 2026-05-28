@@ -1,0 +1,27 @@
+-- ============================================================
+-- 00031_mcp_forecast_contracts_anticipos.sql
+--
+-- Nueva RPC `mcp_forecast_contracts_anticipos` para el drilldown
+-- clickeable del KPI "Anticipos de contratos a facturar Y" en /forecast.
+--
+-- Devuelve, para el mismo universo elegible que mcp_forecast_by_month:
+--   - contract_id, number, status, client_id, client_name
+--   - country_iso2, country_name, organization_name, organization_prefix
+--   - kam_name (full_name del app_user owner)
+--   - billing_usd  (su aporte al total del año, regla atómica)
+--   - plants       (suma de qty_plants de items elegibles)
+--   - anticipos_usd, anticipos_count (suma de payments status='pagado',
+--                    type IN ('anticipo_1','anticipo_2'), sin filtro de fecha)
+--
+-- Ordenado por anticipos_usd DESC, luego billing_usd DESC. Lo abrimos en
+-- un Sheet lateral cuando el usuario clickea el KPI "Anticipos".
+--
+-- Acepta los mismos filtros que mcp_forecast_by_month:
+--   p_year (obligatorio), p_country_id, p_kam_id, p_organization_id,
+--   p_status_in (text[]), p_from_month.
+--
+-- SECURITY DEFINER + _mcp_require_active(p_user_id). GRANT EXECUTE a
+-- authenticated. Cargado vía mcp_apply_migration; ver función en DB.
+-- ============================================================
+
+NOTIFY pgrst, 'reload schema';

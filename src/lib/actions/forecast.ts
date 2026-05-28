@@ -92,6 +92,78 @@ export async function getForecastByMonth(params: {
   return res.data;
 }
 
+// ---------------------------------------------------------------
+// Drilldown del KPI Anticipos: lista de contratos elegibles para el
+// año con su aporte al billing + anticipos pagados (cualquier fecha).
+// ---------------------------------------------------------------
+
+export type ForecastContractAnticipoRow = {
+  contract_id: string;
+  number: string;
+  status: string;
+  client_id: string;
+  client_name: string;
+  country_iso2: string | null;
+  country_name: string | null;
+  organization_name: string | null;
+  organization_prefix: string | null;
+  kam_name: string | null;
+  billing_usd: number;
+  plants: number;
+  anticipos_usd: number;
+  anticipos_count: number;
+};
+
+export type ForecastContractsAnticiposResult = {
+  filter: {
+    year: number;
+    from_month: number;
+    country_id: string | null;
+    kam_id: string | null;
+    organization_id: string | null;
+    status_in: string[];
+  };
+  contracts: ForecastContractAnticipoRow[];
+};
+
+/** Llama al RPC mcp_forecast_contracts_anticipos con los mismos filtros
+ *  del Forecast — devuelve la tabla del drilldown del KPI Anticipos. */
+export async function getForecastContractsAnticipos(params: {
+  year: number;
+  country_id?: string | null;
+  kam_id?: string | null;
+  organization_id?: string | null;
+  status_in?: string[];
+  from_month?: number;
+}): Promise<ForecastContractsAnticiposResult | null> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const args: Record<string, unknown> = {
+    p_user_id: user.id,
+    p_year: params.year,
+    p_country_id: params.country_id ?? null,
+    p_kam_id: params.kam_id ?? null,
+    p_organization_id: params.organization_id ?? null,
+    p_from_month: params.from_month ?? 1,
+  };
+  if (params.status_in && params.status_in.length > 0) {
+    args.p_status_in = params.status_in;
+  }
+
+  const res = await (supabase.rpc as unknown as (
+    name: string,
+    args: Record<string, unknown>,
+  ) => Promise<RpcResult<ForecastContractsAnticiposResult>>)(
+    "mcp_forecast_contracts_anticipos",
+    args,
+  );
+
+  if (res.error) throw new Error(res.error.message);
+  return res.data;
+}
+
 /** Lista organizaciones activas para el filtro. */
 export async function listOrganizationsForForecast(): Promise<
   { id: string; name: string; prefix: string | null }[]
