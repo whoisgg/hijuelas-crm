@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { PeriodFilter, type PeriodKey } from "@/components/dashboard/period-filter";
+import { CountryGrid } from "@/components/dashboard/country-grid";
 import { CountryStackedBar } from "@/components/dashboard/country-stacked-bar";
 import { TopRankings } from "@/components/dashboard/top-rankings";
 import { EmptyState } from "@/components/dashboard/empty-state";
@@ -156,7 +157,13 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
               />
             </div>
           ) : (
-            <CountryStackedBar data={mapData} />
+            <>
+              {/* Franja minimalista arriba — un glance del país-mix sin
+                  competir con las cards. h-2, hover muestra detalle, click
+                  drill-down a /clientes?country=ISO2. */}
+              <CountryStackedBar data={mapData} />
+              <CountryGrid data={mapData} />
+            </>
           )}
         </div>
       </Card>
