@@ -1,0 +1,28 @@
+-- ============================================================
+-- 00029_forecast_anticipos_year_by_first_delivery.sql
+--
+-- Fix: el KPI "Anticipos recibidos $Y" datava los anticipos por
+-- COALESCE(paid_at, signed_at, payments.created_at). El problema:
+-- los 146 anticipos pagados tienen paid_at=NULL, signed_at=NULL, y
+-- created_at = fecha de import del Excel (Mayo 2026). Resultado:
+-- todos caían en 2026 → mostraba $19.87M en cualquier filtro de
+-- year=2026, $0 en cualquier otro año.
+--
+-- Fix: reemplazar el último fallback de p.created_at por
+-- MIN(contract_items.delivery_year) del contrato. Es el "año para
+-- el que se firmó el contrato" — proxy mucho mejor del año de
+-- cobro del anticipo.
+--
+-- Distribución resultante:
+--   2024 → $9.95M (56 anticipos)
+--   2025 → $9.79M (76)
+--   2026 → $97K (11)
+--   2027 → $21K (3)
+--
+-- Refleja la realidad: Hijuelas ya cobró anticipos de contratos
+-- 2024/2025 mayoritariamente. Pocos contratos 2026 firmados todavía.
+--
+-- Ver función actual en DB para SQL completo (aplicado via MCP).
+-- ============================================================
+
+NOTIFY pgrst, 'reload schema';
