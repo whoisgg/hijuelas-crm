@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Building2, Globe2, Sprout } from "lucide-react";
+import { Building2, Sprout, UserCircle2 } from "lucide-react";
 
 import type { TopRankings as TopRankingsData, TopRankingItem } from "@/lib/actions/analytics";
 import { Card } from "@/components/ui/card";
@@ -12,9 +12,10 @@ type Props = {
 };
 
 /**
- * Tres mini-rankings (top 5) que complementan al país-grid del dashboard:
- * programa genético, cliente, país — todos por USD comprometido del
- * período activo. Cambian al cambiar el chip de período.
+ * Tres mini-rankings (top 5) que complementan al stacked-bar de países
+ * del dashboard: programa genético, cliente, KAM — todos por USD
+ * comprometido del período activo. El detalle de país ya vive en la
+ * barra apilada del card "Entregas comprometidas".
  */
 export function TopRankings({ data, periodLabel }: Props) {
   return (
@@ -32,10 +33,10 @@ export function TopRankings({ data, periodLabel }: Props) {
         items={data.clients}
       />
       <RankingCard
-        title="Top países"
-        icon={Globe2}
+        title="Top KAM"
+        icon={UserCircle2}
         periodLabel={periodLabel}
-        items={data.countries}
+        items={data.kams}
       />
     </div>
   );
