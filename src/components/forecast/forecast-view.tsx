@@ -331,9 +331,10 @@ export function ForecastView({
                                 <thead className="text-[10px] uppercase text-muted-foreground">
                                   <tr>
                                     <th className="px-2 py-1 text-left">Cliente</th>
-                                    <th className="px-2 py-1 text-left">País</th>
+                                    <th className="px-2 py-1 text-center w-8">País</th>
+                                    <th className="px-2 py-1 text-left">Org</th>
                                     <th className="px-2 py-1 text-left">Variedades</th>
-                                    <th className="px-2 py-1 text-center">Anticipo</th>
+                                    <th className="px-2 py-1 text-center w-16">Anticipo</th>
                                     <th className="px-2 py-1 text-right">Plantas</th>
                                     <th className="px-2 py-1 text-right">Facturación USD</th>
                                   </tr>
@@ -349,18 +350,37 @@ export function ForecastView({
                                           {c.client_name}
                                         </a>
                                       </td>
-                                      <td className="px-2 py-1.5">
+                                      <td className="px-2 py-1.5 text-center">
                                         {c.country_iso2 ? (
-                                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                                          <span
+                                            className="inline-flex items-center"
+                                            title={c.country_name ?? c.country_iso2}
+                                          >
                                             <CountryFlag
                                               iso2={c.country_iso2}
                                               size="sm"
                                               showName={false}
                                             />
-                                            {c.country_name ?? c.country_iso2}
                                           </span>
                                         ) : (
-                                          "—"
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-2 py-1.5">
+                                        {c.organizations && c.organizations.length > 0 ? (
+                                          <div className="flex flex-wrap gap-1">
+                                            {c.organizations.map((o) => (
+                                              <Badge
+                                                key={o}
+                                                variant="secondary"
+                                                className="text-[10px] font-mono font-normal"
+                                              >
+                                                {o}
+                                              </Badge>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
                                         )}
                                       </td>
                                       <td className="px-2 py-1.5">

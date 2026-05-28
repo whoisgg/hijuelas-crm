@@ -13,6 +13,9 @@ export type ForecastClientRow = {
    *  desde contract_items.variety_id → varieties.name). Renderizado como
    *  burbujas en el drill-down, mismo patrón que /kam. */
   varieties: string[] | null;
+  /** Organizaciones (prefix, ej. VHSA/VH/ZOE/SJL) que tienen contratos
+   *  elegibles en esta (cliente, mes) row. Render como burbujas. */
+  organizations: string[] | null;
   /** Conteo de payments pagados (anticipo_1 + anticipo_2) en los contratos
    *  que componen el billing de esta (cliente, mes) row. >= 1 → ✓ en UI,
    *  0 → ✗. Permite ver de un vistazo qué clientes ya tienen anticipo. */
