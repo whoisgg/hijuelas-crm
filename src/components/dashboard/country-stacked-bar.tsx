@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 
 import type { MapCountryDatum } from "@/lib/actions/analytics";
+import { CountryFlag } from "@/components/clientes/country-flag";
 import { formatNumber, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -13,21 +14,22 @@ type Props = {
 
 /**
  * Paleta de colores ordenada por rank. Top 8 países usan colores distintos;
- * el resto cae en bucket "Otros" (gris). Pensada para verse minimalista
- * — solo una franja delgada arriba del grid de cards, sin texto encima.
+ * el resto cae en bucket "Otros" (gris). Tonos elegidos para alto contraste
+ * con texto blanco — los labels viven SOBRE la barra, así que el background
+ * tiene que cargar bien la tinta.
  */
 const PALETTE = [
-  "bg-emerald-500",
-  "bg-sky-500",
-  "bg-amber-500",
-  "bg-violet-500",
-  "bg-rose-500",
-  "bg-teal-500",
-  "bg-indigo-500",
-  "bg-orange-500",
+  "bg-emerald-600",
+  "bg-sky-600",
+  "bg-amber-600",
+  "bg-violet-600",
+  "bg-rose-600",
+  "bg-teal-600",
+  "bg-indigo-600",
+  "bg-orange-600",
 ] as const;
 
-const OTHERS_COLOR = "bg-zinc-400 dark:bg-zinc-600";
+const OTHERS_COLOR = "bg-zinc-500 dark:bg-zinc-600";
 
 type Segment = {
   countryId: string | null; // null = bucket "Otros"
@@ -36,16 +38,20 @@ type Segment = {
   plantsCommitted: number;
   revenueUsd: number;
   contractsCount: number;
-  shareCount: number; // # de países agrupados (1 normalmente, >1 si es "Otros")
+  shareCount: number; // 1 normal, >1 si es "Otros"
   fill: string;
   href: string | null;
 };
 
 /**
- * Stacked bar minimalista — una franja delgada (h-2) arriba del grid de
- * cards. Da un glance instantáneo del país-mix del período. Hover muestra
- * el detalle; click va a /clientes?country=ISO2. Sin texto sobre la barra
- * — los nombres y números viven en las cards de abajo.
+ * Stacked bar minimalista — franja con segmentos proporcionales por país.
+ * Cada segmento muestra inline su bandera + nombre/ISO2 + % (la densidad
+ * de info se ajusta según el ancho disponible). Hover revela el detalle
+ * completo, click → /clientes?country=ISO2.
+ *
+ * Bug fix de la versión anterior: el width se aplicaba doble (Link wrapper
+ * + inner div), produciendo huecos visibles entre segmentos. Ahora el
+ * width vive UNA sola vez en el elemento outer.
  */
 export function CountryStackedBar({ data }: Props) {
   const segments = React.useMemo<Segment[]>(() => {
@@ -95,48 +101,79 @@ export function CountryStackedBar({ data }: Props) {
   if (segments.length === 0 || total === 0) return null;
 
   return (
-    <div
-      className="flex h-2 w-full overflow-hidden border-b bg-muted/30"
-      role="img"
-      aria-label={`Distribución de ${formatNumber(total, true)} plantas comprometidas entre ${segments.length} países`}
-    >
-      {segments.map((s, idx) => {
-        const widthPct = (s.plantsCommitted / total) * 100;
-        // Minimo visual para no perder presencia de segmentos chicos.
-        const renderedPct = Math.max(widthPct, 0.5);
-        const title = `${s.nameEs} · ${formatNumber(s.plantsCommitted, true)} plantas (${widthPct.toFixed(1)}%) · ${formatUsd(s.revenueUsd, true)} · ${s.contractsCount} ${s.contractsCount === 1 ? "contrato" : "contratos"}`;
-
-        const inner = (
-          <div
-            title={title}
-            className={cn(
-              "h-full transition-opacity hover:opacity-80",
-              s.fill,
-              s.href && "cursor-pointer",
-            )}
-            style={{ width: `${renderedPct}%` }}
+    <div className="px-3 pt-3 md:px-4">
+      <div
+        className="flex h-6 w-full overflow-hidden rounded-md border bg-muted/40"
+        role="img"
+        aria-label={`Distribución de ${formatNumber(total, true)} plantas comprometidas entre ${segments.length} países`}
+      >
+        {segments.map((s, idx) => (
+          <SegmentEl
+            key={s.countryId ?? `others-${idx}`}
+            seg={s}
+            total={total}
           />
-        );
+        ))}
+      </div>
+    </div>
+  );
+}
 
-        if (s.href) {
-          return (
-            <Link
-              key={s.countryId ?? `others-${idx}`}
-              href={s.href}
-              className="h-full"
-              style={{ width: `${renderedPct}%` }}
-              aria-label={title}
-            >
-              {inner}
-            </Link>
-          );
-        }
-        return (
-          <React.Fragment key={s.countryId ?? `others-${idx}`}>
-            {inner}
-          </React.Fragment>
-        );
-      })}
+function SegmentEl({ seg, total }: { seg: Segment; total: number }) {
+  const widthPct = (seg.plantsCommitted / total) * 100;
+  // Mínimo visual de 0.6% para que segmentos chicos sigan siendo visibles
+  // pero sin distorsionar a los grandes.
+  const renderedPct = Math.max(widthPct, 0.6);
+  const title = `${seg.nameEs} · ${formatNumber(seg.plantsCommitted, true)} plantas (${widthPct.toFixed(1)}%) · ${formatUsd(seg.revenueUsd, true)} · ${seg.contractsCount} ${seg.contractsCount === 1 ? "contrato" : "contratos"}`;
+
+  // Decidir qué tanto label cabe según el % de ancho del segmento.
+  // Estas thresholds son heurísticas — funcionan bien para barras desktop
+  // de ~1000px de ancho con flag + 1-2 tokens de texto.
+  const showFlag = renderedPct >= 4 && seg.iso2 != null;
+  const showName = renderedPct >= 18;
+  const showPct = renderedPct >= 8;
+  const showIso2 = renderedPct >= 4 && !showName;
+
+  const content = (
+    <div
+      title={title}
+      className={cn(
+        "flex h-full min-w-0 items-center justify-center gap-1 px-1.5 text-[10px] font-semibold uppercase tracking-wider text-white transition-opacity hover:opacity-90",
+        seg.fill,
+      )}
+    >
+      {showFlag && seg.iso2 ? (
+        <CountryFlag iso2={seg.iso2} size="sm" showName={false} />
+      ) : null}
+      {showName ? (
+        <span className="truncate">{seg.nameEs}</span>
+      ) : showIso2 && seg.iso2 ? (
+        <span>{seg.iso2}</span>
+      ) : null}
+      {showPct ? (
+        <span className="tabular-nums opacity-90">
+          {widthPct.toFixed(0)}%
+        </span>
+      ) : null}
+    </div>
+  );
+
+  // ÚNICO lugar donde se aplica width — outer element.
+  if (seg.href) {
+    return (
+      <Link
+        href={seg.href}
+        className="block h-full"
+        style={{ width: `${renderedPct}%` }}
+        aria-label={title}
+      >
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <div className="h-full" style={{ width: `${renderedPct}%` }}>
+      {content}
     </div>
   );
 }
