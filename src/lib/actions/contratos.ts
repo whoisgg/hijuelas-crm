@@ -119,6 +119,31 @@ function prettyEnum(v: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// El importador legacy empaquetó metadata en `notes` con el formato
+// "source:excel_import | Venta 2024 | Centro de costo: Frutales".
+// Acá lo desempaquetamos: recuperamos el Centro de costo a su columna y
+// dejamos el Comentario limpio (sin metadata interna ni tokens redundantes).
+function parseNotes(notes: string | null | undefined): {
+  centroDeCosto: string;
+  comentario: string;
+} {
+  if (!notes) return { centroDeCosto: "", comentario: "" };
+  let centroDeCosto = "";
+  const comentarioParts: string[] = [];
+  for (const raw of notes.split("|")) {
+    const part = raw.trim();
+    if (!part) continue;
+    const cc = part.match(/^centro de costo:\s*(.+)$/i);
+    if (cc) { centroDeCosto = cc[1].trim(); continue; }
+    if (/^source[:_]/i.test(part)) continue; // source:excel_import / source_sheet:...
+    if (/^incoterm note:/i.test(part)) continue;
+    // Token redundante "Venta 2024" / "Muestra 2025" (condición + año)
+    if (/^(venta|muestra|reposici[oó]n)\s+\d{4}$/i.test(part)) continue;
+    comentarioParts.push(part);
+  }
+  return { centroDeCosto, comentario: comentarioParts.join(" | ") };
+}
+
 type RawContactExport = {
   name: string | null;
   email: string | null;
@@ -209,6 +234,8 @@ export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> 
     const a2 = pay("anticipo_2");
     const saldo = pay("saldo");
 
+    const { centroDeCosto, comentario } = parseNotes(c.notes);
+
     const items = (c.items ?? []).filter((it) => !it.deleted_at);
     // Un contrato sin items igual sale como una fila (para no perder contratos).
     const itemList: (RawItemExport | null)[] = items.length > 0 ? items : [null];
@@ -232,7 +259,7 @@ export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> 
         "Situación Anticipo 2": prettyEnum(a2?.status),
         "Condición": prettyEnum(c.condition),
         "Tipo de venta": prettyEnum(c.sale_type),
-        "Centro de costo": "",
+        "Centro de costo": centroDeCosto,
         "Especie": it?.variety?.species?.name ?? "",
         "Variedad": it?.variety?.name ?? "",
         "Tipo de material": prettyEnum(it?.material_type),
@@ -243,7 +270,7 @@ export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> 
         "Incoterm": c.incoterm ?? "",
         "Rut": client?.tax_id ?? "",
         "Giro": client?.giro ?? "",
-        "Comentario": c.notes ?? it?.notes ?? "",
+        "Comentario": comentario || it?.notes || "",
         "Contacto": contact?.name ?? "",
         "Teléfono de contacto": contact?.phone ?? "",
         "Mail": contact?.email ?? "",
