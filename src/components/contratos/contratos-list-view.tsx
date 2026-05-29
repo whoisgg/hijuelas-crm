@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { formatMoney, formatDate } from "@/components/contratos/format";
+import { ExportAllButton } from "@/components/contratos/export-all-button";
 
 const plantsFormatter = new Intl.NumberFormat("es-CL");
 
@@ -168,6 +169,7 @@ export function ContratosListView({ rows, organizations }: Props) {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
+          <ExportAllButton />
           <Button variant="outline" size="sm" render={<Link href="/contratos" />}>
             <Globe2 className="h-4 w-4" />
             Vista país

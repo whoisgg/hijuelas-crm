@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getFxRates } from "@/lib/actions/fx-rates";
 import type { Database, Json } from "@/lib/database.types";
+import type { ExportCompromisosRow } from "@/lib/export/compromisos";
 
 type ContractStatus = Database["public"]["Enums"]["contract_status"];
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
@@ -95,6 +96,177 @@ export async function listContracts(filters: ContractListFilters = {}) {
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return data ?? [];
+}
+
+// ---------------------------------------------------------------------------
+// Export "Todo" — replica la planilla original BBDD ventas (hoja "Compromisos").
+// Devuelve una fila por contract_item con las 41 columnas originales, listo
+// para volcar a .xlsx en el cliente. Campos no almacenados en el modelo nuevo
+// (País origen, Centro de costo, Punto contacto) salen vacíos.
+// Financieros: Total Neto se calcula por item (qty * valor planta); los
+// anticipos/saldo son a nivel contrato y se repiten en cada fila del contrato
+// (igual que en la planilla original denormalizada).
+// ---------------------------------------------------------------------------
+
+const MONTHS_ES_FULL = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+
+function prettyEnum(v: string | null | undefined): string {
+  if (!v) return "";
+  const s = v.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+type RawContactExport = {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  is_primary: boolean | null;
+  deleted_at: string | null;
+};
+type RawItemExport = {
+  qty_plants: number | null;
+  qty_delivered: number | null;
+  unit_price: number | null;
+  currency: string | null;
+  format: string | null;
+  material_type: string | null;
+  delivery_year: number | null;
+  delivery_week: number | null;
+  delivery_month: number | null;
+  status: string | null;
+  notes: string | null;
+  deleted_at: string | null;
+  variety: {
+    name: string | null;
+    species: { name: string | null } | null;
+    genetic_program: { name: string | null } | null;
+  } | null;
+};
+type RawPaymentExport = {
+  type: PaymentType | null;
+  amount: number | null;
+  iva: number | null;
+  status: string | null;
+};
+type RawContractExport = {
+  number: string | null;
+  status: string | null;
+  condition: string | null;
+  sale_type: string | null;
+  incoterm: string | null;
+  notes: string | null;
+  client: {
+    name: string | null;
+    tax_id: string | null;
+    giro: string | null;
+    region: string | null;
+    country: { name_es: string | null } | null;
+    contacts: RawContactExport[] | null;
+  } | null;
+  organization: { name: string | null } | null;
+  items: RawItemExport[] | null;
+  payments: RawPaymentExport[] | null;
+};
+
+export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("contracts")
+    .select(
+      `number, status, condition, sale_type, incoterm, notes,
+       client:clients!contracts_client_id_fkey (
+         name, tax_id, giro, region,
+         country:countries ( name_es ),
+         contacts:client_contacts ( name, email, phone, is_primary, deleted_at )
+       ),
+       organization:organizations!contracts_organization_id_fkey ( name ),
+       items:contract_items (
+         qty_plants, qty_delivered, unit_price, currency, format, material_type,
+         delivery_year, delivery_week, delivery_month, status, notes, deleted_at,
+         variety:varieties ( name, species:species ( name ), genetic_program:genetic_programs ( name ) )
+       ),
+       payments ( type, amount, iva, status )`,
+    )
+    .is("deleted_at", null)
+    .order("number", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  const contracts = (data ?? []) as unknown as RawContractExport[];
+  const rows: ExportCompromisosRow[] = [];
+
+  for (const c of contracts) {
+    const client = c.client;
+    const contacts = (client?.contacts ?? []).filter((ct) => !ct.deleted_at);
+    const contact = contacts.find((ct) => ct.is_primary) ?? contacts[0] ?? null;
+
+    const payments = c.payments ?? [];
+    const pay = (t: PaymentType) => payments.find((p) => p.type === t) ?? null;
+    const a1 = pay("anticipo_1");
+    const a2 = pay("anticipo_2");
+    const saldo = pay("saldo");
+
+    const items = (c.items ?? []).filter((it) => !it.deleted_at);
+    // Un contrato sin items igual sale como una fila (para no perder contratos).
+    const itemList: (RawItemExport | null)[] = items.length > 0 ? items : [null];
+
+    for (const it of itemList) {
+      const qty = it?.qty_plants ?? null;
+      const price = it?.unit_price ?? null;
+      const totalNeto =
+        qty != null && price != null ? Math.round(qty * price * 100) / 100 : null;
+      const month = it?.delivery_month ?? null;
+
+      rows.push({
+        "País origen": "",
+        "País Destino": client?.country?.name_es ?? "",
+        "Región": client?.region ?? "",
+        "Empresa vendedora": c.organization?.name ?? "",
+        "Cliente": client?.name ?? "",
+        "# Contrato": c.number ?? "",
+        "Situación Contrato": prettyEnum(c.status),
+        "Situación Anticipo 1": prettyEnum(a1?.status),
+        "Situación Anticipo 2": prettyEnum(a2?.status),
+        "Condición": prettyEnum(c.condition),
+        "Tipo de venta": prettyEnum(c.sale_type),
+        "Centro de costo": "",
+        "Especie": it?.variety?.species?.name ?? "",
+        "Variedad": it?.variety?.name ?? "",
+        "Tipo de material": prettyEnum(it?.material_type),
+        "Situación entrega": prettyEnum(it?.status),
+        "Programa genético": it?.variety?.genetic_program?.name ?? "",
+        "Formato": it?.format ?? "",
+        "Moneda": it?.currency ?? "",
+        "Incoterm": c.incoterm ?? "",
+        "Rut": client?.tax_id ?? "",
+        "Giro": client?.giro ?? "",
+        "Comentario": c.notes ?? it?.notes ?? "",
+        "Contacto": contact?.name ?? "",
+        "Teléfono de contacto": contact?.phone ?? "",
+        "Mail": contact?.email ?? "",
+        "Punto contacto": "",
+        "# plantas": qty,
+        "# entregada": it?.qty_delivered ?? null,
+        "Valor planta": price,
+        "Año entrega": it?.delivery_year ?? null,
+        "Mes entrega": month != null && month >= 1 && month <= 12 ? MONTHS_ES_FULL[month - 1] : "",
+        "Wk entrega": it?.delivery_week ?? null,
+        "Total Neto": totalNeto,
+        "Total IVA": null,
+        "Anticipo 1": a1?.amount ?? null,
+        "IVA anticipo 1": a1?.iva ?? null,
+        "Anticipo 2": a2?.amount ?? null,
+        "IVA anticipo 2": a2?.iva ?? null,
+        "Saldo": saldo?.amount ?? null,
+        "IVA saldo": saldo?.iva ?? null,
+      });
+    }
+  }
+
+  return rows;
 }
 
 export async function getContract(id: string) {
