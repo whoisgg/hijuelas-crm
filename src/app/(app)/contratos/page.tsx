@@ -8,6 +8,8 @@ import {
   ContratosListView,
   type ContractListRow,
 } from "@/components/contratos/contratos-list-view";
+import { ExportAllButton } from "@/components/contratos/export-all-button";
+import { ImportContractsButton } from "@/components/contratos/import-contracts-button";
 import {
   ContratosByCountryView,
   type CountryContractRow,
@@ -171,6 +173,12 @@ export default async function ContratosPage({
         description={
           view === "country" ? undefined : "Vista de lista plana. Filtros avanzados."
         }
+        actions={
+          <>
+            {isAdmin ? <ImportContractsButton /> : null}
+            <ExportAllButton />
+          </>
+        }
       />
       {view === "country" ? (
         <ContratosByCountryView
@@ -179,7 +187,7 @@ export default async function ContratosPage({
           fxRates={fxRates}
         />
       ) : (
-        <ContratosListView rows={listRows} organizations={organizations} isAdmin={isAdmin} />
+        <ContratosListView rows={listRows} organizations={organizations} />
       )}
     </AppShell>
   );

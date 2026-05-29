@@ -25,8 +25,6 @@ import {
 } from "@/components/ui/table";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { formatMoney, formatDate } from "@/components/contratos/format";
-import { ExportAllButton } from "@/components/contratos/export-all-button";
-import { ImportContractsButton } from "@/components/contratos/import-contracts-button";
 
 const plantsFormatter = new Intl.NumberFormat("es-CL");
 
@@ -83,7 +81,6 @@ const STORAGE_KEY = "hijuelas-contratos-view";
 type Props = {
   rows: ContractListRow[];
   organizations: OrgOption[];
-  isAdmin?: boolean;
 };
 
 // Reads the saved view from localStorage. Returns the default on SSR.
@@ -101,7 +98,7 @@ function readStoredView(): SavedView {
   return DEFAULT_VIEWS[0];
 }
 
-export function ContratosListView({ rows, organizations, isAdmin = false }: Props) {
+export function ContratosListView({ rows, organizations }: Props) {
   const router = useRouter();
   // Use lazy initializers so the saved view is read once on mount. SSR will
   // render the default, then the client will reconcile on hydration.
@@ -171,8 +168,6 @@ export function ContratosListView({ rows, organizations, isAdmin = false }: Prop
           </button>
         ))}
         <div className="ml-auto flex items-center gap-2">
-          {isAdmin ? <ImportContractsButton /> : null}
-          <ExportAllButton />
           <Button variant="outline" size="sm" render={<Link href="/contratos" />}>
             <Globe2 className="h-4 w-4" />
             Vista país
