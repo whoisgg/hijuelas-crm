@@ -15,6 +15,7 @@ import {
 } from "@/components/contratos/contratos-by-country-view";
 import { createClient } from "@/lib/supabase/server";
 import { getFxRates } from "@/lib/actions/fx-rates";
+import { isCurrentUserAdmin } from "@/lib/actions/admin-users";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Contratos" };
@@ -161,6 +162,8 @@ export default async function ContratosPage({
     },
   );
 
+  const isAdmin = await isCurrentUserAdmin();
+
   return (
     <AppShell>
       <PageHeader
@@ -176,7 +179,7 @@ export default async function ContratosPage({
           fxRates={fxRates}
         />
       ) : (
-        <ContratosListView rows={listRows} organizations={organizations} />
+        <ContratosListView rows={listRows} organizations={organizations} isAdmin={isAdmin} />
       )}
     </AppShell>
   );
