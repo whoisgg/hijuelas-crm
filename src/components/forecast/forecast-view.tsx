@@ -253,10 +253,10 @@ export function ForecastView({
                   <th className="px-3 py-2 text-left w-10" />
                   <th className="px-3 py-2 text-left">Mes</th>
                   <th className="px-3 py-2 text-right">Plantas</th>
-                  <th className="px-3 py-2 text-right">Clientes</th>
+                  <th className="px-3 py-2 text-right hidden md:table-cell">Clientes</th>
                   <th className="px-3 py-2 text-right">Facturación USD</th>
                   {showPipelineCol ? (
-                    <th className="px-3 py-2 text-right">
+                    <th className="px-3 py-2 text-right hidden md:table-cell">
                       <span className="inline-flex items-center gap-1">
                         <Sparkles className="h-3 w-3 text-amber-500" />
                         Pipeline USD
@@ -305,14 +305,14 @@ export function ForecastView({
                         <td className="px-3 py-2 text-right tabular-nums">
                           {hasData ? fmtPlants(m.plants) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
+                        <td className="px-3 py-2 text-right tabular-nums hidden md:table-cell">
                           {hasData ? numFmt.format(m.clients_count) : "—"}
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">
                           {hasData ? usdFmt.format(m.billing_usd) : "—"}
                         </td>
                         {showPipelineCol ? (
-                          <td className="px-3 py-2 text-right tabular-nums text-amber-600 dark:text-amber-500">
+                          <td className="px-3 py-2 text-right tabular-nums text-amber-600 dark:text-amber-500 hidden md:table-cell">
                             {m.pipeline_usd > 0 ? (
                               <span title={`${m.pipeline_count} oportunidades (weighted)`}>
                                 {usdFmt.format(m.pipeline_usd)}
@@ -331,10 +331,10 @@ export function ForecastView({
                                 <thead className="text-[10px] uppercase text-muted-foreground">
                                   <tr>
                                     <th className="px-2 py-1 text-left">Cliente</th>
-                                    <th className="px-2 py-1 text-center w-8">País</th>
-                                    <th className="px-2 py-1 text-left">Org</th>
-                                    <th className="px-2 py-1 text-left">Variedades</th>
-                                    <th className="px-2 py-1 text-center w-16">Anticipo</th>
+                                    <th className="px-2 py-1 text-center w-8 hidden md:table-cell">País</th>
+                                    <th className="px-2 py-1 text-left hidden md:table-cell">Org</th>
+                                    <th className="px-2 py-1 text-left hidden md:table-cell">Variedades</th>
+                                    <th className="px-2 py-1 text-center w-16 hidden md:table-cell">Anticipo</th>
                                     <th className="px-2 py-1 text-right">Plantas</th>
                                     <th className="px-2 py-1 text-right">Facturación USD</th>
                                   </tr>
@@ -350,7 +350,7 @@ export function ForecastView({
                                           {c.client_name}
                                         </a>
                                       </td>
-                                      <td className="px-2 py-1.5 text-center">
+                                      <td className="px-2 py-1.5 text-center hidden md:table-cell">
                                         {c.country_iso2 ? (
                                           <span
                                             className="inline-flex items-center"
@@ -366,7 +366,7 @@ export function ForecastView({
                                           <span className="text-muted-foreground">—</span>
                                         )}
                                       </td>
-                                      <td className="px-2 py-1.5">
+                                      <td className="px-2 py-1.5 hidden md:table-cell">
                                         {c.organizations && c.organizations.length > 0 ? (
                                           <div className="flex flex-wrap gap-1">
                                             {c.organizations.map((o) => (
@@ -383,7 +383,7 @@ export function ForecastView({
                                           <span className="text-muted-foreground">—</span>
                                         )}
                                       </td>
-                                      <td className="px-2 py-1.5">
+                                      <td className="px-2 py-1.5 hidden md:table-cell">
                                         {c.varieties && c.varieties.length > 0 ? (
                                           <div className="flex flex-wrap gap-1">
                                             {c.varieties.map((v) => (
@@ -400,7 +400,7 @@ export function ForecastView({
                                           <span className="text-muted-foreground">—</span>
                                         )}
                                       </td>
-                                      <td className="px-2 py-1.5 text-center">
+                                      <td className="px-2 py-1.5 text-center hidden md:table-cell">
                                         {c.anticipos_count > 0 ? (
                                           <span
                                             className="inline-flex items-center gap-1 text-foreground"
@@ -454,14 +454,14 @@ export function ForecastView({
                   <td className="px-3 py-2 text-right tabular-nums font-semibold">
                     {fmtPlants(totals.plants_total)}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">
+                  <td className="px-3 py-2 text-right tabular-nums font-semibold hidden md:table-cell">
                     {numFmt.format(totals.clients_count)}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums font-bold text-primary">
                     {usdFmt.format(totals.billing_usd)}
                   </td>
                   {showPipelineCol ? (
-                    <td className="px-3 py-2 text-right tabular-nums font-bold text-amber-600 dark:text-amber-500">
+                    <td className="px-3 py-2 text-right tabular-nums font-bold text-amber-600 dark:text-amber-500 hidden md:table-cell">
                       {usdFmt.format(totals.pipeline_usd)}
                     </td>
                   ) : null}
