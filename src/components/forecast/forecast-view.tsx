@@ -238,12 +238,9 @@ export function ForecastView({
             <TrendingUp className="h-4 w-4 text-primary" />
             Proyección mensual {year}
           </CardTitle>
-          <CardDescription>
-            Items <strong>pendientes</strong> de entrega (qty_delivered &lt; qty_plants),
-            facturación atómica por item (no se prorratea por % entregado). Excluye
-            reposición/muestra y legacy sin precio. USD usando fx_rate del contrato.
-            {year === currentYear ? " · Mostrando desde el mes actual." : ""}
-          </CardDescription>
+          {year === currentYear ? (
+            <CardDescription>Mostrando desde el mes actual.</CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
@@ -483,14 +480,39 @@ export function ForecastView({
         fromMonth={forecast.filter.from_month}
       />
 
-      <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
-        <Badge variant="outline" className="mr-1.5 text-[10px]">v2</Badge>
-        Regla de facturación: <strong>solo items pendientes</strong> (qty_delivered &lt; qty_plants);
-        items ya entregados al 100% se consideran facturados y NO entran al forecast.
-        Pipeline (opps) = estimated_value_usd × probability_pct / 100 con expected_close_date en el período.
-        <strong> Anticipos</strong>: suma <em>todos</em> los anticipos pagados (anticipo_1 + anticipo_2)
-        de los contratos que componen el billing del año — no filtra por fecha de cobro del anticipo,
-        sino por elegibilidad del contrato para facturar en {year}.
+      <div className="space-y-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <Badge variant="outline" className="text-[10px]">v2</Badge>
+          <span className="font-medium text-foreground">Metodología del forecast</span>
+        </div>
+        <ul className="space-y-1.5 [&_strong]:text-foreground">
+          <li>
+            <strong>Items pendientes:</strong> solo entran items con entrega incompleta
+            (<code>qty_delivered &lt; qty_plants</code>). Los entregados al 100% se consideran
+            facturados y quedan fuera del forecast.
+          </li>
+          <li>
+            <strong>Facturación atómica por item:</strong> se cuenta el valor completo del item,
+            no se prorratea por % entregado.
+          </li>
+          <li>
+            <strong>Exclusiones:</strong> no se consideran contratos de reposición ni muestra,
+            ni los items legacy sin precio.
+          </li>
+          <li>
+            <strong>Moneda:</strong> los montos se expresan en USD usando el <code>fx_rate</code>
+            propio de cada contrato.
+          </li>
+          <li>
+            <strong>Anticipos:</strong> suma <em>todos</em> los anticipos pagados (anticipo_1 +
+            anticipo_2) de los contratos que componen el billing del año. No filtra por fecha de
+            cobro del anticipo, sino por elegibilidad del contrato para facturar en {year}.
+          </li>
+          <li>
+            <strong>Pipeline (oportunidades):</strong> estimated_value_usd × probability_pct / 100,
+            con expected_close_date dentro del período.
+          </li>
+        </ul>
       </div>
     </div>
   );
