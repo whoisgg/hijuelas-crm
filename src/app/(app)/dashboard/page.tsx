@@ -88,7 +88,7 @@ export default async function DashboardPage({
 
       {/* Período rápido — 4 chips. Diferencia el dashboard del calendario
           detallado (allá se navega semana por semana). */}
-      <div className="-mx-4 mt-4 border-y bg-card/50 md:-mx-6">
+      <div className="-mx-4 mt-4 bg-card/50 md:-mx-6">
         <PeriodFilter selected={period.key} />
       </div>
 
@@ -138,7 +138,7 @@ async function DashboardContent({ period }: { period: ResolvedPeriod }) {
       {/* Grid de países — natural height (no flex-1) hasta máximo 3
           filas. Debajo queda espacio reservado para widgets futuros. */}
       <Card className="mt-4 flex flex-col overflow-hidden">
-        <div className="flex shrink-0 items-center justify-between border-b px-4 py-2.5 text-xs">
+        <div className="flex shrink-0 items-center justify-between px-4 py-2.5 text-xs">
           <span className="font-medium text-muted-foreground">
             Entregas comprometidas — <span className="text-foreground">{period.label}</span>
           </span>
