@@ -11,6 +11,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Download,
+  Eye,
+  EyeOff,
   ExternalLink,
   Search,
   Sigma,
@@ -152,6 +154,11 @@ export function CalendarGrid({
   );
   // Filtro vía leyenda: ocultar condiciones específicas (venta/muestra/reposicion).
   const [hiddenConditions, setHiddenConditions] = React.useState<Set<string>>(
+    () => new Set(),
+  );
+  // Columnas de país ocultas en desktop (iso2). Permite angostar la grilla
+  // para que la columna Total entre en el viewport sin scroll horizontal.
+  const [hiddenCountries, setHiddenCountries] = React.useState<Set<string>>(
     () => new Set(),
   );
   // Infinite scroll: cuántos periodos extras agregamos sobre el inicial.
@@ -592,6 +599,15 @@ export function CalendarGrid({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [events]);
 
+  // Países efectivamente visibles como columnas (desktop) — allCountries
+  // menos los que el usuario ocultó. La columna Total siempre suma TODOS
+  // los países (visibles + ocultos), así ocultar es solo un declutter
+  // visual, no cambia los totales por período.
+  const visibleCountries = React.useMemo(
+    () => allCountries.filter((c) => !hiddenCountries.has(c.iso2)),
+    [allCountries, hiddenCountries],
+  );
+
   // For each country, group its filtered events by week or month
   type CountryRow = {
     iso2: string;
@@ -786,8 +802,9 @@ export function CalendarGrid({
     if (!isDefaultStatuses) n++;
     if (includeOpps) n++;
     if (hiddenConditions.size > 0) n++;
+    if (hiddenCountries.size > 0) n++;
     return n;
-  }, [speciesId, contractStatuses, includeOpps, hiddenConditions]);
+  }, [speciesId, contractStatuses, includeOpps, hiddenConditions, hiddenCountries]);
 
   // Inline KPI compact: total + año actual (si existe en kpis.years).
   const currentYear = today.year;
@@ -1207,6 +1224,63 @@ export function CalendarGrid({
                   </div>
                 ) : null}
               </div>
+
+              {/* Columnas de país (solo desktop) — mostrar/ocultar para
+                  angostar la grilla y dejar Total siempre a la vista. */}
+              {!isMobile && allCountries.length > 0 ? (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Columnas de país
+                      </span>
+                      {hiddenCountries.size > 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => setHiddenCountries(new Set())}
+                          className="text-[11px] font-medium text-primary hover:underline"
+                        >
+                          Mostrar todas
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {allCountries.map((c) => {
+                        const visible = !hiddenCountries.has(c.iso2);
+                        return (
+                          <button
+                            key={`colvis-${c.iso2}`}
+                            type="button"
+                            onClick={() =>
+                              setHiddenCountries((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(c.iso2)) next.delete(c.iso2);
+                                else next.add(c.iso2);
+                                return next;
+                              })
+                            }
+                            title={visible ? `Ocultar ${c.name}` : `Mostrar ${c.name}`}
+                            className={
+                              "inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors " +
+                              (visible
+                                ? "border-primary/40 bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground line-through opacity-70 hover:bg-muted")
+                            }
+                          >
+                            {visible ? (
+                              <Eye className="h-3 w-3" />
+                            ) : (
+                              <EyeOff className="h-3 w-3" />
+                            )}
+                            {c.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
           </PopoverContent>
         </Popover>
@@ -1231,10 +1305,10 @@ export function CalendarGrid({
           style={{
             gridTemplateColumns: isMobile
               ? `3.5rem minmax(0, 1fr) 3.5rem`
-              : `7rem repeat(${allCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
+              : `7rem repeat(${visibleCountries.length}, minmax(8rem, 1fr)) 5.5rem`,
             minWidth: isMobile
               ? "auto"
-              : `${7 + allCountries.length * 8 + 5.5}rem`,
+              : `${7 + visibleCountries.length * 8 + 5.5}rem`,
           }}
         >
           {/* Header row — sticky con top dinámico = 56 (topbar fixed) +
@@ -1257,19 +1331,39 @@ export function CalendarGrid({
               Entregas
             </div>
           ) : (
-            allCountries.map((c) => (
+            visibleCountries.map((c) => (
               <div
                 key={`hdr-${c.iso2}`}
-                className="sticky z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
+                className="group sticky z-20 flex min-w-0 items-center gap-1.5 overflow-hidden border-b border-r bg-card px-2 py-2 text-xs"
                 style={{ top: "var(--cal-hdr-top, 56px)" }}
               >
                 <CountryFlag iso2={c.iso2} size="sm" />
                 <span className="truncate font-medium">{c.name}</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setHiddenCountries((prev) => {
+                      const next = new Set(prev);
+                      next.add(c.iso2);
+                      return next;
+                    })
+                  }
+                  title={`Ocultar ${c.name}`}
+                  aria-label={`Ocultar ${c.name}`}
+                  className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  <EyeOff className="h-3 w-3" />
+                </button>
               </div>
             ))
           )}
+          {/* Columna Total — sticky-right (right-0) además de sticky-top:
+              queda SIEMPRE visible en el viewport aunque la grilla tenga
+              scroll horizontal. bg opaco (bg-muted, no /40) para que el
+              contenido que scrollea por debajo no se transparente. z-[22]
+              para quedar sobre los country headers (z-20) al scrollear. */}
           <div
-            className="sticky z-20 min-w-0 overflow-hidden border-b border-l bg-muted/40 px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
+            className="sticky right-0 z-[22] min-w-0 overflow-hidden border-b border-l bg-muted px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
             style={{ top: "var(--cal-hdr-top, 56px)" }}
           >
             Total
@@ -1278,7 +1372,7 @@ export function CalendarGrid({
           {countryRows.length === 0 ? (
             <div
               className="border-r p-8 text-center text-sm text-muted-foreground"
-              style={{ gridColumn: `span ${isMobile ? 3 : allCountries.length + 2}` }}
+              style={{ gridColumn: `span ${isMobile ? 3 : visibleCountries.length + 2}` }}
             >
               No hay entregas registradas todavía.
             </div>
@@ -1342,7 +1436,7 @@ export function CalendarGrid({
                       // (que se veía feo bajo la columna Total).
                       className="flex items-start justify-center border-y-2 border-primary/30 bg-primary/5 pt-2 pb-7 font-mono text-xs font-bold tracking-widest text-primary"
                       style={{
-                        gridColumn: `span ${isMobile ? 3 : allCountries.length + 2}`,
+                        gridColumn: `span ${isMobile ? 3 : visibleCountries.length + 2}`,
                       }}
                     >
                       ▸ {year} ◂
@@ -1408,7 +1502,7 @@ export function CalendarGrid({
                           ),
                         },
                       ]
-                    : allCountries.map((country) => {
+                    : visibleCountries.map((country) => {
                         const cr = countryRows.find(
                           (r) => r.iso2 === country.iso2,
                         );
@@ -1555,14 +1649,18 @@ export function CalendarGrid({
                     );
                   })}
 
-                  {/* Row total */}
+                  {/* Row total — sticky-right (right-0) para que SIEMPRE quede
+                      visible aunque haya scroll horizontal. z-[5] (igual que la
+                      columna Período sticky-left). bg opaco para tapar el
+                      contenido que scrollea por debajo (isCur usa bg-primary
+                      sólido en vez de /10). */}
                   <div
                     className={
-                      "min-w-0 overflow-hidden border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
+                      "sticky right-0 z-[5] min-w-0 overflow-hidden border-b border-l px-2 py-2 text-right font-mono text-xs font-bold tabular-nums " +
                       firstRowMt + " " +
                       (isCur
-                        ? "bg-primary/10 text-primary"
-                        : "bg-muted/30 text-foreground")
+                        ? "bg-[oklch(0.95_0.03_145)] text-primary dark:bg-[oklch(0.28_0.05_145)]"
+                        : "bg-muted text-foreground")
                     }
                     title={
                       total > 0
