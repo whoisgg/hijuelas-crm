@@ -259,6 +259,9 @@ export function CalendarGrid({
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
       if (countryIso !== "all" && (e.countryIso2 ?? "??") !== countryIso) return false;
+      // Columnas de país ocultas (desktop): se excluyen por completo — así
+      // su aporte se descuenta del Total por período y del KPI.
+      if (hiddenCountries.has(e.countryIso2 ?? "??")) return false;
       if (
         includeOpps &&
         e.source_type === "opportunity" &&
@@ -294,6 +297,7 @@ export function CalendarGrid({
     search,
     speciesId,
     countryIso,
+    hiddenCountries,
     includeOpps,
     minProb,
     viewMode,
@@ -326,6 +330,8 @@ export function CalendarGrid({
         return false;
       if (speciesId !== "all" && e.speciesId !== speciesId) return false;
       if (countryIso !== "all" && (e.countryIso2 ?? "??") !== countryIso) return false;
+      // Países ocultos (desktop) excluidos también del KPI total.
+      if (hiddenCountries.has(e.countryIso2 ?? "??")) return false;
       if (
         includeOpps &&
         e.source_type === "opportunity" &&
@@ -354,6 +360,7 @@ export function CalendarGrid({
     search,
     speciesId,
     countryIso,
+    hiddenCountries,
     includeOpps,
     minProb,
     contractStatuses,
@@ -600,9 +607,9 @@ export function CalendarGrid({
   }, [events]);
 
   // Países efectivamente visibles como columnas (desktop) — allCountries
-  // menos los que el usuario ocultó. La columna Total siempre suma TODOS
-  // los países (visibles + ocultos), así ocultar es solo un declutter
-  // visual, no cambia los totales por período.
+  // menos los que el usuario ocultó. Ocultar un país lo excluye también de
+  // `filtered`/`eventsAllPeriods`, así su aporte se DESCUENTA del Total por
+  // período y del KPI (no es solo un declutter visual).
   const visibleCountries = React.useMemo(
     () => allCountries.filter((c) => !hiddenCountries.has(c.iso2)),
     [allCountries, hiddenCountries],
@@ -923,16 +930,35 @@ export function CalendarGrid({
           </button>
         </div>
 
-        {/* Desktop: search libre. Mobile: country select. */}
-        <div className="relative hidden md:flex flex-1 min-w-[180px] items-center">
+        {/* Desktop: search compacto (ancho fijo). Mobile: country select. */}
+        <div className="relative hidden md:flex md:w-48 items-center">
           <Search className="absolute left-2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar país, cliente, variedad..."
-            className="pl-7"
+            placeholder="Buscar…"
+            className="h-8 pl-7"
           />
         </div>
+
+        {/* Spacer — empuja KPI/Excel/Filtros al borde derecho ahora que la
+            búsqueda dejó de ser flex-1. */}
+        <div className="hidden flex-1 md:block" />
+
+        {/* Unhide rápido — visible solo si hay columnas de país ocultas.
+            Atajo para restaurarlas todas sin abrir el popover Filtros. */}
+        {!isMobile && hiddenCountries.size > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5"
+            onClick={() => setHiddenCountries(new Set())}
+            title="Mostrar todas las columnas de país ocultas"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {hiddenCountries.size} {hiddenCountries.size === 1 ? "oculto" : "ocultos"}
+          </Button>
+        ) : null}
         <div className="order-last basis-full md:hidden">
           <Select
             value={countryIso}
