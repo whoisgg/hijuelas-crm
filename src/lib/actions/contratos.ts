@@ -56,15 +56,19 @@ export type CreateContractInput = {
   saldoDueDate?: string | null;
 };
 
+// Transiciones permitidas. Cada estado lista a dónde puede ir — incluye el
+// paso hacia ADELANTE (avanzar en el flujo), el paso hacia ATRÁS (corregir un
+// avance prematuro) y cancelar. Los estados terminales (finalizado/cancelado)
+// pueden volver atrás para deshacer un cierre/cancelación equivocada.
 const ALLOWED_TRANSITIONS: Record<ContractStatus, ContractStatus[]> = {
   borrador: ["firmado", "cancelado"],
   // por_revisar se descontinuó pero se permite la salida directa a firmado
   // para datos legacy que aún no migraron.
   por_revisar: ["firmado", "borrador", "cancelado"],
-  firmado: ["en_proceso", "cancelado"],
-  en_proceso: ["finalizado", "cancelado"],
-  finalizado: [],
-  cancelado: [],
+  firmado: ["en_proceso", "borrador", "cancelado"],
+  en_proceso: ["finalizado", "firmado", "cancelado"],
+  finalizado: ["en_proceso"],
+  cancelado: ["borrador"],
 };
 
 export async function listContracts(filters: ContractListFilters = {}) {
@@ -795,11 +799,21 @@ export async function transitionContractStatus(
     );
   }
 
-  const updates: { status: ContractStatus; signed_at?: string } = {
+  // ¿Es una firma "por primera vez"? Solo cuando venimos de un estado previo
+  // a firmado (borrador/por_revisar). Volver a firmado desde en_proceso es un
+  // retroceso y NO debe re-sellar la fecha ni congelar una versión nueva.
+  const isInitialSigning =
+    toStatus === "firmado" &&
+    (currentStatus === "borrador" || currentStatus === "por_revisar");
+
+  const updates: { status: ContractStatus; signed_at?: string | null } = {
     status: toStatus,
   };
-  if (toStatus === "firmado") {
+  if (isInitialSigning) {
     updates.signed_at = new Date().toISOString();
+  } else if (toStatus === "borrador") {
+    // Al volver a borrador el contrato deja de estar firmado.
+    updates.signed_at = null;
   }
 
   const { error } = await supabase
@@ -808,7 +822,7 @@ export async function transitionContractStatus(
     .eq("id", contractId);
   if (error) throw new Error(error.message);
 
-  if (toStatus === "firmado") {
+  if (isInitialSigning) {
     await freezeContractVersion(contractId);
   }
 

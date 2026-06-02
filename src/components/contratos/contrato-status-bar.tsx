@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, XCircle } from "lucide-react";
+import { Check, Undo2, XCircle } from "lucide-react";
 
 import type { Database } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,13 @@ const NEXT: Partial<Record<ContractStatus, ContractStatus>> = {
   en_proceso: "finalizado",
 };
 
+// Paso hacia atrás del flujo — permite corregir un avance prematuro.
+const PREV: Partial<Record<ContractStatus, ContractStatus>> = {
+  firmado: "borrador",
+  en_proceso: "firmado",
+  finalizado: "en_proceso",
+};
+
 type Props = {
   contractId: string;
   status: ContractStatus;
@@ -62,6 +69,7 @@ export function ContratoStatusBar({ contractId, status }: Props) {
   };
 
   const nextStatus = NEXT[status];
+  const prevStatus = PREV[status];
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-3">
@@ -113,18 +121,35 @@ export function ContratoStatusBar({ contractId, status }: Props) {
         ) : null}
       </ol>
 
-      {!isFinal ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {nextStatus ? (
-            <Button
-              size="sm"
-              disabled={pending}
-              onClick={() => handleAdvance(nextStatus)}
-            >
-              <Check className="h-3.5 w-3.5" />
-              Marcar como {LABELS[nextStatus]}
-            </Button>
-          ) : null}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Avanzar — solo si el contrato no está en un estado terminal. */}
+        {!isFinal && nextStatus ? (
+          <Button
+            size="sm"
+            disabled={pending}
+            onClick={() => handleAdvance(nextStatus)}
+          >
+            <Check className="h-3.5 w-3.5" />
+            Marcar como {LABELS[nextStatus]}
+          </Button>
+        ) : null}
+
+        {/* Retroceder — disponible en cualquier estado con paso anterior,
+            incluido finalizado (vuelve a en_proceso). */}
+        {prevStatus ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => handleAdvance(prevStatus)}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Volver a {LABELS[prevStatus]}
+          </Button>
+        ) : null}
+
+        {/* Cancelar — solo desde estados activos. */}
+        {!isFinal ? (
           <Button
             variant="outline"
             size="sm"
@@ -142,8 +167,21 @@ export function ContratoStatusBar({ contractId, status }: Props) {
             <XCircle className="h-3.5 w-3.5" />
             Cancelar contrato
           </Button>
-        </div>
-      ) : null}
+        ) : null}
+
+        {/* Reactivar — deshace una cancelación, vuelve a borrador. */}
+        {isCanceled ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={pending}
+            onClick={() => handleAdvance("borrador")}
+          >
+            <Undo2 className="h-3.5 w-3.5" />
+            Reactivar contrato
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
