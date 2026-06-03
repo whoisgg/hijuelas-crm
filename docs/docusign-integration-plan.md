@@ -46,6 +46,24 @@ Dos credenciales DISTINTAS (no confundir):
 - **Conector MCP** (ya conectado) = Claude ↔ DocuSign. Solo para testear/operar desde el chat.
 - **Integration Key (JWT)** = la app Next.js ↔ DocuSign. Es lo que hay que crear y configurar.
 
+### Entornos: developer (demo) vs producción
+
+| | Developer / demo | Producción (Grupo Hijuelas) |
+|---|---|---|
+| Signup | **developers.docusign.com** (gratis, no expira) | cuenta actual (trial → pago) |
+| OAuth base | `account-d.docusign.com` | `account.docusign.com` |
+| API base | `https://demo.docusign.net/restapi` | `https://na4.docusign.net/restapi` |
+| Sobres | de prueba, marca "DEMO", **sin valor legal** | reales, vinculantes |
+
+**Se construye y prueba en DEMO**, y luego se promueve la Integration Key a producción
+vía **"Go-Live"** (≈20 llamadas API exitosas en demo → request de promoción → la misma key
+queda habilitada en producción). Esto mantiene el trial de 30 días intacto y evita mandar
+sobres reales durante el desarrollo.
+
+> El conector MCP actual apunta a **producción** (na4). Un "sobre de prueba" enviado por el
+> conector sería un sobre REAL en la cuenta productiva — OK para una demo puntual, no para
+> iterar el desarrollo (para eso, demo account).
+
 ## 2. Autenticación — JWT Grant (server-to-server)
 
 La app autentica como aplicación e **impersona** al integration user (sin login interactivo).
@@ -79,13 +97,17 @@ La app autentica como aplicación e **impersona** al integration user (sin login
 ```
 DOCUSIGN_INTEGRATION_KEY=<client_id>
 DOCUSIGN_USER_ID=60377bbf-9e95-464c-bb46-fe87e206b11e   # cambiar al integration user de sistema cuando exista
-DOCUSIGN_ACCOUNT_ID=9d02b533-5e42-4b10-ac0a-49395dfdbf48
-DOCUSIGN_API_BASE=https://na4.docusign.net/restapi
-DOCUSIGN_OAUTH_BASE=account.docusign.com
+DOCUSIGN_ACCOUNT_ID=<account id del entorno activo>
+# DEMO (desarrollo):       account-d.docusign.com  +  https://demo.docusign.net/restapi
+# PROD (Grupo Hijuelas):   account.docusign.com    +  https://na4.docusign.net/restapi  (account 9d02b533-…)
+DOCUSIGN_API_BASE=https://demo.docusign.net/restapi
+DOCUSIGN_OAUTH_BASE=account-d.docusign.com
 DOCUSIGN_PRIVATE_KEY=<RSA private key — multilinea, base64 o \n-escaped>
 DOCUSIGN_CONNECT_HMAC_KEY=<secret para verificar el webhook>
 ```
-> La clave privada es secreto fuerte: NO commitear. En Vercel va como env var (no `NEXT_PUBLIC_`).
+> Arrancar con valores **demo**; al hacer Go-Live cambiar `DOCUSIGN_API_BASE`/`OAUTH_BASE`/
+> `ACCOUNT_ID` a producción (na4). La clave privada es secreto fuerte: NO commitear. En Vercel
+> va como env var (no `NEXT_PUBLIC_`).
 
 ## 4. Base de datos — migración `contract_signatures`
 
@@ -169,7 +191,7 @@ Sin esto, la integración no tiene documento que enviar.
 
 ## 10. Fases de ejecución
 
-- **Fase 0 — Setup cuenta** (vos): Integration Key + RSA + consent + agregar correo soporte como admin + plan pago.
+- **Fase 0 — Setup cuenta** (vos): crear **developer account gratis** (developers.docusign.com) → Integration Key + RSA + consent en DEMO. Agregar correo soporte como admin en la cuenta prod. (El plan pago de prod solo se necesita al pasar a producción real.)
 - **Fase 1 — Auth + envío básico**: JWT helper, `sendContractForSignature`, tabla, botón. Probar con un PDF dummy.
 - **Fase 2 — Webhook + estado**: Connect + `/api/docusign/webhook` + guardado del PDF firmado + flip a `firmado`.
 - **Fase 3 — Template PDF**: parametrizar el contrato real (depende de recibir el `.docx`).
@@ -177,10 +199,12 @@ Sin esto, la integración no tiene documento que enviar.
 
 ## 11. Checklist concreto
 
-- [ ] Crear Integration Key (JWT) + generar RSA keypair (guardar privada)
+- [ ] Crear **developer account** gratis (developers.docusign.com) para construir/testear
+- [ ] Crear Integration Key (JWT) + generar RSA keypair (guardar privada) — en DEMO primero
 - [ ] Definir/crear el integration user de sistema (¿`firmas@`?) y usar su User ID
 - [ ] Dar consentimiento admin (scope `signature impersonation`)
-- [ ] Cargar env vars en `.env.local` + Vercel (Prod + Preview)
+- [ ] Cargar env vars en `.env.local` + Vercel (Prod + Preview) — empezar con valores DEMO
+- [ ] Tras testear: **Go-Live** (≈20 llamadas API en demo → promover la key a producción) + switch de env vars a na4
 - [ ] Migración `contract_signatures` (+ RLS + `NOTIFY pgrst`)
 - [ ] `src/lib/actions/signatures.ts` (send / status / void)
 - [ ] `/api/docusign/webhook` con verificación HMAC
