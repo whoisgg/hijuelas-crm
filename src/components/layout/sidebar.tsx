@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleHelp, Shield } from "lucide-react";
+import { Building2, CircleHelp, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS, type NavItem } from "@/lib/constants";
@@ -13,15 +13,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-const ADMIN_NAV: NavItem = {
-  label: "Usuarios",
-  href: "/admin/usuarios",
-  icon: Shield,
-};
+const ADMIN_NAV: NavItem[] = [
+  { label: "Usuarios", href: "/admin/usuarios", icon: Shield },
+  { label: "Organizaciones", href: "/admin/organizaciones", icon: Building2 },
+];
 
 export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
-  const items = isAdmin ? [...NAV_ITEMS, ADMIN_NAV] : NAV_ITEMS;
+  const items = isAdmin ? [...NAV_ITEMS, ...ADMIN_NAV] : NAV_ITEMS;
 
   return (
     <TooltipProvider delay={200}>

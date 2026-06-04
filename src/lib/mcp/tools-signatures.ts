@@ -16,7 +16,7 @@ import {
   type ContractPdfItem,
   type ContractPdfPayment,
 } from "@/lib/contract-pdf";
-import { sellerProfileFor } from "@/lib/contract-templates/frambuesa-legal";
+import { sellerProfileFromOrg } from "@/lib/contract-templates/frambuesa-legal";
 
 type ToolHandler = Parameters<McpServer["registerTool"]>[2];
 type ToolExtra = { authInfo?: AuthInfo };
@@ -57,6 +57,14 @@ type ContractBundle = {
   org_name: string | null;
   org_legal_name: string | null;
   org_tax_id: string | null;
+  org_rep_name: string | null;
+  org_rep_id: string | null;
+  org_domicile: string | null;
+  org_bank_name: string | null;
+  org_bank_account: string | null;
+  org_notice_name: string | null;
+  org_notice_email: string | null;
+  org_signer_email: string | null;
   items: {
     variety_name: string | null;
     species_name: string | null;
@@ -116,7 +124,18 @@ export function registerSignatureTools(server: McpServer): void {
         );
       const buyerRep = c.buyer?.representative_name ?? "Comprador";
 
-      const seller = sellerProfileFor(c.org_tax_id, c.org_legal_name ?? c.org_name);
+      const seller = sellerProfileFromOrg({
+        name: c.org_name,
+        legal_name: c.org_legal_name,
+        tax_id: c.org_tax_id,
+        legal_representative_name: c.org_rep_name,
+        legal_representative_id: c.org_rep_id,
+        legal_domicile: c.org_domicile,
+        bank_name: c.org_bank_name,
+        bank_account: c.org_bank_account,
+        notice_name: c.org_notice_name,
+        notice_email: c.org_notice_email,
+      });
 
       const items: ContractPdfItem[] = c.items.map((it) => ({
         species_name: it.species_name,
@@ -166,7 +185,7 @@ export function registerSignatureTools(server: McpServer): void {
       const signers: EnvelopeSigner[] = [
         { email: buyerEmail, name: buyerRep, anchorString: "/sn1/", routingOrder: 1 },
       ];
-      const sellerEmail = process.env.DOCUSIGN_SELLER_SIGNER_EMAIL;
+      const sellerEmail = c.org_signer_email ?? process.env.DOCUSIGN_SELLER_SIGNER_EMAIL;
       if (sellerEmail && sellerEmail.includes("@")) {
         signers.push({
           email: sellerEmail,

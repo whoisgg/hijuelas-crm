@@ -17,7 +17,7 @@ import {
   type ContractPdfItem,
   type ContractPdfPayment,
 } from "@/lib/contract-pdf";
-import { sellerProfileFor } from "@/lib/contract-templates/frambuesa-legal";
+import { sellerProfileFromOrg } from "@/lib/contract-templates/frambuesa-legal";
 import type { EnvelopeSigner } from "@/lib/docusign/client";
 
 const BUCKET = "attachments";
@@ -180,7 +180,9 @@ export async function sendContractForSignature(
       .select(
         `id, number, status, condition, currency, total_neto, total_iva, total_neto_usd, incoterm, signed_at,
          client:clients!contracts_client_id_fkey ( id, name, legal_name, tax_id, giro, region ),
-         organization:organizations!contracts_organization_id_fkey ( id, name, legal_name, tax_id ),
+         organization:organizations!contracts_organization_id_fkey ( id, name, legal_name, tax_id,
+           legal_representative_name, legal_representative_id, legal_domicile,
+           bank_name, bank_account, notice_name, notice_email, signer_email ),
          items:contract_items ( qty_plants, unit_price, currency, delivery_year, delivery_week,
            variety:varieties ( name, species:species ( name ) ) ),
          payments ( type, amount, currency, due_date, status )`,
@@ -211,6 +213,14 @@ export async function sendContractForSignature(
         name: string | null;
         legal_name: string | null;
         tax_id: string | null;
+        legal_representative_name: string | null;
+        legal_representative_id: string | null;
+        legal_domicile: string | null;
+        bank_name: string | null;
+        bank_account: string | null;
+        notice_name: string | null;
+        notice_email: string | null;
+        signer_email: string | null;
       } | null;
       items: {
         qty_plants: number | string;
@@ -246,10 +256,7 @@ export async function sendContractForSignature(
       };
     }
 
-    const seller = sellerProfileFor(
-      c.organization?.tax_id ?? null,
-      c.organization?.legal_name ?? c.organization?.name ?? null,
-    );
+    const seller = sellerProfileFromOrg(c.organization ?? {});
 
     const items: ContractPdfItem[] = c.items.map((it) => ({
       species_name: it.variety?.species?.name ?? null,
@@ -312,7 +319,9 @@ export async function sendContractForSignature(
         routingOrder: 1,
       },
     ];
-    const sellerEmail = process.env.DOCUSIGN_SELLER_SIGNER_EMAIL;
+    // Firmante vendedor: prioridad a organizations.signer_email; si no, env.
+    const sellerEmail =
+      c.organization?.signer_email ?? process.env.DOCUSIGN_SELLER_SIGNER_EMAIL;
     if (sellerEmail && sellerEmail.includes("@")) {
       signers.push({
         email: sellerEmail,

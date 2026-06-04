@@ -31,40 +31,56 @@ export type SellerLegalProfile = {
 };
 
 /**
- * Perfiles por organización vendedora. La clave es el `tax_id` de la organización
- * (más estable que el nombre). Si no hay match, se usa DEFAULT_SELLER_PROFILE.
+ * Perfil por defecto (placeholder). Los datos reales del vendedor viven en la
+ * tabla `organizations` (columnas legales, migración 00037) y se editan en
+ * /admin/organizaciones. Este default solo cubre campos faltantes.
  *
  * ⚠️ Verificar estos datos (cédula del representante, cuenta corriente, etc.).
  */
-export const SELLER_PROFILES: Record<string, SellerLegalProfile> = {
-  // VIVEROS HIJUELAS S.A. — RUT 96.835.510-4
-  "96.835.510-4": {
-    legalName: "VIVEROS HIJUELAS S.A.",
-    taxId: "96.835.510-4",
-    representativeName: "Gaspar Goycoolea Vial",
-    representativeId: "7.040.318-7",
-    domicile: "Carretera Panamericana Norte Km 102, comuna de Hijuelas, Quinta Región",
-    bankName: "Banco Crédito e Inversiones",
-    bankAccount: "88130312",
-    noticeName: "Marta Simon",
-    noticeEmail: "jgoycoolea@grupohijuelas.com",
-    noticeAddress: "Carretera Panamericana Norte Km 102, comuna de Hijuelas",
-  },
+export const DEFAULT_SELLER_PROFILE: SellerLegalProfile = {
+  legalName: "VIVEROS HIJUELAS S.A.",
+  taxId: "96.835.510-4",
+  representativeName: "Gaspar Goycoolea Vial",
+  representativeId: "7.040.318-7",
+  domicile: "Carretera Panamericana Norte Km 102, comuna de Hijuelas, Quinta Región",
+  bankName: "Banco Crédito e Inversiones",
+  bankAccount: "88130312",
+  noticeName: "Marta Simon",
+  noticeEmail: "jgoycoolea@grupohijuelas.com",
+  noticeAddress: "Carretera Panamericana Norte Km 102, comuna de Hijuelas",
 };
 
-export const DEFAULT_SELLER_PROFILE: SellerLegalProfile =
-  SELLER_PROFILES["96.835.510-4"];
+/** Datos legales de la organización vendedora (columnas de `organizations`). */
+export type OrgLegalData = {
+  name?: string | null;
+  legal_name?: string | null;
+  tax_id?: string | null;
+  legal_representative_name?: string | null;
+  legal_representative_id?: string | null;
+  legal_domicile?: string | null;
+  bank_name?: string | null;
+  bank_account?: string | null;
+  notice_name?: string | null;
+  notice_email?: string | null;
+};
 
-export function sellerProfileFor(
-  taxId: string | null | undefined,
-  legalName: string | null | undefined,
-): SellerLegalProfile {
-  if (taxId && SELLER_PROFILES[taxId]) return SELLER_PROFILES[taxId];
-  // Fallback: usa el default pero con la razón social real de la org.
+/**
+ * Construye el perfil legal del vendedor desde los datos de la organización.
+ * Cada campo cae al DEFAULT solo si la org no lo tiene cargado.
+ */
+export function sellerProfileFromOrg(org: OrgLegalData): SellerLegalProfile {
+  const d = DEFAULT_SELLER_PROFILE;
   return {
-    ...DEFAULT_SELLER_PROFILE,
-    legalName: legalName ?? DEFAULT_SELLER_PROFILE.legalName,
-    taxId: taxId ?? DEFAULT_SELLER_PROFILE.taxId,
+    legalName: org.legal_name ?? org.name ?? d.legalName,
+    taxId: org.tax_id ?? d.taxId,
+    representativeName: org.legal_representative_name ?? d.representativeName,
+    representativeId: org.legal_representative_id ?? d.representativeId,
+    domicile: org.legal_domicile ?? d.domicile,
+    bankName: org.bank_name ?? d.bankName,
+    bankAccount: org.bank_account ?? d.bankAccount,
+    noticeName: org.notice_name ?? d.noticeName,
+    noticeEmail: org.notice_email ?? d.noticeEmail,
+    noticeAddress: org.legal_domicile ?? d.noticeAddress,
   };
 }
 
