@@ -1,9 +1,35 @@
 # Integración DocuSign ↔ Hijuelas Growth — Plan técnico
 
-> Estado: **pendiente de ejecución**. Cuenta DocuSign ya creada + conector MCP probado.
-> Complementa `docs/firma-electronica-plan.md` (decisión: para los contratos de venta
-> externos se usa DocuSign por aceptación del cliente + no-repudio de tercero, no por
-> validez legal — la FES self-built también sería válida en CL/PE/MX).
+> Estado: **código implementado (2026-06-04)** — falta el setup de cuenta DocuSign
+> (Fase 0) + cargar las env vars para activarlo. Cuenta DocuSign ya creada + conector
+> MCP probado. Complementa `docs/firma-electronica-plan.md` (decisión: para los
+> contratos de venta externos se usa DocuSign por aceptación del cliente + no-repudio
+> de tercero, no por validez legal — la FES self-built también sería válida en CL/PE/MX).
+
+## ✅ Implementado (Fases 1-3, 2026-06-04)
+
+| Pieza | Archivo |
+|---|---|
+| Migración tabla `contract_signatures` + RPCs (`docusign_record_sent`, `docusign_apply_event`, `docusign_set_signed_pdf`) | `supabase/migrations/00035_contract_signatures.sql` (aplicada) |
+| Config + guards de env | `src/lib/docusign/config.ts` |
+| Auth JWT Grant (RS256 + cache de token) | `src/lib/docusign/jwt.ts` |
+| Cliente REST (createEnvelope / getEnvelope / downloadDocument / void) | `src/lib/docusign/client.ts` |
+| PDF provisional del contrato (`pdf-lib`, ancla `/sn1/`) | `src/lib/contract-pdf.ts` |
+| Server actions (send / status / void / archivar) | `src/lib/actions/signatures.ts` |
+| Webhook Connect (HMAC + apply event) | `src/app/api/docusign/webhook/route.ts` |
+| Admin client opcional (service role) | `src/lib/supabase/admin.ts` |
+| UI panel "Firma electrónica" en `/contratos/[id]` | `src/components/contratos/contrato-signature-panel.tsx` |
+| Env vars documentadas | `.env.local` (comentadas, defaults DEMO) |
+
+**Para activar** sólo falta: (1) crear la developer account + Integration Key + RSA +
+consent (Fase 0), (2) pegar las env vars `DOCUSIGN_*`, (3) configurar Connect → URL del
+webhook. Mientras `DOCUSIGN_*` no esté, el panel se muestra deshabilitado con una nota.
+
+> Nota PDF: hoy se envía un **PDF provisional** generado desde los datos del contrato
+> (`contract-pdf.ts`). Reemplazar por el template real cuando llegue el `.docx` (§7).
+> Nota archivado: sin `SUPABASE_SERVICE_ROLE_KEY` el webhook flipa el estado pero no
+> sube el PDF firmado; el botón "Refrescar estado" (autenticado) lo archiva. Setear el
+> service role en Vercel para que el webhook archive solo.
 
 ## 0. Datos de la cuenta (verificados 2026-06-03 vía conector)
 
@@ -199,17 +225,17 @@ Sin esto, la integración no tiene documento que enviar.
 
 ## 11. Checklist concreto
 
-- [ ] Crear **developer account** gratis (developers.docusign.com) para construir/testear
-- [ ] Crear Integration Key (JWT) + generar RSA keypair (guardar privada) — en DEMO primero
-- [ ] Definir/crear el integration user de sistema (¿`firmas@`?) y usar su User ID
-- [ ] Dar consentimiento admin (scope `signature impersonation`)
-- [ ] Cargar env vars en `.env.local` + Vercel (Prod + Preview) — empezar con valores DEMO
-- [ ] Tras testear: **Go-Live** (≈20 llamadas API en demo → promover la key a producción) + switch de env vars a na4
-- [ ] Migración `contract_signatures` (+ RLS + `NOTIFY pgrst`)
-- [ ] `src/lib/actions/signatures.ts` (send / status / void)
-- [ ] `/api/docusign/webhook` con verificación HMAC
-- [ ] Configurar Connect → URL del webhook + HMAC + eventos
-- [ ] Botón "Enviar a firmar" + badge en `/contratos/[id]`
-- [ ] Resolver PDF del contrato (template)
-- [ ] Pasar trial → plan pago antes del ~3 jul
+- [ ] Crear **developer account** gratis (developers.docusign.com) para construir/testear  ← *tú*
+- [ ] Crear Integration Key (JWT) + generar RSA keypair (guardar privada) — en DEMO primero  ← *tú*
+- [ ] Definir/crear el integration user de sistema (¿`firmas@`?) y usar su User ID  ← *tú*
+- [ ] Dar consentimiento admin (scope `signature impersonation`)  ← *tú*
+- [ ] Cargar env vars en `.env.local` + Vercel (Prod + Preview) — empezar con valores DEMO  ← *tú* (plantilla ya en `.env.local`)
+- [ ] Tras testear: **Go-Live** (≈20 llamadas API en demo → promover la key a producción) + switch de env vars a na4  ← *tú*
+- [x] Migración `contract_signatures` (+ RLS + `NOTIFY pgrst`) — `00035`, aplicada
+- [x] `src/lib/actions/signatures.ts` (send / status / void / archivar)
+- [x] `/api/docusign/webhook` con verificación HMAC
+- [ ] Configurar Connect → URL del webhook + HMAC + eventos  ← *tú* (en DocuSign Admin)
+- [x] Botón "Enviar a firmar" + badge en `/contratos/[id]`
+- [~] Resolver PDF del contrato (template) — *provisional* generado por `contract-pdf.ts`; falta el `.docx` real
+- [ ] Pasar trial → plan pago antes del ~3 jul  ← *tú*
 - [ ] Test end-to-end con un contrato real de bajo riesgo

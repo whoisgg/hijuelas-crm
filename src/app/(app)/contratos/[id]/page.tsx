@@ -7,9 +7,14 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { getContract, listVarietiesForSelect } from "@/lib/actions/contratos";
 import { listAttachments } from "@/lib/actions/attachments";
+import {
+  getContractSignature,
+  docusignReady,
+} from "@/lib/actions/signatures";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { ContractConditionBadge } from "@/components/contratos/condition-badge";
 import { ContratoStatusBar } from "@/components/contratos/contrato-status-bar";
+import { ContratoSignaturePanel } from "@/components/contratos/contrato-signature-panel";
 import { ContratoTabs } from "@/components/contratos/contrato-tabs";
 import { ContratoModifyDialog } from "@/components/contratos/contrato-modify-dialog";
 import { formatMoney, formatDate } from "@/components/contratos/format";
@@ -147,9 +152,11 @@ export default async function ContratoDetailPage({
   }
   if (!contract) notFound();
 
-  const [varieties, attachments] = await Promise.all([
+  const [varieties, attachments, signature, dsReady] = await Promise.all([
     listVarietiesForSelect(),
     listAttachments("contract", id),
+    getContractSignature(id),
+    docusignReady(),
   ]);
 
   const client = pickOne<{
@@ -337,6 +344,13 @@ export default async function ContratoDetailPage({
 
       {/* TODO: replace with <PathStepper /> from @/components/design-system */}
       <ContratoStatusBar contractId={contract.id} status={contract.status} />
+
+      <ContratoSignaturePanel
+        contractId={contract.id}
+        contractStatus={contract.status}
+        ready={dsReady}
+        signature={signature}
+      />
 
       <ContratoTabs
         contractId={contract.id}

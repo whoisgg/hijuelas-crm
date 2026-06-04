@@ -168,6 +168,84 @@ export type Database = {
           },
         ]
       }
+      contract_signatures: {
+        Row: {
+          certificate_url: string | null
+          completed_at: string | null
+          contract_id: string
+          created_at: string
+          created_by: string | null
+          declined_reason: string | null
+          delivered_at: string | null
+          document_hash: string | null
+          envelope_id: string | null
+          id: string
+          provider: string
+          raw_event: Json | null
+          sent_at: string | null
+          signed_pdf_url: string | null
+          signer_email: string
+          signer_name: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          certificate_url?: string | null
+          completed_at?: string | null
+          contract_id: string
+          created_at?: string
+          created_by?: string | null
+          declined_reason?: string | null
+          delivered_at?: string | null
+          document_hash?: string | null
+          envelope_id?: string | null
+          id?: string
+          provider?: string
+          raw_event?: Json | null
+          sent_at?: string | null
+          signed_pdf_url?: string | null
+          signer_email: string
+          signer_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          certificate_url?: string | null
+          completed_at?: string | null
+          contract_id?: string
+          created_at?: string
+          created_by?: string | null
+          declined_reason?: string | null
+          delivered_at?: string | null
+          document_hash?: string | null
+          envelope_id?: string | null
+          id?: string
+          provider?: string
+          raw_event?: Json | null
+          sent_at?: string | null
+          signed_pdf_url?: string | null
+          signer_email?: string
+          signer_name?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_signatures_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_signatures_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_addresses: {
         Row: {
           client_id: string
