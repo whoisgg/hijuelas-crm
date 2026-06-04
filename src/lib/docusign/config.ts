@@ -55,13 +55,15 @@ export function getDocusignConfig(): DocusignConfig | null {
   }
 
   return {
-    integrationKey,
-    userId,
-    accountId,
-    apiBase: apiBase.replace(/\/+$/, ""), // sin trailing slash
-    oauthBase: oauthBase.replace(/^https?:\/\//, "").replace(/\/+$/, ""),
+    // Trim defensivo: valores cargados por `vercel env add` pueden traer un
+    // newline final del pipe; sin esto romperían las URLs / el JWT.
+    integrationKey: integrationKey.trim(),
+    userId: userId.trim(),
+    accountId: accountId.trim(),
+    apiBase: apiBase.trim().replace(/\/+$/, ""), // sin trailing slash
+    oauthBase: oauthBase.trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""),
     privateKey: normalizePrivateKey(privateKey),
-    connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY || null,
+    connectHmacKey: process.env.DOCUSIGN_CONNECT_HMAC_KEY?.trim() || null,
   };
 }
 
