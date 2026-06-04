@@ -15,7 +15,10 @@ import {
   generateContractPdf,
   type ContractPdfData,
   type ContractPdfItem,
+  type ContractPdfPayment,
 } from "@/lib/contract-pdf";
+import { sellerProfileFor } from "@/lib/contract-templates/frambuesa-legal";
+import type { EnvelopeSigner } from "@/lib/docusign/client";
 
 const BUCKET = "attachments";
 
@@ -104,27 +107,52 @@ async function signedDownloadUrl(path: string | null): Promise<string | null> {
   return data.signedUrl;
 }
 
-/** Resuelve email + nombre del firmante desde el contacto principal del cliente. */
-async function resolveSigner(
+/** Resuelve el firmante comprador (contacto con email) + dirección del cliente. */
+async function resolveBuyer(
   clientId: string,
-): Promise<{ email: string; name: string } | null> {
+): Promise<{
+  email: string;
+  representativeName: string;
+  domicile: string | null;
+} | null> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("client_contacts")
-    .select("name, email, is_primary")
-    .eq("client_id", clientId)
-    .is("deleted_at", null)
-    .order("is_primary", { ascending: false })
-    .limit(20);
-  if (error) throw new Error(error.message);
-  const contacts = (data ?? []) as {
+  const [contactsRes, addrRes] = await Promise.all([
+    supabase
+      .from("client_contacts")
+      .select("name, email, role, is_primary")
+      .eq("client_id", clientId)
+      .is("deleted_at", null)
+      .order("is_primary", { ascending: false })
+      .limit(20),
+    supabase
+      .from("client_addresses")
+      .select("line1, line2, region")
+      .eq("client_id", clientId)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  if (contactsRes.error) throw new Error(contactsRes.error.message);
+  const contacts = (contactsRes.data ?? []) as {
     name: string | null;
     email: string | null;
+    role: string | null;
     is_primary: boolean | null;
   }[];
   const withEmail = contacts.find((c) => c.email && c.email.includes("@"));
   if (!withEmail) return null;
-  return { email: withEmail.email as string, name: withEmail.name ?? "Cliente" };
+
+  const addr = addrRes.data as
+    | { line1: string | null; line2: string | null; region: string | null }
+    | null;
+  const domicile =
+    [addr?.line1, addr?.line2, addr?.region].filter(Boolean).join(", ") || null;
+
+  return {
+    email: withEmail.email as string,
+    representativeName: withEmail.name ?? "Comprador",
+    domicile,
+  };
 }
 
 /**
@@ -150,11 +178,12 @@ export async function sendContractForSignature(
     const { data: contract, error } = await supabase
       .from("contracts")
       .select(
-        `id, number, status, condition, currency, total_neto, total_iva, total_neto_usd, incoterm,
-         client:clients!contracts_client_id_fkey ( id, name, tax_id ),
-         organization:organizations!contracts_organization_id_fkey ( id, name ),
+        `id, number, status, condition, currency, total_neto, total_iva, total_neto_usd, incoterm, signed_at,
+         client:clients!contracts_client_id_fkey ( id, name, legal_name, tax_id, giro, region ),
+         organization:organizations!contracts_organization_id_fkey ( id, name, legal_name, tax_id ),
          items:contract_items ( qty_plants, unit_price, currency, delivery_year, delivery_week,
-           variety:varieties ( name ) )`,
+           variety:varieties ( name, species:species ( name ) ) ),
+         payments ( type, amount, currency, due_date, status )`,
       )
       .eq("id", contractId)
       .is("deleted_at", null)
@@ -164,21 +193,39 @@ export async function sendContractForSignature(
     type RawContract = {
       number: string;
       status: string;
-      condition: string | null;
       currency: string;
       total_neto: number | string;
       total_iva: number | string;
       total_neto_usd: number | string;
-      incoterm: string | null;
-      client: { id: string; name: string | null; tax_id: string | null } | null;
-      organization: { id: string; name: string | null } | null;
+      signed_at: string | null;
+      client: {
+        id: string;
+        name: string | null;
+        legal_name: string | null;
+        tax_id: string | null;
+        giro: string | null;
+        region: string | null;
+      } | null;
+      organization: {
+        id: string;
+        name: string | null;
+        legal_name: string | null;
+        tax_id: string | null;
+      } | null;
       items: {
         qty_plants: number | string;
         unit_price: number | string;
         currency: string;
         delivery_year: number | null;
         delivery_week: number | null;
-        variety: { name: string | null } | null;
+        variety: { name: string | null; species: { name: string | null } | null } | null;
+      }[];
+      payments: {
+        type: string;
+        amount: number | string;
+        currency: string;
+        due_date: string | null;
+        status: string;
       }[];
     };
     const c = contract as unknown as RawContract;
@@ -190,8 +237,8 @@ export async function sendContractForSignature(
       return { ok: false, message: "El contrato no tiene cliente asociado." };
     }
 
-    const signer = await resolveSigner(c.client.id);
-    if (!signer) {
+    const buyer = await resolveBuyer(c.client.id);
+    if (!buyer) {
       return {
         ok: false,
         message:
@@ -199,7 +246,13 @@ export async function sendContractForSignature(
       };
     }
 
+    const seller = sellerProfileFor(
+      c.organization?.tax_id ?? null,
+      c.organization?.legal_name ?? c.organization?.name ?? null,
+    );
+
     const items: ContractPdfItem[] = c.items.map((it) => ({
+      species_name: it.variety?.species?.name ?? null,
       variety_name: it.variety?.name ?? null,
       qty_plants: Number(it.qty_plants),
       unit_price: Number(it.unit_price),
@@ -208,20 +261,40 @@ export async function sendContractForSignature(
       delivery_week: it.delivery_week,
     }));
 
+    const payments: ContractPdfPayment[] = c.payments
+      .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))
+      .map((p, i) => ({
+        label: `${i + 1}ª cuota${p.type ? ` (${p.type})` : ""}`,
+        dueDate: p.due_date,
+        amount: Number(p.amount),
+        currency: p.currency,
+      }));
+
+    const placeAndDate = `Santiago, ${new Date(c.signed_at ?? Date.now()).toLocaleDateString(
+      "es-CL",
+      { day: "2-digit", month: "long", year: "numeric" },
+    )}`;
+
     const pdfData: ContractPdfData = {
       number: c.number,
-      condition: c.condition,
-      clientName: c.client.name,
-      clientTaxId: c.client.tax_id,
-      organizationName: c.organization?.name ?? null,
+      placeAndDate,
+      seller,
+      buyer: {
+        legalName: c.client.legal_name ?? c.client.name ?? "Comprador",
+        taxId: c.client.tax_id,
+        giro: c.client.giro,
+        domicile: buyer.domicile ?? c.client.region,
+        representativeName: buyer.representativeName,
+        representativeId: null, // cédula no modelada en el CRM (queda en blanco)
+        noticeEmail: buyer.email,
+      },
+      plantingLocation: null, // no modelado en el CRM
       currency: c.currency,
       totalNeto: Number(c.total_neto),
       totalIva: Number(c.total_iva),
       totalNetoUsd: Number(c.total_neto_usd),
-      incoterm: c.incoterm,
-      signerName: signer.name,
       items,
-      generatedAtIso: new Date().toISOString(),
+      payments,
     };
 
     const pdf = await generateContractPdf(pdfData);
@@ -229,12 +302,32 @@ export async function sendContractForSignature(
       .update(Buffer.from(pdf))
       .digest("hex");
 
+    // Firmantes: comprador (obligatorio) + vendedor Hijuelas (opcional, si hay
+    // email de firmante interno configurado en env).
+    const signers: EnvelopeSigner[] = [
+      {
+        email: buyer.email,
+        name: buyer.representativeName,
+        anchorString: "/sn1/",
+        routingOrder: 1,
+      },
+    ];
+    const sellerEmail = process.env.DOCUSIGN_SELLER_SIGNER_EMAIL;
+    if (sellerEmail && sellerEmail.includes("@")) {
+      signers.push({
+        email: sellerEmail,
+        name:
+          process.env.DOCUSIGN_SELLER_SIGNER_NAME ?? seller.representativeName,
+        anchorString: "/sn2/",
+        routingOrder: 2,
+      });
+    }
+
     const envelope = await createEnvelope({
       pdf,
       documentName: `Contrato ${c.number}`,
-      signerEmail: signer.email,
-      signerName: signer.name,
-      emailSubject: `Contrato ${c.number} — ${c.organization?.name ?? "Viveros Hijuelas"} para firma`,
+      signers,
+      emailSubject: `Contrato ${c.number} — ${seller.legalName} para firma`,
       emailBody:
         "Por favor revisá y firmá el contrato adjunto. Cualquier consulta, respondé este correo.",
     });
@@ -242,8 +335,8 @@ export async function sendContractForSignature(
     const { error: rpcErr } = await callRpc<string>("docusign_record_sent", {
       p_contract_id: contractId,
       p_envelope_id: envelope.envelopeId,
-      p_signer_email: signer.email,
-      p_signer_name: signer.name,
+      p_signer_email: buyer.email,
+      p_signer_name: buyer.representativeName,
       p_document_hash: documentHash,
     });
     if (rpcErr) {

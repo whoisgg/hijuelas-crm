@@ -20,13 +20,22 @@ async function authHeaders(): Promise<HeadersInit> {
   };
 }
 
+export type EnvelopeSigner = {
+  email: string;
+  name: string;
+  /** Texto ancla en el PDF donde va el tab signHere (ej. "/sn1/"). */
+  anchorString: string;
+  /** Orden de firma (1 = primero). Mismo número = firman en paralelo. */
+  routingOrder?: number;
+};
+
 export type CreateEnvelopeInput = {
   /** PDF a firmar, en bytes. */
   pdf: Buffer | Uint8Array;
   /** Nombre del documento (sin extensión sirve; DocuSign agrega .pdf). */
   documentName: string;
-  signerEmail: string;
-  signerName: string;
+  /** Uno o más firmantes (comprador, vendedor...). */
+  signers: EnvelopeSigner[];
   /** Asunto del email que recibe el firmante. */
   emailSubject: string;
   /** Cuerpo opcional del email. */
@@ -39,9 +48,9 @@ export type CreateEnvelopeResult = {
 };
 
 /**
- * Crea un sobre y lo envía (status `sent`). El firmante se ancla con un tab
- * `signHere` por anchor string "/sn1/"; si el PDF no contiene ese texto, se cae
- * a una posición fija en la última zona inferior de la página 1.
+ * Crea un sobre y lo envía (status `sent`). Cada firmante se ancla con un tab
+ * `signHere` sobre su `anchorString`. El COMPRADOR suele ir primero (routingOrder
+ * 1) y el VENDEDOR después (2).
  */
 export async function createEnvelope(
   input: CreateEnvelopeInput,
@@ -61,29 +70,22 @@ export async function createEnvelope(
       },
     ],
     recipients: {
-      signers: [
-        {
-          email: input.signerEmail,
-          name: input.signerName,
-          recipientId: "1",
-          routingOrder: "1",
-          tabs: {
-            signHereTabs: [
-              {
-                anchorString: "/sn1/",
-                anchorUnits: "pixels",
-                anchorXOffset: "0",
-                anchorYOffset: "0",
-                // Fallback si no encuentra el anchor: posición fija pág. 1.
-                documentId: "1",
-                pageNumber: "1",
-                xPosition: "100",
-                yPosition: "650",
-              },
-            ],
-          },
+      signers: input.signers.map((s, i) => ({
+        email: s.email,
+        name: s.name,
+        recipientId: String(i + 1),
+        routingOrder: String(s.routingOrder ?? i + 1),
+        tabs: {
+          signHereTabs: [
+            {
+              anchorString: s.anchorString,
+              anchorUnits: "pixels",
+              anchorXOffset: "0",
+              anchorYOffset: "0",
+            },
+          ],
         },
-      ],
+      })),
     },
   };
 

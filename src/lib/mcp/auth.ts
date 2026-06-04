@@ -82,3 +82,13 @@ export function getAuthExtra(authInfo: AuthInfo | undefined): McpAuthExtra | nul
 export function canWrite(role: string): boolean {
   return role === "admin" || role === "mcp_editor";
 }
+
+/** Firmar (enviar/anular) vía MCP: sales + admin (y mcp_editor / sales_support). */
+export function canSign(role: string): boolean {
+  return (
+    role === "admin" ||
+    role === "mcp_editor" ||
+    role === "sales" ||
+    role === "sales_support"
+  );
+}

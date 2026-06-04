@@ -189,14 +189,16 @@ Endpoint `src/app/api/docusign/webhook/route.ts` (POST):
 > Configurar Connect en DocuSign Admin → Connect → apuntando a
 > `https://hijuelas-crm.vercel.app/api/docusign/webhook`, con HMAC activado y los eventos de envelope.
 
-## 7. Dependencia bloqueante — PDF del contrato
+## 7. PDF del contrato — RESUELTO (template legal en código, 2026-06-04)
 
-"Enviar a firmar" necesita un **PDF**. Hoy los contratos se redactan en Word a mano. Antes de la
-integración hay que resolver (de `firma-electronica-plan.md`):
-1. Conseguir el contrato base en `.docx` (el PDF actual está escaneado, sin capa de texto).
-2. Parametrizar variables (cliente, vivero, items, condiciones, firmas).
-3. Generar el PDF on-demand desde el detalle del contrato (`pdf-lib` o template MDX/Handlebars).
-Sin esto, la integración no tiene documento que enviar.
+El PDF ya no es bloqueante: se genera on-demand desde los datos del CRM con `pdf-lib`.
+- **Términos legales** transcritos del scan "Contrato firmado.pdf" → `src/lib/contract-templates/frambuesa-legal.ts` (cláusulas boilerplate + perfil legal del vendedor por organización). ⚠️ **TEXTO TRANSCRITO DE UN SCAN — revisar/reemplazar contra el .docx original** antes de producción.
+- **Generador** `src/lib/contract-pdf.ts`: encabezado, comparecencia, tablas (Objeto, Entrega, Precio, Forma de pago), cláusulas, doble bloque de firma (anclas `/sn1/` comprador + `/sn2/` vendedor). Sanitiza datos a WinAnsi. Smoke test OK (PDF de 6 ítems, 16 KB).
+- **Doble firmante**: comprador (contacto principal del cliente) + vendedor Hijuelas opcional (env `DOCUSIGN_SELLER_SIGNER_EMAIL`/`NAME`).
+- **Gaps de datos** no modelados en el CRM (quedan en blanco o config): cédula del representante comprador, descuento%/royalty por ítem, `plantingLocation` (cláusula 1.2). Considerar agregarlos al schema si se necesitan en el documento.
+
+### MCP — firma disponible a sales + admin (2026-06-04)
+`src/lib/mcp/tools-signatures.ts` (registrado en `/api/[transport]`): `send_for_signature`, `signature_status`, `void_signature`. Gate `canSign` = admin/mcp_editor/sales/sales_support. RPCs MCP en migración `00036` (`mcp_contract_for_signature`, `mcp_docusign_record_sent`, `mcp_docusign_signature_status`, helper `_mcp_require_signer`).
 
 ## 8. UI — `/contratos/[id]`
 
