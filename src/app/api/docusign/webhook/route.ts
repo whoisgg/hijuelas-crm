@@ -79,7 +79,8 @@ export async function POST(req: Request): Promise<Response> {
 
   // 1. Verificar HMAC (si hay secreto configurado). Sin secreto se rechaza para
   //    no aceptar eventos sin autenticar.
-  const secret = process.env.DOCUSIGN_CONNECT_HMAC_KEY;
+  // trim: `vercel env add` puede dejar un newline final que rompería el HMAC.
+  const secret = process.env.DOCUSIGN_CONNECT_HMAC_KEY?.trim();
   if (!secret) {
     return new Response("Connect HMAC no configurado", { status: 503 });
   }
