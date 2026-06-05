@@ -3,7 +3,15 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Check } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Check,
+  Send,
+  TriangleAlert,
+} from "lucide-react";
 
 import type { Database } from "@/lib/database.types";
 import { cn } from "@/lib/utils";
@@ -32,6 +40,10 @@ import {
   type ContractItemInput,
   type CreateContractInput,
 } from "@/lib/actions/contratos";
+import {
+  sendContractForSignature,
+  getClientSignerInfo,
+} from "@/lib/actions/signatures";
 
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 type ConditionType = Database["public"]["Enums"]["condition_type"];
@@ -54,6 +66,14 @@ type Props = {
   clients: ClientOption[];
   organizations: OrgOption[];
   varieties: VarietyOption[];
+  docusignReady?: boolean;
+};
+
+type SignerInfo = {
+  hasEmail: boolean;
+  name: string | null;
+  email: string | null;
+  for: string; // clientId al que corresponde este chequeo
 };
 
 type ItemDraft = {
@@ -99,7 +119,12 @@ function newItem(currency: CurrencyCode): ItemDraft {
   };
 }
 
-export function ContratoWizard({ clients, organizations, varieties }: Props) {
+export function ContratoWizard({
+  clients,
+  organizations,
+  varieties,
+  docusignReady = false,
+}: Props) {
   const router = useRouter();
   const [stepIndex, setStepIndex] = React.useState(0);
   const [clientId, setClientId] = React.useState<string>("");
@@ -120,8 +145,31 @@ export function ContratoWizard({ clients, organizations, varieties }: Props) {
   const [anticipo2Due, setAnticipo2Due] = React.useState<string>("");
   const [saldoDue, setSaldoDue] = React.useState<string>("");
   const [submitting, setSubmitting] = React.useState(false);
+  const [signerInfo, setSignerInfo] = React.useState<SignerInfo | null>(null);
+
+  // Chequeo previo: ¿el cliente tiene contacto con email para enviar a firmar?
+  // signerInfo se asocia al clientId con el que se resolvió (signerInfo.for) para
+  // ignorar resultados de un cliente anterior.
+  React.useEffect(() => {
+    if (!clientId) return;
+    let active = true;
+    getClientSignerInfo(clientId)
+      .then((info) => {
+        if (active) setSignerInfo({ ...info, for: clientId });
+      })
+      .catch(() => {
+        if (active) setSignerInfo({ hasEmail: false, name: null, email: null, for: clientId });
+      });
+    return () => {
+      active = false;
+    };
+  }, [clientId]);
 
   const selectedOrg = organizations.find((o) => o.id === organizationId);
+  const selectedClient = clients.find((c) => c.id === clientId);
+  // Solo válido si el chequeo corresponde al cliente actualmente seleccionado.
+  const currentSigner = signerInfo?.for === clientId ? signerInfo : null;
+  const canSend = docusignReady && Boolean(currentSigner?.hasEmail);
 
   const handleOrganizationChange = (id: string) => {
     setOrganizationId(id);
@@ -174,7 +222,7 @@ export function ContratoWizard({ clients, organizations, varieties }: Props) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (alsoSend = false) => {
     if (submitting) return;
     setSubmitting(true);
     try {
@@ -206,7 +254,20 @@ export function ContratoWizard({ clients, organizations, varieties }: Props) {
         saldoDueDate: saldoDue || null,
       };
       const result = await createContract(input);
-      toast.success(`Contrato ${result.number} creado`);
+
+      if (alsoSend) {
+        const sendRes = await sendContractForSignature(result.id);
+        if (sendRes.ok) {
+          toast.success(`Contrato ${result.number} creado y enviado a firmar`);
+        } else {
+          toast.warning(
+            `Contrato ${result.number} creado como borrador, pero no se envió a firmar: ${sendRes.message}`,
+            { duration: 8000 },
+          );
+        }
+      } else {
+        toast.success(`Contrato ${result.number} creado`);
+      }
       router.push(`/contratos/${result.id}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error al crear contrato";
@@ -566,6 +627,34 @@ export function ContratoWizard({ clients, organizations, varieties }: Props) {
         ) : null}
       </div>
 
+      {/* Chequeo previo a "Crear y enviar a firmar" (solo en el último paso). */}
+      {stepIndex === STEPS.length - 1 && clientId ? (
+        !currentSigner?.hasEmail ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              {selectedClient?.name ?? "El cliente"} no tiene un contacto con
+              email. Podés crear el borrador, pero para{" "}
+              <strong>enviarlo a firmar</strong> primero agregá un contacto con
+              correo en la ficha del cliente.
+            </span>
+          </div>
+        ) : !docusignReady ? (
+          <div className="flex items-start gap-2 rounded-lg border bg-muted/50 p-3 text-sm text-muted-foreground">
+            <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>DocuSign no está configurado — solo podés crear el borrador.</span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-sm text-emerald-800 dark:text-emerald-200">
+            <Send className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>
+              Al enviar a firmar, el contrato irá a{" "}
+              <strong>{currentSigner?.email}</strong> vía DocuSign.
+            </span>
+          </div>
+        )
+      ) : null}
+
       <div className="flex items-center justify-between">
         <Button
           variant="outline"
@@ -584,9 +673,27 @@ export function ContratoWizard({ clients, organizations, varieties }: Props) {
             <ChevronRight className="h-4 w-4" />
           </Button>
         ) : (
-          <Button disabled={submitting || !canAdvance()} onClick={handleSubmit}>
-            {submitting ? "Creando..." : "Crear borrador"}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={submitting || !canAdvance()}
+              onClick={() => handleSubmit(false)}
+            >
+              {submitting ? "Guardando..." : "Crear borrador"}
+            </Button>
+            <Button
+              disabled={submitting || !canAdvance() || !canSend}
+              title={
+                !canSend
+                  ? "Necesita un contacto con email y DocuSign configurado"
+                  : undefined
+              }
+              onClick={() => handleSubmit(true)}
+            >
+              <Send className="h-4 w-4" />
+              Crear y enviar a firmar
+            </Button>
+          </div>
         )}
       </div>
     </div>

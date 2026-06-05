@@ -6,6 +6,7 @@ import {
   listOrganizationsForSelect,
   listVarietiesForSelect,
 } from "@/lib/actions/contratos";
+import { docusignReady } from "@/lib/actions/signatures";
 import { ContratoWizard } from "@/components/contratos/contrato-wizard";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -13,10 +14,11 @@ import { ChevronLeft } from "lucide-react";
 export const metadata = { title: "Nuevo contrato" };
 
 export default async function NuevoContratoPage() {
-  const [clients, organizations, varieties] = await Promise.all([
+  const [clients, organizations, varieties, dsReady] = await Promise.all([
     listClientsForSelect(),
     listOrganizationsForSelect(),
     listVarietiesForSelect(),
+    docusignReady(),
   ]);
 
   return (
@@ -35,6 +37,7 @@ export default async function NuevoContratoPage() {
         clients={clients}
         organizations={organizations}
         varieties={varieties}
+        docusignReady={dsReady}
       />
     </AppShell>
   );

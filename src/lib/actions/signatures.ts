@@ -70,6 +70,32 @@ export async function docusignReady(): Promise<boolean> {
   return isDocusignConfigured();
 }
 
+/**
+ * Chequeo previo para el wizard: ¿el cliente tiene un contacto con email para
+ * poder enviar a firmar? Lo usa "Crear y enviar a firmar".
+ */
+export async function getClientSignerInfo(
+  clientId: string,
+): Promise<{ hasEmail: boolean; name: string | null; email: string | null }> {
+  if (!clientId) return { hasEmail: false, name: null, email: null };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("client_contacts")
+    .select("name, email, is_primary")
+    .eq("client_id", clientId)
+    .is("deleted_at", null)
+    .order("is_primary", { ascending: false })
+    .limit(20);
+  if (error) return { hasEmail: false, name: null, email: null };
+  const contacts = (data ?? []) as { name: string | null; email: string | null }[];
+  const withEmail = contacts.find((c) => c.email && c.email.includes("@"));
+  return {
+    hasEmail: Boolean(withEmail),
+    name: withEmail?.name ?? null,
+    email: withEmail?.email ?? null,
+  };
+}
+
 /** Devuelve la firma vigente del contrato (la más reciente) o null. */
 export async function getContractSignature(
   contractId: string,
