@@ -26,7 +26,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Calendario", href: "/calendario", icon: Calendar },
   { label: "Oportunidades", href: "/oportunidades", icon: Briefcase },
-  { label: "Contratos", href: "/contratos", icon: FileText },
+  { label: "Ventas", href: "/contratos", icon: FileText },
   { label: "Forecast", href: "/forecast", icon: TrendingUp },
   { label: "KAM", href: "/kam", icon: UserCheck },
   { label: "Clientes", href: "/clientes", icon: Users },
@@ -42,6 +42,6 @@ export type QuickCreateItem = {
 
 export const QUICK_CREATE_ITEMS: QuickCreateItem[] = [
   { label: "Cliente", href: "/clientes/nuevo" },
-  { label: "Contrato", href: "/contratos/nuevo" },
+  { label: "Venta", href: "/contratos/nuevo" },
   { label: "Oportunidad", href: "/oportunidades/nueva" },
 ];

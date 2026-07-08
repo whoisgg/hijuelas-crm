@@ -219,7 +219,7 @@ export function ForecastView({
           onClick={() => setAnticiposOpen(true)}
         />
         <Kpi label="Plantas comprometidas" value={fmtPlants(totals.plants_total)} />
-        <Kpi label="Contratos" value={numFmt.format(totals.contracts_count)} />
+        <Kpi label="Ventas" value={numFmt.format(totals.contracts_count)} />
         <Kpi label="Clientes" value={numFmt.format(totals.clients_count)} />
         {includeOpps ? (
           <Kpi

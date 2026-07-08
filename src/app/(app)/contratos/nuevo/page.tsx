@@ -11,7 +11,7 @@ import { ContratoWizard } from "@/components/contratos/contrato-wizard";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
-export const metadata = { title: "Nuevo contrato" };
+export const metadata = { title: "Nueva venta" };
 
 export default async function NuevoContratoPage() {
   const [clients, organizations, varieties, dsReady] = await Promise.all([
@@ -24,7 +24,7 @@ export default async function NuevoContratoPage() {
   return (
     <AppShell>
       <PageHeader
-        title="Nuevo contrato"
+        title="Nueva venta"
         description="Wizard de 4 pasos: cliente, organización, items y detalles."
         actions={
           <Button variant="outline" render={<Link href="/contratos" />}>

@@ -113,7 +113,7 @@ type RawVersion = {
   created_at: string;
 };
 
-export const metadata = { title: "Contrato" };
+export const metadata = { title: "Venta" };
 
 // Computa la fecha aproximada del lunes ISO de la última semana/año de entrega
 // del contrato. Usado para sugerir el due_date de pagos saldo.

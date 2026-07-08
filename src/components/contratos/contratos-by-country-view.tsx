@@ -272,7 +272,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
           </Button>
           <Button render={<Link href="/contratos/nuevo" />}>
             <Plus className="h-4 w-4" />
-            Nuevo contrato
+            Nueva venta
           </Button>
         </div>
       </div>
@@ -332,7 +332,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
 
       {filtered.length === 0 ? (
         <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">
-          No hay contratos para los filtros aplicados.
+          No hay ventas para los filtros aplicados.
         </div>
       ) : null}
     </div>
@@ -403,7 +403,7 @@ function SummaryTotals({
     <div className="rounded-lg border bg-card px-4 py-3">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         <SummaryStat label="Países" value={numFmt.format(totals.countries)} />
-        <SummaryStat label="Contratos" value={numFmt.format(totals.contracts)} />
+        <SummaryStat label="Ventas" value={numFmt.format(totals.contracts)} />
         <SummaryStat label="Clientes" value={numFmt.format(totals.clients)} />
         <SummaryStat
           label={plantsLabel}
@@ -492,7 +492,7 @@ function CountryGrid({
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
             <div>
-              <div className="text-muted-foreground">Contratos</div>
+              <div className="text-muted-foreground">Ventas</div>
               <div className="font-mono text-lg font-semibold tabular-nums">{numFmt.format(c.contracts)}</div>
             </div>
             <div>

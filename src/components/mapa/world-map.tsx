@@ -280,7 +280,7 @@ function MapTooltip({
         <span className="text-right font-medium text-foreground">
           {payload.datum.clientsCount}
         </span>
-        <span>Contratos</span>
+        <span>Ventas</span>
         <span className="text-right font-medium text-foreground">
           {payload.datum.contractsCount}
         </span>

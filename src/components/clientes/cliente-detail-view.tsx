@@ -133,7 +133,7 @@ export function ClienteDetailView({ detail, countries }: Props) {
           value: client.giro ?? "—",
         },
         {
-          label: "Contratos",
+          label: "Ventas",
           value: counts.contracts,
         },
         {
@@ -339,7 +339,7 @@ export function ClienteDetailView({ detail, countries }: Props) {
     },
     {
       id: "contratos",
-      label: "Contratos",
+      label: "Ventas",
       content: contratosTab,
       count: counts.contracts,
     },

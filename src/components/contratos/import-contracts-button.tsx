@@ -203,7 +203,7 @@ export function ImportContractsButton() {
                   <span className="font-medium">Listo</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="Contratos" value={result.contractsCreated} highlight />
+                  <Stat label="Ventas" value={result.contractsCreated} highlight />
                   <Stat label="Items" value={result.itemsCreated} />
                   <Stat label="Clientes" value={result.clientsCreated} />
                 </div>

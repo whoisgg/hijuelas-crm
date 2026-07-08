@@ -20,7 +20,7 @@ import { getFxRates } from "@/lib/actions/fx-rates";
 import { isCurrentUserAdmin } from "@/lib/actions/admin-users";
 import type { Database } from "@/lib/database.types";
 
-export const metadata = { title: "Contratos" };
+export const metadata = { title: "Ventas" };
 
 type ContractStatus = Database["public"]["Enums"]["contract_status"];
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
@@ -174,7 +174,7 @@ export default async function ContratosPage({
   return (
     <AppShell>
       <PageHeader
-        title="Contratos"
+        title="Ventas"
         description={
           view === "country" ? undefined : "Vista de lista plana. Filtros avanzados."
         }

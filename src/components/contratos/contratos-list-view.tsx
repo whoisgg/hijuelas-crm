@@ -182,7 +182,7 @@ export function ContratosListView({ rows, organizations }: Props) {
           </Button>
           <Button render={<Link href="/contratos/nuevo" />}>
             <Plus className="h-4 w-4" />
-            Nuevo contrato
+            Nueva venta
           </Button>
         </div>
       </div>

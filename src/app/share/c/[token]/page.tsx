@@ -289,7 +289,7 @@ export default async function SharedClientPage({
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-              <Kpi label="Contratos" value={fmtNumber(t.contracts_count)} />
+              <Kpi label="Ventas" value={fmtNumber(t.contracts_count)} />
               <Kpi label="Total USD" value={fmtUsd(t.total_usd)} />
               <Kpi
                 label="Plantas comprometidas"

@@ -164,7 +164,7 @@ export function ClientesListView({
         },
       }),
       columnHelper.accessor("active_contracts", {
-        header: "Contratos",
+        header: "Ventas",
         cell: (info) => {
           const count = info.getValue();
           if (count === 0)

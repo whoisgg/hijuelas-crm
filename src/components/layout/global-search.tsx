@@ -162,7 +162,7 @@ export function GlobalSearch() {
             onSelect={navigate}
           />
           <HitGroup
-            heading="Contratos"
+            heading="Ventas"
             icon={FileText}
             hits={results.contratos}
             onSelect={navigate}
