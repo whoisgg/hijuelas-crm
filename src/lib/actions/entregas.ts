@@ -13,6 +13,9 @@ export type RecordDeliveryInput = {
   deliveredAt: string;
   remitoNumber?: string | null;
   notes?: string | null;
+  /** Override del cliente de despacho; null = hereda el ship_to del contrato. */
+  shipToClientId?: string | null;
+  shipToAddress?: string | null;
 };
 
 export async function recordDelivery(input: RecordDeliveryInput) {
@@ -33,6 +36,8 @@ export async function recordDelivery(input: RecordDeliveryInput) {
       delivered_at: input.deliveredAt,
       remito_number: input.remitoNumber ?? null,
       notes: input.notes ?? null,
+      ship_to_client_id: input.shipToClientId ?? null,
+      ship_to_address: input.shipToAddress ?? null,
     })
     .select("id")
     .single();
@@ -78,6 +83,8 @@ export async function listDeliveriesForContract(contractId: string) {
     .from("deliveries")
     .select(
       `id, contract_item_id, qty_delivered, delivered_at, remito_number, notes, created_at,
+       ship_to_client_id, ship_to_address,
+       ship_to_client:clients!deliveries_ship_to_client_id_fkey ( id, name ),
        item:contract_items!deliveries_contract_item_id_fkey (
          id, variety_id, qty_plants, delivery_year, delivery_week,
          variety:varieties ( id, name )

@@ -13,6 +13,8 @@ import {
 } from "@/lib/actions/signatures";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
 import { ContractConditionBadge } from "@/components/contratos/condition-badge";
+import { DocTypeBadge } from "@/components/contratos/doc-type-badge";
+import { docTypeMeta, type CommercialDocType } from "@/lib/contract-doc-type";
 import { ContratoStatusBar } from "@/components/contratos/contrato-status-bar";
 import { ContratoSignaturePanel } from "@/components/contratos/contrato-signature-panel";
 import { ContratoTabs } from "@/components/contratos/contrato-tabs";
@@ -41,6 +43,7 @@ type RawContract = {
   number: string;
   status: ContractStatus;
   condition: ContractCondition | null;
+  doc_type: CommercialDocType | null;
   currency: CurrencyCode;
   total_neto: number | string;
   total_iva: number | string;
@@ -50,6 +53,7 @@ type RawContract = {
   notes: string | null;
   incoterm: string | null;
   client: unknown;
+  ship_to_client: unknown;
   organization: unknown;
   items: unknown;
   payments: unknown;
@@ -164,6 +168,9 @@ export default async function ContratoDetailPage({
     name: string;
     tax_id: string | null;
   }>(contract.client);
+  const shipToClient = pickOne<{ id: string; name: string }>(
+    contract.ship_to_client,
+  );
   const organization = pickOne<{
     id: string;
     name: string;
@@ -238,7 +245,7 @@ export default async function ContratoDetailPage({
   return (
     <AppShell>
       <PageHeader
-        title={`Contrato ${contract.number}`}
+        title={`${docTypeMeta(contract.doc_type).label} ${contract.number}`}
         description={
           client
             ? `${client.name}${organization ? ` · ${organization.name}` : ""}`
@@ -270,7 +277,7 @@ export default async function ContratoDetailPage({
         </div>
         <div className="md:col-span-2">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-            Cliente
+            Cliente (paga)
           </p>
           <p className="font-medium">
             {client ? (
@@ -287,6 +294,23 @@ export default async function ContratoDetailPage({
         </div>
         <div className="md:col-span-2">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Despachar a
+          </p>
+          <p className="text-sm">
+            {shipToClient ? (
+              <Link
+                href={`/clientes/${shipToClient.id}`}
+                className="font-medium hover:underline"
+              >
+                {shipToClient.name}
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">Mismo cliente</span>
+            )}
+          </p>
+        </div>
+        <div className="md:col-span-2">
+          <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
             Organización
           </p>
           <p className="text-sm">{organization?.name ?? "—"}</p>
@@ -298,6 +322,9 @@ export default async function ContratoDetailPage({
           <div className="flex flex-wrap items-center gap-1">
             <ContractStatusBadge status={contract.status} />
             <ContractConditionBadge condition={contract.condition ?? "venta"} />
+            {contract.doc_type && contract.doc_type !== "contrato" ? (
+              <DocTypeBadge docType={contract.doc_type} short />
+            ) : null}
           </div>
         </div>
         <div>
@@ -345,12 +372,14 @@ export default async function ContratoDetailPage({
       {/* TODO: replace with <PathStepper /> from @/components/design-system */}
       <ContratoStatusBar contractId={contract.id} status={contract.status} />
 
-      <ContratoSignaturePanel
-        contractId={contract.id}
-        contractStatus={contract.status}
-        ready={dsReady}
-        signature={signature}
-      />
+      {contract.doc_type !== "venta_spot" ? (
+        <ContratoSignaturePanel
+          contractId={contract.id}
+          contractStatus={contract.status}
+          ready={dsReady}
+          signature={signature}
+        />
+      ) : null}
 
       <ContratoTabs
         contractId={contract.id}

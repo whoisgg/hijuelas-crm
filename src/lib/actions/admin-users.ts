@@ -52,7 +52,14 @@ export async function listAdminUsers(): Promise<AdminUserRow[]> {
 
 /* ---- Crear ---- */
 
-const ROLE_VALUES = ["admin", "sales", "sales_support", "finance", "viewer"] as const;
+const ROLE_VALUES = [
+  "admin",
+  "sales",
+  "sales_support",
+  "finance",
+  "viewer",
+  "mcp_editor",
+] as const;
 
 const createSchema = z.object({
   full_name: z.string().min(2, "Mínimo 2 caracteres").max(120),

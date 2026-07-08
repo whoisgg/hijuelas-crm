@@ -779,6 +779,25 @@ export async function listCountries(): Promise<CountryOption[]> {
   return data ?? [];
 }
 
+/**
+ * Lista liviana (id, name) para selects — ej. "despachar a" en entregas.
+ */
+export async function listClientsForSelect(): Promise<
+  { id: string; name: string }[]
+> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, name")
+    .is("deleted_at", null)
+    .order("name", { ascending: true });
+  if (error) {
+    console.error("[listClientsForSelect]", error);
+    return [];
+  }
+  return data ?? [];
+}
+
 /* -------------------------------------------------------------------------- */
 /* Leaderboard — vista clientes por valor                                     */
 /* -------------------------------------------------------------------------- */

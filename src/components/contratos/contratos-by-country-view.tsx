@@ -32,6 +32,13 @@ import {
   matchesContractConditions,
   type ContractCondition,
 } from "@/lib/contract-condition";
+import { DocTypeBadge } from "@/components/contratos/doc-type-badge";
+import { ContractDocTypeFilter } from "@/components/contratos/contract-doc-type-filter";
+import {
+  DOC_TYPE_OPTIONS,
+  matchesDocTypes,
+  type CommercialDocType,
+} from "@/lib/contract-doc-type";
 import {
   formatMoney,
   formatMoneyCompact,
@@ -49,6 +56,7 @@ export type CountryContractRow = {
   number: string;
   status: ContractStatus;
   condition: ContractCondition;
+  docType: CommercialDocType;
   signed_at: string | null;
   totalPlants: number;
   totalUsd: number;
@@ -89,6 +97,10 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
   const [activeConditions, setActiveConditions] = React.useState<
     Set<ContractCondition>
   >(() => new Set(CONTRACT_CONDITION_OPTIONS.map((o) => o.key)));
+  // Doc-type filter (Contrato / OC / Venta spot). Default: todos.
+  const [activeDocTypes, setActiveDocTypes] = React.useState<
+    Set<CommercialDocType>
+  >(() => new Set(DOC_TYPE_OPTIONS.map((o) => o.key)));
   const [drilldown, setDrilldown] = React.useState<{ iso2: string | null }>({
     iso2: null,
   });
@@ -121,6 +133,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
     return rows.filter((r) => {
       if (!allowedStatuses.has(r.status)) return false;
       if (!matchesContractConditions(r.condition, activeConditions)) return false;
+      if (!matchesDocTypes(r.docType, activeDocTypes)) return false;
       if (speciesName && !r.speciesNames.includes(speciesName)) return false;
       if (q.length > 0) {
         const hit =
@@ -131,7 +144,7 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
       }
       return true;
     });
-  }, [rows, search, speciesId, species, allowedStatuses, activeConditions]);
+  }, [rows, search, speciesId, species, allowedStatuses, activeConditions, activeDocTypes]);
 
   // Aggregate by country
   type CountryAgg = {
@@ -282,11 +295,18 @@ export function ContratosByCountryView({ rows, species, fxRates }: Props) {
 
       {/* FX rates + Condition filter (controles secundarios) */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <ContractConditionFilter
-          selected={activeConditions}
-          onChange={setActiveConditions}
-          size="sm"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <ContractConditionFilter
+            selected={activeConditions}
+            onChange={setActiveConditions}
+            size="sm"
+          />
+          <ContractDocTypeFilter
+            selected={activeDocTypes}
+            onChange={setActiveDocTypes}
+            size="sm"
+          />
+        </div>
         <FxRatesLegend initial={fxRates} />
       </div>
 
@@ -709,6 +729,9 @@ function OrganizationsForCountry({ rows }: { rows: CountryContractRow[] }) {
                               <ContractStatusBadge status={c.status} />
                               {c.condition !== "venta" ? (
                                 <ContractConditionBadge condition={c.condition} />
+                              ) : null}
+                              {c.docType !== "contrato" ? (
+                                <DocTypeBadge docType={c.docType} short />
                               ) : null}
                             </div>
                           </td>

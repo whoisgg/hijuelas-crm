@@ -257,12 +257,21 @@ export function registerWriteTools(server: McpServer): void {
   server.registerTool(
     "create_contract_draft",
     {
-      title: "Crear borrador de contrato",
+      title: "Crear borrador de documento comercial",
       description:
-        "Crea un contrato nuevo en status 'borrador' con sus items. El KAM lo termina de armar después en la web. Auto-genera el número con formato {PREFIX}-{YEAR}-MCP{epoch}. organization_id se resuelve del caller. total_neto se calcula como SUM(qty_plants * unit_price). Requiere admin o mcp_editor.",
+        "Crea un documento comercial nuevo (contrato, orden de compra o venta spot) con sus items. Contrato/OC nacen en status 'borrador'; venta_spot nace en 'en_proceso' (no lleva firma). El documento siempre se asocia al cliente que paga (client_id); si se despacha a otro cliente usa ship_to_client_id. Auto-genera el número con formato {PREFIX}-{YEAR}-MCP{epoch}. organization_id se resuelve del caller. total_neto se calcula como SUM(qty_plants * unit_price). Requiere admin o mcp_editor.",
       inputSchema: {
-        client_id: z.string().uuid(),
+        client_id: z.string().uuid().describe("Cliente que paga"),
         currency: z.string().describe("USD, CLP, EUR, etc."),
+        doc_type: z
+          .enum(["contrato", "orden_compra", "venta_spot"])
+          .optional()
+          .describe("Tipo de documento; default 'contrato'"),
+        ship_to_client_id: z
+          .string()
+          .uuid()
+          .optional()
+          .describe("Cliente al que se despacha si difiere del que paga"),
         items: z.array(z.object({
           variety_id: z.string().uuid(),
           qty_plants: z.number().int().min(1),
@@ -286,6 +295,8 @@ export function registerWriteTools(server: McpServer): void {
         client_id: string;
         currency: string;
         items: unknown[];
+        doc_type?: string;
+        ship_to_client_id?: string;
         sale_type?: string;
         condition?: string;
         incoterm?: string;
@@ -301,6 +312,8 @@ export function registerWriteTools(server: McpServer): void {
         p_client_id: args.client_id,
         p_currency: args.currency,
         p_items: args.items,
+        p_doc_type: args.doc_type ?? "contrato",
+        p_ship_to_client_id: args.ship_to_client_id ?? null,
         p_sale_type: args.sale_type ?? null,
         p_condition: args.condition ?? "venta",
         p_incoterm: args.incoterm ?? null,
@@ -317,11 +330,15 @@ export function registerWriteTools(server: McpServer): void {
     {
       title: "Actualizar contrato",
       description:
-        "Actualiza metadata del contrato. status: borrador, por_revisar, firmado, en_proceso, finalizado, cancelado.",
+        "Actualiza metadata del documento. status: borrador, por_revisar, firmado, en_proceso, finalizado, cancelado. doc_type: contrato, orden_compra, venta_spot. ship_to_client_id setea el cliente de despacho (no permite limpiarlo a null; eso se hace en la web).",
       inputSchema: {
         contract_id: z.string().uuid(),
         status: z.string().optional(),
         condition: z.string().optional(),
+        doc_type: z
+          .enum(["contrato", "orden_compra", "venta_spot"])
+          .optional(),
+        ship_to_client_id: z.string().uuid().optional(),
         sale_type: z.string().optional(),
         signed_at: z.string().optional(),
         kam_id: z.string().uuid().optional(),
@@ -337,6 +354,8 @@ export function registerWriteTools(server: McpServer): void {
         p_contract_id: args.contract_id,
         p_status: args.status ?? null,
         p_condition: args.condition ?? null,
+        p_doc_type: args.doc_type ?? null,
+        p_ship_to_client_id: args.ship_to_client_id ?? null,
         p_sale_type: args.sale_type ?? null,
         p_signed_at: args.signed_at ?? null,
         p_kam_id: args.kam_id ?? null,

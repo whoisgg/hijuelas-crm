@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { formatQty } from "@/components/contratos/format";
 import { recordDelivery } from "@/lib/actions/entregas";
+import { listClientsForSelect } from "@/lib/actions/clientes";
 import type { ContractItemRow } from "@/components/contratos/types";
 
 type Props = {
@@ -142,6 +143,21 @@ function RecordDeliveryDialog({ items }: { items: ContractItemRow[] }) {
   const [remito, setRemito] = React.useState<string>("");
   const [notes, setNotes] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
+  // Despacho a un cliente distinto del que paga (override por entrega).
+  const [shipToOther, setShipToOther] = React.useState(false);
+  const [shipToClientId, setShipToClientId] = React.useState<string>("");
+  const [shipToAddress, setShipToAddress] = React.useState<string>("");
+  const [clientOptions, setClientOptions] = React.useState<
+    { id: string; name: string }[] | null
+  >(null);
+
+  // Carga lazy del listado de clientes la primera vez que se abre el dialog.
+  React.useEffect(() => {
+    if (!open || clientOptions !== null) return;
+    listClientsForSelect()
+      .then(setClientOptions)
+      .catch(() => setClientOptions([]));
+  }, [open, clientOptions]);
 
   const handleSubmit = async () => {
     if (!itemId || !qty || Number(qty) <= 0) {
@@ -156,6 +172,8 @@ function RecordDeliveryDialog({ items }: { items: ContractItemRow[] }) {
         deliveredAt: new Date(deliveredAt).toISOString(),
         remitoNumber: remito || null,
         notes: notes || null,
+        shipToClientId: shipToOther && shipToClientId ? shipToClientId : null,
+        shipToAddress: shipToOther && shipToAddress ? shipToAddress : null,
       });
       toast.success("Entrega registrada");
       setOpen(false);
@@ -163,6 +181,9 @@ function RecordDeliveryDialog({ items }: { items: ContractItemRow[] }) {
       setQty("");
       setRemito("");
       setNotes("");
+      setShipToOther(false);
+      setShipToClientId("");
+      setShipToAddress("");
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Error";
@@ -243,6 +264,53 @@ function RecordDeliveryDialog({ items }: { items: ContractItemRow[] }) {
               value={remito}
               onChange={(e) => setRemito(e.target.value)}
             />
+          </div>
+          <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <input
+                type="checkbox"
+                checked={shipToOther}
+                onChange={(e) => {
+                  setShipToOther(e.target.checked);
+                  if (!e.target.checked) {
+                    setShipToClientId("");
+                    setShipToAddress("");
+                  }
+                }}
+                className="h-4 w-4 accent-primary"
+              />
+              Despachar a otro cliente
+            </label>
+            {shipToOther ? (
+              <>
+                <Select
+                  value={shipToClientId}
+                  onValueChange={(v) => setShipToClientId(String(v ?? ""))}
+                >
+                  <SelectTrigger className="h-9 w-full">
+                    <SelectValue
+                      placeholder={
+                        clientOptions === null
+                          ? "Cargando clientes..."
+                          : "Selecciona cliente de despacho"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(clientOptions ?? []).map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={shipToAddress}
+                  onChange={(e) => setShipToAddress(e.target.value)}
+                  placeholder="Dirección de despacho (opcional)"
+                />
+              </>
+            ) : null}
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="notes">Notas</Label>

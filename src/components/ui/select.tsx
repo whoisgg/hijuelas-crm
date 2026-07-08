@@ -6,7 +6,44 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+// Base UI resuelve el label del trigger desde `items`; sin ese prop muestra el
+// valor crudo (ej. "__none__" en vez de "Sin país"). Acá derivamos `items`
+// automáticamente recorriendo los <SelectItem> declarados como children, para
+// que ningún callsite tenga que duplicar sus opciones.
+function collectItems(
+  children: React.ReactNode,
+  acc: { label: React.ReactNode; value: unknown }[]
+) {
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) return
+    const props = child.props as { value?: unknown; children?: React.ReactNode }
+    if (child.type === SelectItem) {
+      acc.push({ value: props.value, label: props.children })
+      return
+    }
+    if (props.children) collectItems(props.children, acc)
+  })
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = React.useMemo(() => {
+    if (items) return items
+    const acc: { label: React.ReactNode; value: unknown }[] = []
+    collectItems(children, acc)
+    return acc.length > 0
+      ? (acc as ReadonlyArray<{ label: React.ReactNode; value: Value }>)
+      : undefined
+  }, [items, children])
+  return (
+    <SelectPrimitive.Root<Value, Multiple> items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

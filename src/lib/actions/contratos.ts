@@ -6,11 +6,13 @@ import { createClient } from "@/lib/supabase/server";
 import { getFxRates } from "@/lib/actions/fx-rates";
 import type { Database, Json } from "@/lib/database.types";
 import type { ExportCompromisosRow } from "@/lib/export/compromisos";
+import { docTypeMeta } from "@/lib/contract-doc-type";
 
 type ContractStatus = Database["public"]["Enums"]["contract_status"];
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 type ConditionType = Database["public"]["Enums"]["condition_type"];
 type SaleType = Database["public"]["Enums"]["sale_type"];
+type CommercialDocType = Database["public"]["Enums"]["commercial_doc_type"];
 type MaterialType = Database["public"]["Enums"]["material_type"];
 type AmendmentType = Database["public"]["Enums"]["amendment_type"];
 type PaymentType = Database["public"]["Enums"]["payment_type"];
@@ -44,6 +46,9 @@ export type CreateContractInput = {
   incoterm?: string | null;
   condition?: ConditionType;
   saleType?: SaleType | null;
+  docType?: CommercialDocType;
+  /** Cliente al que se despacha si difiere del que paga (clientId). */
+  shipToClientId?: string | null;
   signedAt?: string | null;
   fxRateToUsd?: number | null;
   notes?: string | null;
@@ -76,7 +81,7 @@ export async function listContracts(filters: ContractListFilters = {}) {
   let q = supabase
     .from("contracts")
     .select(
-      `id, number, status, condition, currency, total_neto, total_iva, total_neto_usd, signed_at, created_at, client_id, organization_id,
+      `id, number, status, condition, doc_type, currency, total_neto, total_iva, total_neto_usd, signed_at, created_at, client_id, organization_id, ship_to_client_id,
        client:clients!contracts_client_id_fkey ( id, name, country:countries ( id, iso2, name_es ) ),
        organization:organizations!contracts_organization_id_fkey ( id, name, contract_prefix ),
        items:contract_items ( id, qty_plants, variety:varieties ( id, name, species:species ( id, name ) ) )`,
@@ -184,9 +189,11 @@ type RawContractExport = {
   number: string | null;
   status: string | null;
   condition: string | null;
+  doc_type: string | null;
   sale_type: string | null;
   incoterm: string | null;
   notes: string | null;
+  ship_to_client: { name: string | null } | null;
   client: {
     name: string | null;
     tax_id: string | null;
@@ -205,7 +212,8 @@ export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> 
   const { data, error } = await supabase
     .from("contracts")
     .select(
-      `number, status, condition, sale_type, incoterm, notes,
+      `number, status, condition, doc_type, sale_type, incoterm, notes,
+       ship_to_client:clients!contracts_ship_to_client_id_fkey ( name ),
        client:clients!contracts_client_id_fkey (
          name, tax_id, giro, region,
          country:countries ( name_es ),
@@ -263,6 +271,8 @@ export async function exportAllContractItems(): Promise<ExportCompromisosRow[]> 
         "Situación Anticipo 2": prettyEnum(a2?.status),
         "Condición": prettyEnum(c.condition),
         "Tipo de venta": prettyEnum(c.sale_type),
+        "Tipo Documento": docTypeMeta(c.doc_type).label,
+        "Cliente Despacho": c.ship_to_client?.name ?? "",
         "Centro de costo": centroDeCosto,
         "Especie": it?.variety?.species?.name ?? "",
         "Variedad": it?.variety?.name ?? "",
@@ -307,6 +317,7 @@ export async function getContract(id: string) {
     .select(
       `*,
        client:clients!contracts_client_id_fkey ( id, name, tax_id, country_id ),
+       ship_to_client:clients!contracts_ship_to_client_id_fkey ( id, name ),
        organization:organizations!contracts_organization_id_fkey ( id, name, contract_prefix, default_currency ),
        items:contract_items (
          id, variety_id, qty_plants, qty_delivered, unit_price, currency, delivery_year, delivery_week,
@@ -323,6 +334,34 @@ export async function getContract(id: string) {
 
   if (error) throw new Error(error.message);
   return contract;
+}
+
+/**
+ * Edita campos de cabecera que no afectan totales ni flujo de estados:
+ * tipo de documento y cliente de despacho (ship-to).
+ */
+export async function updateContractHeader(
+  contractId: string,
+  patch: Partial<{
+    docType: CommercialDocType;
+    shipToClientId: string | null;
+  }>,
+) {
+  const supabase = await createClient();
+  const update: Record<string, unknown> = {};
+  if (patch.docType !== undefined) update.doc_type = patch.docType;
+  if (patch.shipToClientId !== undefined)
+    update.ship_to_client_id = patch.shipToClientId;
+  if (Object.keys(update).length === 0) return;
+
+  const { error } = await supabase
+    .from("contracts")
+    .update(update)
+    .eq("id", contractId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/contratos/${contractId}`);
+  revalidatePath("/contratos");
 }
 
 /**
@@ -486,12 +525,17 @@ export async function createContract(input: CreateContractInput) {
       organization_id: input.organizationId,
       currency: input.currency,
       condition: input.condition ?? "venta",
+      doc_type: input.docType ?? "contrato",
+      ship_to_client_id: input.shipToClientId ?? null,
       incoterm: input.incoterm ?? null,
       sale_type: input.saleType ?? null,
       signed_at: input.signedAt ?? null,
       fx_rate_to_usd: input.fxRateToUsd ?? null,
       notes: input.notes ?? null,
-      status: "borrador" as ContractStatus,
+      // Venta spot no pasa por firma: nace directo en ejecución.
+      status: (input.docType === "venta_spot"
+        ? "en_proceso"
+        : "borrador") as ContractStatus,
     })
     .select("id")
     .single();

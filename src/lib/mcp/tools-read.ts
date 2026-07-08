@@ -129,12 +129,16 @@ export function registerReadTools(server: McpServer): void {
   server.registerTool(
     "list_contracts",
     {
-      title: "Listar contratos",
+      title: "Listar documentos comerciales",
       description:
-        "Lista contratos con paginación. Filtros: búsqueda (número o cliente), status, año firma, KAM, cliente.",
+        "Lista documentos comerciales (contratos, órdenes de compra y ventas spot) con paginación. Filtros: búsqueda (número o cliente), status, tipo de documento, año firma, KAM, cliente. Cada fila incluye ship_to_client cuando se despacha a un cliente distinto del que paga.",
       inputSchema: {
         search: z.string().optional(),
         status: z.string().optional().describe("Ej: borrador, firmado, ejecutado, cancelado"),
+        doc_type: z
+          .enum(["contrato", "orden_compra", "venta_spot"])
+          .optional()
+          .describe("Tipo de documento comercial"),
         year: z.number().int().optional().describe("Año de firma"),
         kam_id: z.string().uuid().optional(),
         client_id: z.string().uuid().optional(),
@@ -149,6 +153,7 @@ export function registerReadTools(server: McpServer): void {
         p_user_id: auth.userId,
         p_search: args.search ?? null,
         p_status: args.status ?? null,
+        p_doc_type: args.doc_type ?? null,
         p_year: args.year ?? null,
         p_kam_id: args.kam_id ?? null,
         p_client_id: args.client_id ?? null,
@@ -165,7 +170,7 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Detalle de contrato",
       description:
-        "Devuelve el contrato completo: items (con variedad), pagos y entregas.",
+        "Devuelve el documento completo: tipo (contrato/orden_compra/venta_spot), cliente que paga, cliente de despacho (ship_to) si difiere, items (con variedad), pagos y entregas.",
       inputSchema: { contract_id: z.string().uuid() },
     },
     (async ({ contract_id }: { contract_id: string }, extra: ToolExtra) => {

@@ -29,6 +29,8 @@ export const EXPORT_COMPROMISOS_HEADERS = [
   "Situación Anticipo 2",
   "Condición",
   "Tipo de venta",
+  "Tipo Documento",
+  "Cliente Despacho",
   "Empresa vendedora",
   "País origen",
   "País Destino",

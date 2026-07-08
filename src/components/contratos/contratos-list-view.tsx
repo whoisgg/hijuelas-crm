@@ -24,6 +24,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContractStatusBadge } from "@/components/contratos/status-badge";
+import { DocTypeBadge } from "@/components/contratos/doc-type-badge";
+import {
+  DOC_TYPE_OPTIONS,
+  type CommercialDocType,
+} from "@/lib/contract-doc-type";
 import { formatMoney, formatDate } from "@/components/contratos/format";
 
 const plantsFormatter = new Intl.NumberFormat("es-CL");
@@ -35,6 +40,7 @@ export type ContractListRow = {
   id: string;
   number: string;
   status: ContractStatus;
+  docType: CommercialDocType;
   currency: CurrencyCode;
   total_neto_usd: number;
   totalPlants: number;
@@ -107,6 +113,7 @@ export function ContratosListView({ rows, organizations }: Props) {
     () => readStoredView().status,
   );
   const [orgId, setOrgId] = React.useState<string>("all");
+  const [docType, setDocType] = React.useState<CommercialDocType | "all">("all");
   const [currency, setCurrency] = React.useState<CurrencyCode | "all">("all");
   const [year, setYear] = React.useState<string>("all");
   const [viewId, setViewId] = React.useState<string>(() => readStoredView().id);
@@ -134,6 +141,7 @@ export function ContratosListView({ rows, organizations }: Props) {
     return rows.filter((r) => {
       if (status !== "all" && r.status !== status) return false;
       if (orgId !== "all" && r.organization?.id !== orgId) return false;
+      if (docType !== "all" && r.docType !== docType) return false;
       if (currency !== "all" && r.currency !== currency) return false;
       if (year !== "all") {
         const y = new Date(r.created_at).getFullYear();
@@ -148,7 +156,7 @@ export function ContratosListView({ rows, organizations }: Props) {
       }
       return true;
     });
-  }, [rows, status, orgId, currency, year, search]);
+  }, [rows, status, orgId, docType, currency, year, search]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -217,6 +225,23 @@ export function ContratosListView({ rows, organizations }: Props) {
           </SelectContent>
         </Select>
 
+        <Select
+          value={docType}
+          onValueChange={(v) => setDocType((v ?? "all") as CommercialDocType | "all")}
+        >
+          <SelectTrigger className="h-8 w-44">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los tipos</SelectItem>
+            {DOC_TYPE_OPTIONS.map((o) => (
+              <SelectItem key={o.key} value={o.key}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Select value={currency} onValueChange={(v) => setCurrency((v ?? "all") as CurrencyCode | "all")}>
           <SelectTrigger className="h-8 w-36">
             <SelectValue placeholder="Moneda" />
@@ -251,20 +276,22 @@ export function ContratosListView({ rows, organizations }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead># Contrato</TableHead>
+              <TableHead># Documento</TableHead>
+              <TableHead>Tipo</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead>Organización</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead className="text-right">Total plantas</TableHead>
               <TableHead className="text-right">Total USD</TableHead>
+              <TableHead>Firma</TableHead>
               <TableHead className="text-right">Items</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                  No hay contratos para los filtros seleccionados.
+                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                  No hay documentos para los filtros seleccionados.
                 </TableCell>
               </TableRow>
             ) : (
@@ -278,6 +305,9 @@ export function ContratosListView({ rows, organizations }: Props) {
                     <Link href={`/contratos/${row.id}`} className="hover:underline">
                       {row.number}
                     </Link>
+                  </TableCell>
+                  <TableCell>
+                    <DocTypeBadge docType={row.docType} short />
                   </TableCell>
                   <TableCell>{row.client?.name ?? "—"}</TableCell>
                   <TableCell className="text-muted-foreground">

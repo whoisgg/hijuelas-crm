@@ -45,6 +45,8 @@ import {
   getClientSignerInfo,
 } from "@/lib/actions/signatures";
 
+import { DOC_TYPE_OPTIONS, type CommercialDocType } from "@/lib/contract-doc-type";
+
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 type ConditionType = Database["public"]["Enums"]["condition_type"];
 type SaleType = Database["public"]["Enums"]["sale_type"];
@@ -127,7 +129,11 @@ export function ContratoWizard({
 }: Props) {
   const router = useRouter();
   const [stepIndex, setStepIndex] = React.useState(0);
+  const [docType, setDocType] = React.useState<CommercialDocType>("contrato");
   const [clientId, setClientId] = React.useState<string>("");
+  // Cliente al que se despacha cuando difiere del que paga (clientId).
+  const [shipToClientId, setShipToClientId] = React.useState<string>("");
+  const [shipToDifferent, setShipToDifferent] = React.useState(false);
   const [organizationId, setOrganizationId] = React.useState<string>("");
   const [previewNumber, setPreviewNumber] = React.useState<string>("");
   const [currency, setCurrency] = React.useState<CurrencyCode>("CLP");
@@ -169,7 +175,10 @@ export function ContratoWizard({
   const selectedClient = clients.find((c) => c.id === clientId);
   // Solo válido si el chequeo corresponde al cliente actualmente seleccionado.
   const currentSigner = signerInfo?.for === clientId ? signerInfo : null;
-  const canSend = docusignReady && Boolean(currentSigner?.hasEmail);
+  // Venta spot no lleva firma; contrato y OC sí (OC opcional).
+  const signatureApplies = docType !== "venta_spot";
+  const canSend =
+    docusignReady && Boolean(currentSigner?.hasEmail) && signatureApplies;
 
   const handleOrganizationChange = (id: string) => {
     setOrganizationId(id);
@@ -199,7 +208,8 @@ export function ContratoWizard({
   }, [items]);
 
   const canAdvance = (): boolean => {
-    if (stepIndex === 0) return !!clientId;
+    if (stepIndex === 0)
+      return !!clientId && (!shipToDifferent || !!shipToClientId);
     if (stepIndex === 1) return !!organizationId;
     if (stepIndex === 2) {
       return items.length > 0 && items.every(itemIsValid);
@@ -242,6 +252,11 @@ export function ContratoWizard({
         incoterm: incoterm || null,
         condition,
         saleType,
+        docType,
+        shipToClientId:
+          shipToDifferent && shipToClientId && shipToClientId !== clientId
+            ? shipToClientId
+            : null,
         signedAt: signedAt || null,
         fxRateToUsd: fxRateToUsd ? Number(fxRateToUsd) : null,
         notes: notes || null,
@@ -314,17 +329,71 @@ export function ContratoWizard({
 
       <div className="rounded-lg border bg-card p-4">
         {stepIndex === 0 ? (
-          <div className="space-y-3">
-            <h3 className="font-medium">Selecciona el cliente</h3>
-            <p className="text-sm text-muted-foreground">
-              Busca un cliente existente. Si no existe, créalo desde el módulo de
-              Clientes.
-            </p>
-            <ClientSearch
-              clients={clients}
-              value={clientId}
-              onChange={setClientId}
-            />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Tipo de documento</Label>
+              <Select
+                value={docType}
+                onValueChange={(v) =>
+                  setDocType((v ?? "contrato") as CommercialDocType)
+                }
+              >
+                <SelectTrigger className="h-9 w-full md:w-64">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOC_TYPE_OPTIONS.map((o) => (
+                    <SelectItem key={o.key} value={o.key}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Contrato firmado, orden de compra del cliente, o venta spot
+                (sin contrato).
+              </p>
+            </div>
+            <div className="space-y-3">
+              <h3 className="font-medium">Selecciona el cliente (quien paga)</h3>
+              <p className="text-sm text-muted-foreground">
+                Busca un cliente existente. Si no existe, créalo desde el módulo
+                de Clientes. El documento siempre queda asociado al cliente que
+                paga.
+              </p>
+              <ClientSearch
+                clients={clients}
+                value={clientId}
+                onChange={setClientId}
+              />
+            </div>
+            <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={shipToDifferent}
+                  onChange={(e) => {
+                    setShipToDifferent(e.target.checked);
+                    if (!e.target.checked) setShipToClientId("");
+                  }}
+                  className="h-4 w-4 accent-primary"
+                />
+                Se despacha a otro cliente
+              </label>
+              {shipToDifferent ? (
+                <>
+                  <p className="text-xs text-muted-foreground">
+                    Cliente que recibe las plantas (el pago sigue asociado al
+                    cliente de arriba).
+                  </p>
+                  <ClientSearch
+                    clients={clients.filter((c) => c.id !== clientId)}
+                    value={shipToClientId}
+                    onChange={setShipToClientId}
+                  />
+                </>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -628,7 +697,7 @@ export function ContratoWizard({
       </div>
 
       {/* Chequeo previo a "Crear y enviar a firmar" (solo en el último paso). */}
-      {stepIndex === STEPS.length - 1 && clientId ? (
+      {stepIndex === STEPS.length - 1 && clientId && signatureApplies ? (
         !currentSigner?.hasEmail ? (
           <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
@@ -681,18 +750,20 @@ export function ContratoWizard({
             >
               {submitting ? "Guardando..." : "Crear borrador"}
             </Button>
-            <Button
-              disabled={submitting || !canAdvance() || !canSend}
-              title={
-                !canSend
-                  ? "Necesita un contacto con email y DocuSign configurado"
-                  : undefined
-              }
-              onClick={() => handleSubmit(true)}
-            >
-              <Send className="h-4 w-4" />
-              Crear y enviar a firmar
-            </Button>
+            {signatureApplies ? (
+              <Button
+                disabled={submitting || !canAdvance() || !canSend}
+                title={
+                  !canSend
+                    ? "Necesita un contacto con email y DocuSign configurado"
+                    : undefined
+                }
+                onClick={() => handleSubmit(true)}
+              >
+                <Send className="h-4 w-4" />
+                Crear y enviar a firmar
+              </Button>
+            ) : null}
           </div>
         )}
       </div>

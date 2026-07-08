@@ -128,6 +128,7 @@ export type KAMContractRow = {
   number: string;
   status: string;
   condition: string;
+  docType: string;
   signed_at: string | null;
   created_at: string;
   totalPlants: number;
@@ -144,6 +145,7 @@ export type KAMGroupedContract = {
   number: string;
   status: string;
   condition: string;
+  docType: string;
   signed_at: string | null;
   created_at: string;
   /** Plantas del contrato dentro de este bucket (program × country). */
@@ -197,7 +199,7 @@ export async function getKAMDetail(
   const contractsRes = await supabase
     .from("contracts")
     .select(
-      `id, number, status, condition, signed_at, created_at, total_neto_usd,
+      `id, number, status, condition, doc_type, signed_at, created_at, total_neto_usd,
        client:clients!contracts_client_id_fkey (
          id, name,
          country:countries ( iso2, name_es )
@@ -219,6 +221,7 @@ export async function getKAMDetail(
     number: string;
     status: string;
     condition: string | null;
+    doc_type: string | null;
     signed_at: string | null;
     created_at: string;
     total_neto_usd: number | string | null;
@@ -270,6 +273,7 @@ export async function getKAMDetail(
       number: raw.number,
       status: raw.status,
       condition: raw.condition ?? "venta",
+      docType: raw.doc_type ?? "contrato",
       signed_at: raw.signed_at,
       created_at: raw.created_at,
       totalPlants,
@@ -342,6 +346,7 @@ export async function getKAMDetail(
         number: raw.number,
         status: raw.status,
         condition: raw.condition ?? "venta",
+        docType: raw.doc_type ?? "contrato",
         signed_at: raw.signed_at,
         created_at: raw.created_at,
         plants: bucket.plants,

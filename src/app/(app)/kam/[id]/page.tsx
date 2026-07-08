@@ -25,6 +25,7 @@ import { KamPeriodFilter } from "@/components/kam/kam-period-filter";
 import { KamStatusFilter } from "@/components/kam/kam-status-filter";
 import { KamConditionFilter } from "@/components/kam/kam-condition-filter";
 import { ContractConditionBadge } from "@/components/contratos/condition-badge";
+import { DocTypeBadge } from "@/components/contratos/doc-type-badge";
 import {
   formatCompact,
   formatMoneyCompact,
@@ -312,6 +313,9 @@ export default async function KAMDetailPage({
                                     <ContractConditionBadge
                                       condition={c.condition}
                                     />
+                                  ) : null}
+                                  {c.docType !== "contrato" ? (
+                                    <DocTypeBadge docType={c.docType} short />
                                   ) : null}
                                 </div>
                               </td>

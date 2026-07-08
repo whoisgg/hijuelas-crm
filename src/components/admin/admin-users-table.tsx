@@ -25,7 +25,13 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-type Role = "admin" | "sales" | "sales_support" | "finance" | "viewer";
+type Role =
+  | "admin"
+  | "sales"
+  | "sales_support"
+  | "finance"
+  | "viewer"
+  | "mcp_editor";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -33,6 +39,7 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "sales_support", label: "Sales (Soporte)" },
   { value: "finance", label: "Finance" },
   { value: "viewer", label: "Viewer" },
+  { value: "mcp_editor", label: "MCP Editor" },
 ];
 
 const ROLE_TONE: Record<Role, string> = {
@@ -41,6 +48,8 @@ const ROLE_TONE: Record<Role, string> = {
   sales_support: "border-sky-300 bg-sky-50 text-sky-700 dark:border-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
   finance: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
   viewer: "border-border bg-muted text-muted-foreground",
+  mcp_editor:
+    "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
 };
 
 export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {

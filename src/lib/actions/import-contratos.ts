@@ -10,6 +10,7 @@ import type { Database } from "@/lib/database.types";
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 type ConditionType = Database["public"]["Enums"]["condition_type"];
 type SaleType = Database["public"]["Enums"]["sale_type"];
+type CommercialDocType = Database["public"]["Enums"]["commercial_doc_type"];
 type MaterialType = Database["public"]["Enums"]["material_type"];
 
 // Una fila cruda parseada del Excel (claves = encabezados de la hoja "Compromisos").
@@ -98,6 +99,13 @@ function mapSaleType(v: unknown): SaleType | null {
   return null;
 }
 
+function mapDocType(v: unknown): CommercialDocType {
+  const n = norm(v);
+  if (n.includes("orden") || n === "oc") return "orden_compra";
+  if (n.includes("spot")) return "venta_spot";
+  return "contrato";
+}
+
 function mapMaterial(v: unknown): MaterialType | null {
   const n = norm(v);
   if (!n) return null;
@@ -150,6 +158,7 @@ type PlannedContract = {
   organizationId: string;
   currency: CurrencyCode;
   condition: ConditionType;
+  docType: CommercialDocType;
   saleType: SaleType | null;
   incoterm: string | null;
   notes: string | null;
@@ -310,6 +319,9 @@ async function buildPlan(rows: ImportRawRow[]): Promise<Plan> {
         organizationId: orgId,
         currency,
         condition: mapCondition(cell(row, "Condición", "Condicion")),
+        docType: mapDocType(
+          cell(row, "Tipo documento", "Tipo Documento", "Tipo de documento"),
+        ),
         saleType: mapSaleType(cell(row, "Tipo de venta")),
         incoterm: str(cell(row, "Incoterm")),
         notes: str(cell(row, "Comentario")),
@@ -458,10 +470,12 @@ export async function importContractsCommit(rows: ImportRawRow[]): Promise<Impor
         organization_id: ct.organizationId,
         currency: ct.currency,
         condition: ct.condition,
+        doc_type: ct.docType,
         sale_type: ct.saleType,
         incoterm: ct.incoterm,
         notes: ct.notes,
-        status: "borrador",
+        // Venta spot no pasa por firma: nace directo en ejecución.
+        status: ct.docType === "venta_spot" ? "en_proceso" : "borrador",
       })
       .select("id")
       .single();

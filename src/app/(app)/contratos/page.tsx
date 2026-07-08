@@ -26,11 +26,14 @@ type ContractStatus = Database["public"]["Enums"]["contract_status"];
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
 type ContractCondition = Database["public"]["Enums"]["condition_type"];
 
+type CommercialDocType = Database["public"]["Enums"]["commercial_doc_type"];
+
 type ListedContract = {
   id: string;
   number: string;
   status: ContractStatus;
   condition: ContractCondition | null;
+  doc_type: CommercialDocType | null;
   currency: CurrencyCode;
   total_neto: number;
   total_iva: number;
@@ -104,6 +107,7 @@ export default async function ContratosPage({
         id: c.id,
         number: c.number,
         status: c.status,
+        docType: c.doc_type ?? "contrato",
         currency: c.currency,
         total_neto_usd: Number(c.total_neto_usd),
         signed_at: c.signed_at,
@@ -148,6 +152,7 @@ export default async function ContratosPage({
         number: c.number,
         status: c.status,
         condition: c.condition ?? "venta",
+        docType: c.doc_type ?? "contrato",
         signed_at: c.signed_at,
         totalPlants,
         totalUsd: Number(c.total_neto_usd),
