@@ -3,6 +3,7 @@ import { verifyMcpBearerToken, getAuthExtra } from "@/lib/mcp/auth";
 import { registerReadTools } from "@/lib/mcp/tools-read";
 import { registerWriteTools } from "@/lib/mcp/tools-write";
 import { registerSignatureTools } from "@/lib/mcp/tools-signatures";
+import { registerPlannerTools } from "@/lib/mcp/tools-planner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,7 @@ const handler = createMcpHandler(
     registerReadTools(server);
     registerWriteTools(server);
     registerSignatureTools(server);
+    registerPlannerTools(server);
   },
   {
     serverInfo: {
