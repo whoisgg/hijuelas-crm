@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Plus, Sprout, User } from "lucide-react";
 import { toast } from "sonner";
 
@@ -15,21 +15,34 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { APP_NAME, QUICK_CREATE_ITEMS } from "@/lib/constants";
+import {
+  APP_NAME,
+  APPS,
+  moduleForPathname,
+  QUICK_CREATE_ITEMS,
+} from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
+import { AppLauncher } from "./app-launcher";
 import { GlobalSearch } from "./global-search";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type TopbarProps = {
   userEmail: string | null;
+  role?: string | null;
 };
 
-export function Topbar({ userEmail }: TopbarProps) {
+export function Topbar({ userEmail, role = null }: TopbarProps) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
 
   const initial = (userEmail?.[0] ?? "U").toUpperCase();
+  const pathname = usePathname();
+  const activeModule = moduleForPathname(pathname);
+  const activeApp = APPS.find((a) => a.key === activeModule) ?? APPS[0];
+  // El logo lleva al home de la app activa; el switcher cambia de app.
+  const homeHref = activeApp.href;
+  const showQuickCreate = activeModule === "comercial";
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -44,17 +57,26 @@ export function Topbar({ userEmail }: TopbarProps) {
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+      <AppLauncher role={role} />
+
+      <Link href={homeHref} className="flex items-center gap-2 font-semibold">
         <Sprout className="h-5 w-5 text-primary" />
-        <span className="hidden sm:inline">{APP_NAME}</span>
+        <span className="hidden sm:inline">
+          {APP_NAME}
+          <span className="ml-1.5 font-normal text-muted-foreground">
+            · {activeApp.label}
+          </span>
+        </span>
       </Link>
 
       <div className="ml-4 flex-1">
-        <GlobalSearch />
+        <GlobalSearch role={role} />
       </div>
 
       {/* Nuevo dropdown — trigger estilizado directo (no render={<Button>})
-          para evitar nested-button hydration bug de base-ui. */}
+          para evitar nested-button hydration bug de base-ui. Solo módulo
+          comercial: los quick-creates son de ventas. */}
+      {showQuickCreate ? (
       <DropdownMenu>
         <DropdownMenuTrigger
           className={cn(
@@ -87,6 +109,7 @@ export function Topbar({ userEmail }: TopbarProps) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      ) : null}
 
       <Button
         variant="ghost"

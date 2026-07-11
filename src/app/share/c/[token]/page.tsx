@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Compartido — Hijuelas Growth" };
+export const metadata = { title: "Compartido — Grupo Hijuelas" };
 
 type SharedItem = {
   variety_name: string | null;

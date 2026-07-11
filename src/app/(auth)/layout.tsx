@@ -32,7 +32,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       {/* Footer */}
       <footer className="px-6 pb-6 text-center text-[11px] text-muted-foreground/70 sm:px-10">
-        © {new Date().getFullYear()} Viveros Hijuelas · CRM interno
+        © {new Date().getFullYear()} Grupo Hijuelas · Plataforma interna
       </footer>
     </div>
   );

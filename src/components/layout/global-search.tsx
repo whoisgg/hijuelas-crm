@@ -13,8 +13,8 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { NAV_ITEMS } from "@/lib/constants";
-import { useRouter } from "next/navigation";
+import { navItemsFor } from "@/lib/constants";
+import { usePathname, useRouter } from "next/navigation";
 import {
   globalSearch,
   type GlobalSearchResults,
@@ -28,12 +28,13 @@ const EMPTY: GlobalSearchResults = {
   variedades: [],
 };
 
-export function GlobalSearch() {
+export function GlobalSearch({ role = null }: { role?: string | null }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<GlobalSearchResults>(EMPTY);
   const [loading, setLoading] = React.useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const reqIdRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -88,10 +89,11 @@ export function GlobalSearch() {
   };
 
   const trimmed = query.trim();
+  const navItems = navItemsFor(role, pathname);
   const navMatches =
     trimmed.length === 0
-      ? NAV_ITEMS
-      : NAV_ITEMS.filter((item) =>
+      ? navItems
+      : navItems.filter((item) =>
           item.label.toLowerCase().includes(trimmed.toLowerCase()),
         );
 

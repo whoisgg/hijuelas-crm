@@ -59,6 +59,7 @@ const ROLE_VALUES = [
   "finance",
   "viewer",
   "mcp_editor",
+  "produccion",
 ] as const;
 
 const createSchema = z.object({

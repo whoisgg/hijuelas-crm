@@ -26,7 +26,7 @@ export default function LoginPage() {
 function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") ?? "/dashboard";
+  const nextPath = params.get("next") ?? "/apps";
   const oauthError = params.get("error");
 
   const [mode, setMode] = React.useState<Mode>("password");

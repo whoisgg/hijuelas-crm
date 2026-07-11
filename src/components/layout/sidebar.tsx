@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Building2, CircleHelp, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, type NavItem } from "@/lib/constants";
+import { moduleForPathname, navItemsFor, type NavItem } from "@/lib/constants";
 import {
   Tooltip,
   TooltipContent,
@@ -14,13 +14,23 @@ import {
 } from "@/components/ui/tooltip";
 
 const ADMIN_NAV: NavItem[] = [
-  { label: "Usuarios", href: "/admin/usuarios", icon: Shield },
-  { label: "Organizaciones", href: "/admin/organizaciones", icon: Building2 },
+  { label: "Usuarios", href: "/admin/usuarios", icon: Shield, module: "comercial" },
+  {
+    label: "Organizaciones",
+    href: "/admin/organizaciones",
+    icon: Building2,
+    module: "comercial",
+  },
 ];
 
-export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
+export function Sidebar({ role = null }: { role?: string | null }) {
   const pathname = usePathname();
-  const items = isAdmin ? [...NAV_ITEMS, ...ADMIN_NAV] : NAV_ITEMS;
+  const appItems = navItemsFor(role, pathname);
+  // Entradas admin solo dentro del CRM (app comercial).
+  const items =
+    role === "admin" && moduleForPathname(pathname) === "comercial"
+      ? [...appItems, ...ADMIN_NAV]
+      : appItems;
 
   return (
     <TooltipProvider delay={200}>

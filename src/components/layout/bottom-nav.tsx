@@ -6,31 +6,38 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "@/lib/constants";
+import { navItemsFor, type NavItem } from "@/lib/constants";
 
 // 4 ítems principales en el bottom-bar (iOS-style). El resto vive en "Más".
 // Orden mobile: Dashboard, Calendario, Contratos, Oportunidades.
+// Planner es primario para el rol produccion (es su único módulo).
 const PRIMARY_HREFS = [
   "/dashboard",
   "/calendario",
   "/contratos",
   "/oportunidades",
+  "/planner",
+  "/planner/carga",
 ];
 
 /**
  * Bottom navigation tipo iOS app — sólo visible en mobile.
- * 4 ítems principales + un "Más" que abre un sheet con el resto.
+ * Hasta 4 ítems principales + un "Más" que abre un sheet con el resto.
  */
-export function BottomNav() {
+export function BottomNav({ role = null }: { role?: string | null }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  const primaryItems = PRIMARY_HREFS.map((href) =>
-    NAV_ITEMS.find((i) => i.href === href),
-  ).filter((i): i is (typeof NAV_ITEMS)[number] => !!i);
+  const items = navItemsFor(role, pathname);
 
-  const secondaryItems = NAV_ITEMS.filter(
-    (i) => !PRIMARY_HREFS.includes(i.href),
+  const primaryItems = PRIMARY_HREFS.map((href) =>
+    items.find((i) => i.href === href),
+  )
+    .filter((i): i is NavItem => !!i)
+    .slice(0, 4);
+
+  const secondaryItems = items.filter(
+    (i) => !primaryItems.some((p) => p.href === i.href),
   );
 
   const isItemActive = (href: string) =>
@@ -71,25 +78,27 @@ export function BottomNav() {
           );
         })}
 
-        <button
-          type="button"
-          onClick={() => setMoreOpen((v) => !v)}
-          className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium",
-            "transition-colors",
-            isMoreActive || moreOpen
-              ? "text-primary"
-              : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
-          )}
-          aria-label={moreOpen ? "Cerrar menú" : "Más opciones"}
-        >
-          {moreOpen ? (
-            <X className="h-5 w-5" strokeWidth={2.5} />
-          ) : (
-            <Menu className="h-5 w-5" strokeWidth={isMoreActive ? 2.5 : 2} />
-          )}
-          <span className="leading-tight">Más</span>
-        </button>
+        {secondaryItems.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setMoreOpen((v) => !v)}
+            className={cn(
+              "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium",
+              "transition-colors",
+              isMoreActive || moreOpen
+                ? "text-primary"
+                : "text-sidebar-foreground/70 hover:text-sidebar-foreground",
+            )}
+            aria-label={moreOpen ? "Cerrar menú" : "Más opciones"}
+          >
+            {moreOpen ? (
+              <X className="h-5 w-5" strokeWidth={2.5} />
+            ) : (
+              <Menu className="h-5 w-5" strokeWidth={isMoreActive ? 2.5 : 2} />
+            )}
+            <span className="leading-tight">Más</span>
+          </button>
+        ) : null}
       </nav>
 
       {/* Drawer "Más" — items secundarios */}

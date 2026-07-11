@@ -12,7 +12,7 @@ export default async function RootPage() {
   } = await supabase.auth.getUser();
 
   if (user) {
-    redirect("/dashboard");
+    redirect("/apps");
   }
   redirect("/login");
 }

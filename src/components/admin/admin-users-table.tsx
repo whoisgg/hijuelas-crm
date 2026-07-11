@@ -31,7 +31,8 @@ type Role =
   | "sales_support"
   | "finance"
   | "viewer"
-  | "mcp_editor";
+  | "mcp_editor"
+  | "produccion";
 
 const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "admin", label: "Admin" },
@@ -40,6 +41,7 @@ const ROLE_OPTIONS: { value: Role; label: string }[] = [
   { value: "finance", label: "Finance" },
   { value: "viewer", label: "Viewer" },
   { value: "mcp_editor", label: "MCP Editor" },
+  { value: "produccion", label: "Producción" },
 ];
 
 const ROLE_TONE: Record<Role, string> = {
@@ -50,6 +52,8 @@ const ROLE_TONE: Record<Role, string> = {
   viewer: "border-border bg-muted text-muted-foreground",
   mcp_editor:
     "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+  produccion:
+    "border-lime-300 bg-lime-50 text-lime-700 dark:border-lime-700 dark:bg-lime-950/50 dark:text-lime-300",
 };
 
 export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {

@@ -42,7 +42,7 @@ export default function UpdatePasswordPage() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
       toast.success("Contraseña actualizada");
-      router.push("/dashboard");
+      router.push("/apps");
       router.refresh();
     } catch (error) {
       const message =
