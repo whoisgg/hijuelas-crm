@@ -11,6 +11,8 @@ export type AllocLot = {
   label: string; // "Avellano Yamhill · 2026-36-AVE-YAM"
   trays: number;
   arrivalWeek: number; // semana de inicio de la etapa en esta área
+  /** referencia opcional para identificar el lote (id + etapa) al mover */
+  ref?: { lotId: number; stage: "rooting" | "maturation" | "predispatch" };
 };
 
 export type AllocLocation = {
@@ -18,11 +20,17 @@ export type AllocLocation = {
   capacityTrays: number;
 };
 
+type AllocPart = {
+  label: string;
+  trays: number;
+  ref?: AllocLot["ref"];
+};
+
 export type AllocationResult = {
   /** location id → { total, parts } */
-  byLocation: Map<number, { trays: number; parts: { label: string; trays: number }[] }>;
+  byLocation: Map<number, { trays: number; parts: AllocPart[] }>;
   /** lotes (o restos de lote) que no cupieron */
-  overflow: { label: string; trays: number }[];
+  overflow: AllocPart[];
   totalTrays: number;
   overflowTrays: number;
 };
@@ -48,7 +56,7 @@ export function allocateFifo(
     totalTrays += lot.trays;
     while (remaining > 0) {
       if (locIdx >= locations.length) {
-        overflow.push({ label: lot.label, trays: remaining });
+        overflow.push({ label: lot.label, trays: remaining, ref: lot.ref });
         overflowTrays += remaining;
         break;
       }
@@ -66,7 +74,7 @@ export function allocateFifo(
         byLocation.set(loc.id, entry);
       }
       entry.trays += take;
-      entry.parts.push({ label: lot.label, trays: take });
+      entry.parts.push({ label: lot.label, trays: take, ref: lot.ref });
       usedInLoc += take;
       remaining -= take;
     }

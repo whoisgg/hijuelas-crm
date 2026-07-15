@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { HEAT_LEGEND, heatTone } from "@/lib/planner/heat";
@@ -19,7 +20,14 @@ const STAGE_SHORT: Record<string, string> = {
   predespacho: "Predesp.",
 };
 
-export function OccupancyTimeline({ data }: { data: TimelineData }) {
+export function OccupancyTimeline({
+  data,
+  scenarioId,
+}: {
+  data: TimelineData;
+  /** si se ve una proyección, los clics llevan a la mesa de trabajo del escenario */
+  scenarioId?: number;
+}) {
   const { areas, weeks, maxUtilization } = data;
 
   // La vista operativa parte en la semana actual; el historial queda
@@ -147,13 +155,23 @@ export function OccupancyTimeline({ data }: { data: TimelineData }) {
                     return (
                       <td key={a.id} className="p-[1px]">
                         <Link
-                          href={`/planner/sector/${a.id}?week=${w.campaignWeek}`}
+                          href={
+                            scenarioId
+                              ? `/planner/sector/${a.id}?week=${w.campaignWeek}&escenario=${scenarioId}`
+                              : `/planner/sector/${a.id}?week=${w.campaignWeek}`
+                          }
                           className={cn(
-                            "flex h-6 items-center justify-center rounded-sm tabular-nums transition-transform hover:scale-[1.04]",
+                            "relative flex h-6 items-center justify-center rounded-sm tabular-nums transition-transform hover:scale-[1.04]",
                             heatTone(pct, maxUtilization),
                           )}
-                          title={`${a.name} · S${w.week} ${w.year}: ${trays.toLocaleString("es-CL")} / ${a.capacityTrays.toLocaleString("es-CL")} bandejas (${pct.toFixed(1)}%) — ver layout`}
+                          title={`${a.name} · S${w.week} ${w.year}: ${trays.toLocaleString("es-CL")} / ${a.capacityTrays.toLocaleString("es-CL")} bandejas (${pct.toFixed(1)}%)${pct > 100 ? " — hay lotes por asignar" : ""}`}
                         >
+                          {pct > 100 ? (
+                            <AlertTriangle
+                              className="absolute left-0.5 top-0.5 h-2.5 w-2.5"
+                              aria-label="Lotes por asignar"
+                            />
+                          ) : null}
                           {pct > 0 ? `${Math.round(pct)}%` : "·"}
                         </Link>
                       </td>
@@ -174,6 +192,10 @@ export function OccupancyTimeline({ data }: { data: TimelineData }) {
             {item.label.replace("{max}", String(Math.round(maxUtilization * 100)))}
           </span>
         ))}
+        <span className="flex items-center gap-1.5">
+          <AlertTriangle className="h-3 w-3" />
+          &gt;100% · lotes por asignar
+        </span>
       </div>
     </div>
   );

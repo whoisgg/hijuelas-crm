@@ -70,7 +70,7 @@ export default async function OcupacionPage({
       />
       <div className="mt-4">
         {data ? (
-          <OccupancyTimeline data={data} />
+          <OccupancyTimeline data={data} scenarioId={scenarioId} />
         ) : (
           <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
             No hay lotes cargados aún.{" "}

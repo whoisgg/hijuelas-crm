@@ -130,6 +130,223 @@ export async function updateScenarioLot(
   return { ok: true };
 }
 
+/**
+ * Mesa de trabajo: mueve lotes del escenario de un sector a otro (misma
+ * etapa), cambiando el área de la etapa que los ubica en el sector origen.
+ * Redistribuye el sobrecupo sin tocar el plan real.
+ */
+export type MoveScenarioLotsInput = {
+  scenarioId: number;
+  moves: { lotId: number; stage: "rooting" | "maturation" | "predispatch" }[];
+  targetAreaId: number;
+};
+
+export async function moveScenarioLotsToArea(
+  input: MoveScenarioLotsInput,
+): Promise<{ ok: boolean; moved: number; error?: string }> {
+  const { supabase } = await requireAccess();
+  if (!input.moves.length) return { ok: false, moved: 0, error: "Nada que mover." };
+
+  const { data: target } = await supabase
+    .from("planner_areas")
+    .select("id, stage")
+    .eq("id", input.targetAreaId)
+    .maybeSingle();
+  if (!target) return { ok: false, moved: 0, error: "Sector destino no existe." };
+
+  let moved = 0;
+  for (const m of input.moves) {
+    const col = `${m.stage}_area_id` as const;
+    const { error } = await supabase
+      .from("planner_scenario_lots")
+      .update({ [col]: input.targetAreaId })
+      .eq("id", m.lotId)
+      .eq("scenario_id", input.scenarioId);
+    if (error) return { ok: false, moved, error: error.message };
+    moved++;
+  }
+
+  // La ruta del sector es force-dynamic y el cliente hace router.refresh(),
+  // así que basta con revalidar el detalle del escenario.
+  revalidatePath(`/planner/simulador/${input.scenarioId}`);
+  return { ok: true, moved };
+}
+
+/**
+ * Mueve una porción (cantidad ajustable de bandejas) de un lote del escenario
+ * a otro sector de la misma etapa. Si mueve el lote completo, sólo cambia el
+ * área de la etapa; si mueve una parte, parte el lote (crea uno nuevo con la
+ * porción movida y reduce el original). El destino lo recibe en su inbox.
+ */
+export async function moveScenarioLotPortion(input: {
+  scenarioId: number;
+  lotId: number;
+  stage: "rooting" | "maturation" | "predispatch";
+  trays: number;
+  targetAreaId: number;
+}): Promise<{ ok: boolean; split?: boolean; error?: string }> {
+  const { supabase } = await requireAccess();
+
+  const { data: lot } = await supabase
+    .from("planner_scenario_lots")
+    .select("*")
+    .eq("id", input.lotId)
+    .eq("scenario_id", input.scenarioId)
+    .maybeSingle();
+  if (!lot) return { ok: false, error: "Lote no encontrado." };
+
+  const { data: target } = await supabase
+    .from("planner_areas")
+    .select("id, stage")
+    .eq("id", input.targetAreaId)
+    .maybeSingle();
+  if (!target) return { ok: false, error: "Sector destino no existe." };
+
+  const total = lot.trays ?? 0;
+  const move = Math.max(0, Math.min(Math.trunc(input.trays), total));
+  if (move <= 0) return { ok: false, error: "Cantidad inválida." };
+
+  const col = `${input.stage}_area_id` as const;
+
+  // Lote completo → sólo re-apuntar la etapa y soltar el pin (cambió de sector).
+  if (move >= total) {
+    const { error } = await supabase
+      .from("planner_scenario_lots")
+      .update({ [col]: input.targetAreaId })
+      .eq("id", input.lotId)
+      .eq("scenario_id", input.scenarioId);
+    if (error) return { ok: false, error: error.message };
+    await supabase
+      .from("planner_scenario_lot_pins")
+      .delete()
+      .eq("scenario_id", input.scenarioId)
+      .eq("scenario_lot_id", input.lotId)
+      .eq("stage", input.stage);
+    revalidatePath(`/planner/simulador/${input.scenarioId}`);
+    return { ok: true, split: false };
+  }
+
+  // Porción → partir el lote: nuevo lote con lo movido, original reducido.
+  const frac = move / total;
+  const movedPlants = Math.round((lot.plants ?? 0) * frac);
+  const rest = { ...(lot as Record<string, unknown>) };
+  delete rest.id;
+  delete rest.created_at;
+  const { error: insertError } = await supabase
+    .from("planner_scenario_lots")
+    .insert({
+      ...rest,
+      lot_code: `${lot.lot_code}·M`,
+      trays: move,
+      plants: movedPlants,
+      [col]: input.targetAreaId,
+    });
+  if (insertError) return { ok: false, error: insertError.message };
+
+  const { error: updateError } = await supabase
+    .from("planner_scenario_lots")
+    .update({ trays: total - move, plants: (lot.plants ?? 0) - movedPlants })
+    .eq("id", input.lotId)
+    .eq("scenario_id", input.scenarioId);
+  if (updateError) return { ok: false, error: updateError.message };
+
+  revalidatePath(`/planner/simulador/${input.scenarioId}`);
+  return { ok: true, split: true };
+}
+
+/**
+ * Merma: descarta una cantidad de bandejas del lote en el escenario (plantas
+ * perdidas / bajas). Si merma el lote completo, lo elimina; si es parcial,
+ * reduce las bandejas y plantas. No toca el plan real (es la mesa de trabajo).
+ */
+export async function mermarScenarioLotPortion(input: {
+  scenarioId: number;
+  lotId: number;
+  stage: "rooting" | "maturation" | "predispatch";
+  trays: number;
+}): Promise<{ ok: boolean; full?: boolean; error?: string }> {
+  const { supabase } = await requireAccess();
+
+  const { data: lot } = await supabase
+    .from("planner_scenario_lots")
+    .select("id, trays, plants")
+    .eq("id", input.lotId)
+    .eq("scenario_id", input.scenarioId)
+    .maybeSingle();
+  if (!lot) return { ok: false, error: "Lote no encontrado." };
+
+  const total = lot.trays ?? 0;
+  const merma = Math.max(0, Math.min(Math.trunc(input.trays), total));
+  if (merma <= 0) return { ok: false, error: "Cantidad inválida." };
+
+  // Merma total → eliminar el lote (y sus pins) del escenario.
+  if (merma >= total) {
+    await supabase
+      .from("planner_scenario_lot_pins")
+      .delete()
+      .eq("scenario_id", input.scenarioId)
+      .eq("scenario_lot_id", input.lotId);
+    const { error } = await supabase
+      .from("planner_scenario_lots")
+      .delete()
+      .eq("id", input.lotId)
+      .eq("scenario_id", input.scenarioId);
+    if (error) return { ok: false, error: error.message };
+    revalidatePath(`/planner/simulador/${input.scenarioId}`);
+    return { ok: true, full: true };
+  }
+
+  // Merma parcial → reducir bandejas y plantas proporcionalmente.
+  const frac = merma / total;
+  const mermaPlants = Math.round((lot.plants ?? 0) * frac);
+  const { error } = await supabase
+    .from("planner_scenario_lots")
+    .update({ trays: total - merma, plants: (lot.plants ?? 0) - mermaPlants })
+    .eq("id", input.lotId)
+    .eq("scenario_id", input.scenarioId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/planner/simulador/${input.scenarioId}`);
+  return { ok: true, full: false };
+}
+
+/**
+ * Fija (pin) un lote a un mesón dentro del escenario: la proyección lo
+ * coloca primero ahí y el FIFO rellena el resto. locationId null quita el pin.
+ */
+export async function pinLotToLocation(input: {
+  scenarioId: number;
+  lotId: number;
+  stage: "rooting" | "maturation" | "predispatch";
+  locationId: number | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { supabase } = await requireAccess();
+
+  if (input.locationId === null) {
+    const { error } = await supabase
+      .from("planner_scenario_lot_pins")
+      .delete()
+      .eq("scenario_id", input.scenarioId)
+      .eq("scenario_lot_id", input.lotId)
+      .eq("stage", input.stage);
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase.from("planner_scenario_lot_pins").upsert(
+      {
+        scenario_id: input.scenarioId,
+        scenario_lot_id: input.lotId,
+        stage: input.stage,
+        location_id: input.locationId,
+      },
+      { onConflict: "scenario_lot_id,stage" },
+    );
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath(`/planner/simulador/${input.scenarioId}`);
+  return { ok: true };
+}
+
 /** Nueva demanda what-if: crea un lote en el escenario derivando las etapas
  * de la ficha de la especie. */
 export type CreateScenarioLotInput = {

@@ -14,7 +14,10 @@ export type LayoutLocation = {
   code: string;
   side: string | null;
   rowNum: number | null;
+  /** capacidad física del mesón (Hotelería) — base de la vista "Hoy" */
   capacityTrays: number | null;
+  /** cuota de la capacidad de planificación — base de la Proyección */
+  planCapacityTrays: number | null;
   trays: number;
   plants: number;
   species: { name: string; trays: number }[];
@@ -31,54 +34,39 @@ export type SectorLayoutData = {
   modules: LayoutModule[];
   snapshotDate: string | null;
   snapshotFile: string | null;
-  totals: { trays: number; capacity: number };
+  totals: { trays: number; physicalCapacity: number; planCapacity: number };
 };
 
 export type SectorPlanFill = {
-  /** location id → ocupación proyectada (base real + llegadas) */
-  byLocation: Map<number, { trays: number; detail: string }>;
+  /** location id → ocupación proyectada con el detalle de lotes FIFO */
+  byLocation: Map<number, { trays: number; parts: { label: string; trays: number }[] }>;
   overflow: { label: string; trays: number }[];
   overflowTrays: number;
 };
 
-type StageLot = {
-  label: string;
-  species: string;
-  trays: number;
-  start: number;
-  end: number;
-};
-
 /**
- * Proyección del plano anclada en la realidad:
- *
- *  1. La base es la foto real por mesón (último snapshot) — lo que está
- *     puesto no se reordena.
- *  2. Hacia adelante, la base se va vaciando según el plan de salida de su
- *     especie (si los lotes ya activos de esa especie terminan la etapa,
- *     esos mesones se liberan proporcionalmente).
- *  3. Los lotes que RECIÉN llegan (inician etapa después de la semana
- *     actual) rellenan los vacíos en orden FIFO, sin tocar lo existente.
- *  4. Lo que no cabe queda como sobrecupo.
- *
- * En la semana actual el resultado es exactamente la foto real.
+ * Proyección "agarrar todo y repartir": los lotes que el plan pone en el
+ * área esa semana se redistribuyen FIFO (por semana de llegada a la etapa)
+ * sobre las cuotas de planificación de los mesones, en su orden físico.
+ * Por construcción cuadra con la timeline: si el plan marca 114%, el plano
+ * se llena y el 14% restante queda listado como sobrecupo.
  */
 export async function getSectorPlanFill(
   supabase: SupabaseClient<Database>,
   areaId: number,
   targetWeek: number,
-  currentWeek: number,
   layout: SectorLayoutData,
 ): Promise<SectorPlanFill> {
   const stageQuery = (stage: "rooting" | "maturation" | "predispatch") =>
     supabase
       .from("planner_lots")
       .select(
-        `lot_code, trays, ${stage}_start_week, ${stage}_end_week, planner_species(name), planner_varieties(name)`,
+        `lot_code, trays, ${stage}_start_week, planner_species(name), planner_varieties(name)`,
       )
       .eq(`${stage}_area_id`, areaId)
       .eq("status", "ACTIVO")
-      .not(`${stage}_start_week`, "is", null)
+      .lte(`${stage}_start_week`, targetWeek)
+      .gte(`${stage}_end_week`, targetWeek)
       .limit(2000);
 
   const [rooting, maturation, predispatch] = await Promise.all([
@@ -88,100 +76,33 @@ export async function getSectorPlanFill(
   ]);
 
   type Rel = { name: string } | null;
-  const lots: StageLot[] = [];
-  for (const [rows, startKey, endKey] of [
-    [rooting.data, "rooting_start_week", "rooting_end_week"],
-    [maturation.data, "maturation_start_week", "maturation_end_week"],
-    [predispatch.data, "predispatch_start_week", "predispatch_end_week"],
+  const lots: AllocLot[] = [];
+  for (const [rows, startKey] of [
+    [rooting.data, "rooting_start_week"],
+    [maturation.data, "maturation_start_week"],
+    [predispatch.data, "predispatch_start_week"],
   ] as const) {
     for (const row of rows ?? []) {
       const r = row as unknown as Record<string, unknown>;
       const species = (r.planner_species as Rel)?.name ?? "¿?";
       const variety = (r.planner_varieties as Rel)?.name;
+      const trays = (r.trays as number | null) ?? 0;
+      if (trays <= 0) continue;
       lots.push({
         label: `${species}${variety ? ` ${variety}` : ""} · ${r.lot_code as string}`,
-        species: species.toLowerCase(),
-        trays: (r.trays as number | null) ?? 0,
-        start: (r[startKey] as number | null) ?? 0,
-        end: (r[endKey] as number | null) ?? 0,
+        trays,
+        arrivalWeek: (r[startKey] as number | null) ?? targetWeek,
       });
     }
   }
 
-  // Factor de permanencia por especie: cuánto de lo que HOY está puesto
-  // sigue en el área en la semana objetivo, según los lotes ya activos.
-  const oldActive = (species: string, week: number) =>
-    lots
-      .filter(
-        (l) =>
-          l.species === species &&
-          l.start <= currentWeek &&
-          l.start <= week &&
-          l.end >= week,
-      )
-      .reduce((s, l) => s + l.trays, 0);
-
-  const stayFactor = new Map<string, number>();
-  const speciesInSnapshot = new Set<string>();
-  for (const m of layout.modules) {
-    for (const loc of m.locations) {
-      for (const s of loc.species) speciesInSnapshot.add(s.name.toLowerCase());
-    }
-  }
-  for (const sp of speciesInSnapshot) {
-    const now = oldActive(sp, currentWeek);
-    if (now <= 0) {
-      // Especie en la foto sin plan asociado: se asume que permanece.
-      stayFactor.set(sp, 1);
-    } else {
-      stayFactor.set(sp, Math.min(1, oldActive(sp, targetWeek) / now));
-    }
-  }
-
-  // Base real por mesón, escalada por permanencia de cada especie.
-  const base = new Map<number, { trays: number; parts: string[] }>();
-  const orderedLocations: { id: number; capacityTrays: number }[] = [];
-  for (const m of layout.modules) {
-    for (const loc of m.locations) {
-      orderedLocations.push({ id: loc.id, capacityTrays: loc.capacityTrays ?? 0 });
-      let total = 0;
-      const parts: string[] = [];
-      for (const s of loc.species) {
-        const kept = Math.round(s.trays * (stayFactor.get(s.name.toLowerCase()) ?? 1));
-        if (kept > 0) {
-          total += kept;
-          parts.push(`${s.name}: ${kept}`);
-        }
-      }
-      base.set(loc.id, { trays: total, parts });
-    }
-  }
-
-  // Llegadas nuevas: lotes que inician etapa DESPUÉS de la semana actual y
-  // están activos en la semana objetivo → rellenan los vacíos FIFO.
-  const arrivals: AllocLot[] = lots
-    .filter((l) => l.start > currentWeek && l.start <= targetWeek && l.end >= targetWeek && l.trays > 0)
-    .map((l) => ({ label: l.label, trays: l.trays, arrivalWeek: l.start }));
-
-  const gaps = orderedLocations.map((l) => ({
-    id: l.id,
-    capacityTrays: Math.max(0, l.capacityTrays - (base.get(l.id)?.trays ?? 0)),
-  }));
-  const alloc = allocateFifo(gaps, arrivals);
-
-  const byLocation = new Map<number, { trays: number; detail: string }>();
-  for (const loc of orderedLocations) {
-    const b = base.get(loc.id) ?? { trays: 0, parts: [] };
-    const a = alloc.byLocation.get(loc.id);
-    const parts = [...b.parts, ...(a?.parts.map((p) => `+ ${p.label}: ${p.trays}`) ?? [])];
-    byLocation.set(loc.id, {
-      trays: b.trays + (a?.trays ?? 0),
-      detail: parts.join(" · "),
-    });
-  }
+  const orderedLocations = layout.modules.flatMap((m) =>
+    m.locations.map((l) => ({ id: l.id, capacityTrays: l.planCapacityTrays ?? 0 })),
+  );
+  const alloc = allocateFifo(orderedLocations, lots);
 
   return {
-    byLocation,
+    byLocation: alloc.byLocation,
     overflow: alloc.overflow,
     overflowTrays: alloc.overflowTrays,
   };
@@ -258,7 +179,8 @@ export async function getSectorLayout(
       : 1;
 
   let totalTrays = 0;
-  let totalCapacity = 0;
+  let totalPhysical = 0;
+  let totalPlanCapacity = 0;
   const mods: LayoutModule[] = (modules ?? []).map((m) => ({
     id: m.id,
     name: m.name,
@@ -277,13 +199,15 @@ export async function getSectorLayout(
         const planCapacity =
           l.capacity_trays !== null ? Math.round(l.capacity_trays * scale) : null;
         totalTrays += occ?.trays ?? 0;
-        totalCapacity += planCapacity ?? 0;
+        totalPhysical += l.capacity_trays ?? 0;
+        totalPlanCapacity += planCapacity ?? 0;
         return {
           id: l.id,
           code: l.code,
           side: l.side,
           rowNum: l.row_num,
-          capacityTrays: planCapacity,
+          capacityTrays: l.capacity_trays,
+          planCapacityTrays: planCapacity,
           trays: occ?.trays ?? 0,
           plants: occ?.plants ?? 0,
           species: [...(occ?.species ?? new Map())]
@@ -303,6 +227,10 @@ export async function getSectorLayout(
     modules: mods.filter((m) => m.locations.length > 0),
     snapshotDate: lastUpload?.created_at ?? null,
     snapshotFile: lastUpload?.file_name ?? null,
-    totals: { trays: totalTrays, capacity: totalCapacity },
+    totals: {
+      trays: totalTrays,
+      physicalCapacity: totalPhysical,
+      planCapacity: totalPlanCapacity,
+    },
   };
 }

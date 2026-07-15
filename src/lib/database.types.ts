@@ -62,6 +62,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean
+          is_module_builder: boolean
           organization_id: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -77,6 +78,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean
+          is_module_builder?: boolean
           organization_id?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -92,6 +94,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean
+          is_module_builder?: boolean
           organization_id?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -937,6 +940,133 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      custom_fields: {
+        Row: {
+          id: number
+          key: string
+          label: string
+          master_source: string | null
+          module_id: number
+          options: Json
+          required: boolean
+          sort: number
+          type: string
+        }
+        Insert: {
+          id?: number
+          key: string
+          label: string
+          master_source?: string | null
+          module_id: number
+          options?: Json
+          required?: boolean
+          sort?: number
+          type: string
+        }
+        Update: {
+          id?: number
+          key?: string
+          label?: string
+          master_source?: string | null
+          module_id?: number
+          options?: Json
+          required?: boolean
+          sort?: number
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_fields_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "custom_modules"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_modules: {
+        Row: {
+          created_at: string
+          description: string | null
+          icon: string
+          id: number
+          key: string
+          name: string
+          owner_id: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          icon?: string
+          id?: number
+          key: string
+          name: string
+          owner_id?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          icon?: string
+          id?: number
+          key?: string
+          name?: string
+          owner_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_modules_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_records: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: number
+          module_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: number
+          module_id: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: number
+          module_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "custom_records_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "custom_records_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "custom_modules"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deliveries: {
         Row: {
@@ -2046,6 +2176,55 @@ export type Database = {
         }
         Relationships: []
       }
+      planner_scenario_lot_pins: {
+        Row: {
+          created_at: string
+          id: number
+          location_id: number
+          scenario_id: number
+          scenario_lot_id: number
+          stage: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          location_id: number
+          scenario_id: number
+          scenario_lot_id: number
+          stage: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          location_id?: number
+          scenario_id?: number
+          scenario_lot_id?: number
+          stage?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_scenario_lot_pins_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "planner_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_scenario_lot_pins_scenario_id_fkey"
+            columns: ["scenario_id"]
+            isOneToOne: false
+            referencedRelation: "planner_scenarios"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_scenario_lot_pins_scenario_lot_id_fkey"
+            columns: ["scenario_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_scenario_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planner_scenario_lots: {
         Row: {
           end_week: number | null
@@ -2176,6 +2355,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: number
+          is_working: boolean
           name: string
           status: string
         }
@@ -2184,6 +2364,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: number
+          is_working?: boolean
           name: string
           status?: string
         }
@@ -2192,6 +2373,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: number
+          is_working?: boolean
           name?: string
           status?: string
         }
@@ -2344,6 +2526,41 @@ export type Database = {
             columns: ["species_id"]
             isOneToOne: false
             referencedRelation: "planner_species"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_module_requests: {
+        Row: {
+          created_at: string
+          description: string
+          id: number
+          name: string
+          requested_by: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          id?: number
+          name: string
+          requested_by?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          id?: number
+          name?: string
+          requested_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_module_requests_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
             referencedColumns: ["id"]
           },
         ]
@@ -2784,6 +3001,7 @@ export type Database = {
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
+      is_builder: { Args: { uid: string }; Returns: boolean }
       is_finance: { Args: never; Returns: boolean }
       is_sales: { Args: never; Returns: boolean }
       list_client_share_links: { Args: { p_client_id?: string }; Returns: Json }
