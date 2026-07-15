@@ -207,7 +207,7 @@ export default async function SharedClientPage({
             <Building2 className="h-5 w-5" />
           </div>
           <span className="text-sm font-semibold text-muted-foreground">
-            Hijuelas Growth
+            Grupo Hijuelas
           </span>
         </div>
         <Badge variant="outline">Ficha pública</Badge>

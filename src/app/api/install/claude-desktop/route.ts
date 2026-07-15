@@ -21,12 +21,12 @@ export async function GET(req: Request): Promise<Response> {
     display_name: "Hijuelas CRM",
     version: "1.0.0",
     description:
-      "Conecta Claude al CRM de Hijuelas Growth: consulta contratos, clientes, oportunidades, pagos y variedades. Escritura limitada al rol mcp_editor/admin.",
+      "Conecta Claude a Hijuelas One: consulta contratos, clientes, oportunidades, pagos y variedades. Escritura limitada al rol mcp_editor/admin.",
     long_description:
       "Este extension proxyea conversaciones con Claude al endpoint MCP del CRM. Requiere un token personal — generalo en " +
       origin +
       "/compartir → Tab \"Conectar Claude\".",
-    author: { name: "Hijuelas Growth" },
+    author: { name: "Grupo Hijuelas" },
     homepage: origin,
     server: {
       type: "node",

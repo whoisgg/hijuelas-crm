@@ -17,7 +17,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   APP_NAME,
-  APPS,
+  liveModulesForRole,
   moduleForPathname,
   QUICK_CREATE_ITEMS,
 } from "@/lib/constants";
@@ -39,9 +39,11 @@ export function Topbar({ userEmail, role = null }: TopbarProps) {
   const initial = (userEmail?.[0] ?? "U").toUpperCase();
   const pathname = usePathname();
   const activeModule = moduleForPathname(pathname);
-  const activeApp = APPS.find((a) => a.key === activeModule) ?? APPS[0];
-  // El logo lleva al home de la app activa; el switcher cambia de app.
-  const homeHref = activeApp.href;
+  const liveModules = liveModulesForRole(role);
+  const activeApp =
+    liveModules.find((m) => m.navModule === activeModule) ?? liveModules[0];
+  // El logo lleva al home del módulo activo; el switcher cambia de módulo.
+  const homeHref = activeApp?.href ?? "/apps";
   const showQuickCreate = activeModule === "comercial";
 
   const handleSignOut = async () => {
@@ -63,9 +65,11 @@ export function Topbar({ userEmail, role = null }: TopbarProps) {
         <Sprout className="h-5 w-5 text-primary" />
         <span className="hidden sm:inline">
           {APP_NAME}
-          <span className="ml-1.5 font-normal text-muted-foreground">
-            · {activeApp.label}
-          </span>
+          {activeApp ? (
+            <span className="ml-1.5 font-normal text-muted-foreground">
+              · {activeApp.label}
+            </span>
+          ) : null}
         </span>
       </Link>
 

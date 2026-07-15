@@ -34,7 +34,7 @@ export async function GET(req: Request): Promise<Response> {
   <h1>${ok ? "Consentimiento otorgado" : "No se pudo otorgar el consentimiento"}</h1>
   <p>${
     ok
-      ? "DocuSign ya autorizó la integración <b>HijuelasGrowth</b> (scope <code>signature impersonation</code>). Podés cerrar esta pestaña; la app Hijuelas Growth ya puede enviar contratos a firmar."
+      ? "DocuSign ya autorizó la integración <b>HijuelasGrowth</b> (scope <code>signature impersonation</code>). Podés cerrar esta pestaña; la app Hijuelas One ya puede enviar contratos a firmar."
       : `Error: <code>${error}</code>. Revisá que el Integration Key y el redirect URI coincidan, y volvé a intentar.`
   }</p>
 </div></body></html>`;

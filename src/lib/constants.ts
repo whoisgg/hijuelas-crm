@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRightLeft,
+  Droplets,
   LayoutDashboard,
   Users,
   FileText,
@@ -11,15 +12,16 @@ import {
   FileUp,
   FlaskConical,
   Layers,
+  SprayCan,
   Sprout,
   Share2,
   TrendingUp,
   UserCheck,
 } from "lucide-react";
 
-export const APP_NAME = "Grupo Hijuelas";
+export const APP_NAME = "Hijuelas One";
 export const APP_DESCRIPTION =
-  "Plataforma integral de Grupo Hijuelas — ventas, clientes y producción.";
+  "Plataforma integral de Grupo Hijuelas — comercial y operaciones agrícolas.";
 
 export type NavModule = "comercial" | "produccion";
 
@@ -51,37 +53,97 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 /**
- * Apps de la suite. Flujo: login → /apps (selector) → cada app con su nav.
+ * Registro de módulos de la plataforma (tipo Odoo/SAP). Un módulo puede ser
+ * nativo (ruta interna con su propia nav), un enlace externo (Jira, SAP,
+ * Power BI) o estar "próximamente". El selector `/apps` y el switcher se
+ * dibujan desde acá — agregar un módulo es una entrada más en esta lista.
+ *
+ * Flujo: login → /apps (selector) → módulo nativo con su nav, enlace externo
+ * en pestaña nueva, o "próximamente" deshabilitado.
  */
-export type AppDef = {
-  key: NavModule;
+export type ModuleGroup = "comercial" | "agricola" | "plataforma";
+export type ModuleStatus = "live" | "soon" | "external";
+
+export type AppModule = {
+  key: string;
   label: string;
   description: string;
-  href: string;
   icon: LucideIcon;
+  group: ModuleGroup;
+  status: ModuleStatus;
+  /** ruta interna (status live) */
+  href?: string;
+  /** URL externa (status external) — abre en pestaña nueva */
+  url?: string;
+  /** roles que ven el módulo; "all" = cualquier autenticado. admin ve todo. */
+  roles: string[] | "all";
+  /** módulo de nav interno (para nativos con sidebar propio) */
+  navModule?: NavModule;
 };
 
-export const APPS: AppDef[] = [
+export const MODULE_GROUPS: { key: ModuleGroup; label: string }[] = [
+  { key: "comercial", label: "Comercial" },
+  { key: "agricola", label: "Operaciones agrícolas" },
+];
+
+// Cada módulo maneja sus propios maestros (conectados entre sí), pero se ven
+// y editan dentro del módulo — no hay un módulo "Maestros" separado.
+export const MODULES: AppModule[] = [
   {
-    key: "comercial",
+    key: "crm",
     label: "CRM",
     description: "Ventas, clientes, oportunidades y forecast.",
-    href: "/dashboard",
     icon: Briefcase,
+    group: "comercial",
+    status: "live",
+    href: "/dashboard",
+    roles: ["admin", "sales", "sales_support", "finance", "viewer", "mcp_editor"],
+    navModule: "comercial",
   },
   {
-    key: "produccion",
+    key: "planner",
     label: "Planner",
-    description: "Planificación de producción del vivero.",
-    href: "/planner",
+    description: "Planificación y ocupación del vivero.",
     icon: CalendarRange,
+    group: "agricola",
+    status: "live",
+    href: "/planner",
+    roles: ["admin", "produccion"],
+    navModule: "produccion",
+  },
+  {
+    key: "riego",
+    label: "Riego",
+    description: "Programación y órdenes de riego por cuartel.",
+    icon: Droplets,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
+  },
+  {
+    key: "mano_obra",
+    label: "Mano de Obra",
+    description: "Asistencia, dotación, asignación a labores y centros de costo.",
+    icon: Users,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
+  },
+  {
+    key: "fitosanitario",
+    label: "Fitosanitario",
+    description: "Aplicaciones, fertilización, carencias y registro SAG.",
+    icon: SprayCan,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
   },
 ];
 
 /**
- * Módulos (apps) disponibles según rol. `produccion` ve solo el Planner;
- * `admin` ve todo; el resto de los roles (sales, finance, viewer, …)
- * mantiene el comportamiento histórico: app comercial completa.
+ * Módulos de nav internos disponibles según rol. `produccion` ve solo el
+ * Planner; `admin` ve todo; el resto de los roles mantiene el comportamiento
+ * histórico: app comercial completa.
  */
 export function navModulesForRole(role: string | null | undefined): NavModule[] {
   if (role === "admin") return ["comercial", "produccion"];
@@ -89,9 +151,24 @@ export function navModulesForRole(role: string | null | undefined): NavModule[] 
   return ["comercial"];
 }
 
-export function appsForRole(role: string | null | undefined): AppDef[] {
-  const modules = navModulesForRole(role);
-  return APPS.filter((app) => modules.includes(app.key));
+/** ¿El rol ve este módulo? admin ve todo; "all" = cualquiera. */
+export function roleCanSeeModule(
+  role: string | null | undefined,
+  m: AppModule,
+): boolean {
+  if (role === "admin") return true;
+  if (m.roles === "all") return true;
+  return !!role && m.roles.includes(role);
+}
+
+/** Módulos visibles para el rol (todos los estados). */
+export function modulesForRole(role: string | null | undefined): AppModule[] {
+  return MODULES.filter((m) => roleCanSeeModule(role, m));
+}
+
+/** Módulos nativos "live" — para el switcher de apps. */
+export function liveModulesForRole(role: string | null | undefined): AppModule[] {
+  return modulesForRole(role).filter((m) => m.status === "live");
 }
 
 /** App activa según la URL: todo lo que cuelga de /planner es producción. */
