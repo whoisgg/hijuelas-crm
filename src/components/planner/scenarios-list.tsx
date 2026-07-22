@@ -28,14 +28,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  createScenario,
+  createSimulation,
   deleteScenario,
   updateScenarioStatus,
 } from "@/lib/actions/planner-scenarios";
 
 /**
- * Kanban de escenarios — misma lógica que el tablero de oportunidades del
- * CRM: columnas por estado, cards arrastrables con override optimista.
+ * Kanban de simulaciones — misma lógica que el tablero de oportunidades del
+ * CRM: columnas por estado, cards arrastrables con override optimista. El
+ * estado controla la carga a Ocupación: desde "evaluacion" se suma al plan.
  */
 
 export type ScenarioRow = {
@@ -46,13 +47,14 @@ export type ScenarioRow = {
   created_at: string;
   created_by_name: string | null;
   lots_count: number;
+  trays_count?: number;
 };
 
 const COLUMNS = [
-  { key: "borrador", label: "Borrador" },
-  { key: "evaluacion", label: "En evaluación" },
-  { key: "aprobado", label: "Aprobado" },
-  { key: "descartado", label: "Descartado" },
+  { key: "borrador", label: "Borrador", loads: false },
+  { key: "evaluacion", label: "En evaluación", loads: true },
+  { key: "aprobado", label: "Confirmada", loads: true },
+  { key: "descartado", label: "Descartada", loads: false },
 ] as const;
 
 export function ScenariosList({ scenarios }: { scenarios: ScenarioRow[] }) {
@@ -101,10 +103,10 @@ export function ScenariosList({ scenarios }: { scenarios: ScenarioRow[] }) {
   };
 
   const remove = async (s: ScenarioRow) => {
-    if (!window.confirm(`¿Eliminar el escenario "${s.name}"?`)) return;
+    if (!window.confirm(`¿Eliminar la simulación "${s.name}" y sus órdenes?`)) return;
     const res = await deleteScenario(s.id);
     if (res.ok) {
-      toast.success("Escenario eliminado.");
+      toast.success("Simulación eliminada.");
       router.refresh();
     } else {
       toast.error(res.error ?? "No se pudo eliminar.");
@@ -117,7 +119,7 @@ export function ScenariosList({ scenarios }: { scenarios: ScenarioRow[] }) {
     <div className="space-y-3">
       <div className="flex justify-end">
         <Button size="sm" onClick={() => setCreating(true)}>
-          <Plus className="h-4 w-4" /> Nuevo escenario
+          <Plus className="h-4 w-4" /> Nueva simulación
         </Button>
       </div>
 
@@ -133,6 +135,7 @@ export function ScenariosList({ scenarios }: { scenarios: ScenarioRow[] }) {
               key={col.key}
               id={col.key}
               label={col.label}
+              loads={col.loads}
               scenarios={scenarios.filter((s) => statusOf(s) === col.key)}
               onDelete={remove}
             />
@@ -151,11 +154,14 @@ export function ScenariosList({ scenarios }: { scenarios: ScenarioRow[] }) {
 function KanbanColumn({
   id,
   label,
+  loads,
   scenarios,
   onDelete,
 }: {
   id: string;
   label: string;
+  /** las simulaciones de esta columna se suman a Ocupación */
+  loads: boolean;
   scenarios: ScenarioRow[];
   onDelete: (s: ScenarioRow) => void;
 }) {
@@ -169,8 +175,16 @@ function KanbanColumn({
       )}
     >
       <div className="flex items-center justify-between px-1">
-        <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
+          {loads ? (
+            <span
+              title="Las simulaciones en este estado se suman a Ocupación."
+              className="rounded bg-emerald-100 px-1 py-0.5 text-[9px] font-semibold normal-case tracking-normal text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+            >
+              se carga
+            </span>
+          ) : null}
         </span>
         <span className="text-xs tabular-nums text-muted-foreground">
           {scenarios.length}
@@ -258,7 +272,11 @@ function ScenarioCard({
         </p>
       ) : null}
       <p className="mt-1.5 text-[11px] text-muted-foreground">
-        {scenario.lots_count.toLocaleString("es-CL")} lotes ·{" "}
+        {scenario.lots_count.toLocaleString("es-CL")} órdenes
+        {scenario.trays_count !== undefined
+          ? ` · ${scenario.trays_count.toLocaleString("es-CL")} band.`
+          : ""}{" "}
+        ·{" "}
         {new Date(scenario.created_at).toLocaleDateString("es-CL", {
           day: "2-digit",
           month: "short",
@@ -278,9 +296,9 @@ function CreateScenarioDialog({ onClose }: { onClose: () => void }) {
   const submit = async () => {
     setSaving(true);
     try {
-      const res = await createScenario(name, description.trim() || null);
+      const res = await createSimulation(name, description.trim() || null);
       if (res.ok && res.id) {
-        toast.success("Escenario creado con la copia del plan vigente.");
+        toast.success("Simulación creada — agrégale órdenes what-if.");
         onClose();
         router.push(`/planner/simulador/${res.id}`);
       } else {
@@ -300,7 +318,7 @@ function CreateScenarioDialog({ onClose }: { onClose: () => void }) {
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nuevo escenario</DialogTitle>
+          <DialogTitle>Nueva simulación</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -309,7 +327,7 @@ function CreateScenarioDialog({ onClose }: { onClose: () => void }) {
               id="sc-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ej: TunelTek atrasado a agosto"
+              placeholder="Ej: Pedido Perú 2027"
               autoFocus
             />
           </div>
@@ -319,19 +337,19 @@ function CreateScenarioDialog({ onClose }: { onClose: () => void }) {
               id="sc-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Qué pregunta responde este escenario"
+              placeholder="Qué demanda representa esta simulación"
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            Se copia el plan vigente como punto de partida y entra al tablero
-            como borrador.
+            Nace vacía y en borrador. Agrégale órdenes what-if adentro; se
+            sumará a Ocupación cuando la muevas a "En evaluación".
           </p>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={onClose} disabled={saving}>
               Cancelar
             </Button>
             <Button onClick={submit} disabled={saving || name.trim().length < 3}>
-              {saving ? "Creando…" : "Crear escenario"}
+              {saving ? "Creando…" : "Crear simulación"}
             </Button>
           </div>
         </div>
