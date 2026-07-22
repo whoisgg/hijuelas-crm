@@ -558,7 +558,7 @@ export async function getTopClients(limit = 5): Promise<TopClient[]> {
   const res = await supabase
     .from("contracts")
     .select(
-      "client_id, total_neto_usd, clients(id, name, countries(name_es))",
+      "client_id, total_neto_usd, clients!contracts_client_id_fkey(id, name, countries(name_es))",
     )
     .gte("signed_at", yearStart)
     .lt("signed_at", nextYearStart)
@@ -645,7 +645,7 @@ export async function getUpcomingDeliveries(weeks = 4): Promise<UpcomingDelivery
   const res = await supabase
     .from("contract_items")
     .select(
-      "id, qty_plants, delivery_year, delivery_week, status, contracts!inner(client_id, clients(name)), varieties(name)",
+      "id, qty_plants, delivery_year, delivery_week, status, contracts!inner(client_id, clients!contracts_client_id_fkey(name)), varieties(name)",
     )
     .eq("delivery_year", year)
     .gte("delivery_week", week)
@@ -783,7 +783,7 @@ export async function getMapData(
   let contractsQ = supabase
     .from("contracts")
     .select(
-      "id, client_id, status, total_neto_usd, organization_id, clients!inner(country_id), contract_items(qty_plants, variety_id, delivery_year, delivery_week, deleted_at, varieties(species_id))",
+      "id, client_id, status, total_neto_usd, organization_id, clients!contracts_client_id_fkey!inner(country_id), contract_items(qty_plants, variety_id, delivery_year, delivery_week, deleted_at, varieties(species_id))",
     )
     .is("deleted_at", null);
 
@@ -860,7 +860,7 @@ export async function getMapData(
     let oppsQ = supabase
       .from("opportunities")
       .select(
-        "id, client_id, estimated_value_usd, probability_pct, organization_id, clients(country_id), opportunity_stages!opportunities_stage_id_fkey(is_won, is_lost), opportunity_items(qty_plants_est, expected_delivery_year, deleted_at, varieties(species_id))",
+        "id, client_id, estimated_value_usd, probability_pct, organization_id, clients!opportunities_client_id_fkey(country_id), opportunity_stages!opportunities_stage_id_fkey(is_won, is_lost), opportunity_items(qty_plants_est, expected_delivery_year, deleted_at, varieties(species_id))",
       )
       .is("deleted_at", null);
 
@@ -1117,7 +1117,7 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
   const itemsRes = await supabase
     .from("contract_items")
     .select(
-      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts(client_id, clients(id, name, country:countries(iso2, name_es)), total_neto_usd)",
+      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts(client_id, clients!contracts_client_id_fkey(id, name, country:countries(iso2, name_es)), total_neto_usd)",
     )
     .eq("variety_id", varietyId)
     .is("deleted_at", null);
@@ -1508,7 +1508,7 @@ export async function getTopRankings(params: {
     .from("contracts")
     .select(
       `id, total_neto_usd, status, client_id,
-       client:clients!inner ( id, name, country:countries ( id, name_es ) ),
+       client:clients!contracts_client_id_fkey!inner ( id, name, country:countries ( id, name_es ) ),
        contract_items ( qty_plants, delivery_year, delivery_week, deleted_at, genetic_program_id )`,
     )
     .is("deleted_at", null)
