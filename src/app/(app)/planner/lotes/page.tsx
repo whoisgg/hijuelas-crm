@@ -4,10 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
-import {
-  getVarietyProgramMap,
-  normalizeVarietyName,
-} from "@/lib/planner/variety-programs";
+import { getProgramByPlannerVarietyId } from "@/lib/planner/variety-programs";
 
 export const metadata = { title: "Lotes" };
 export const dynamic = "force-dynamic";
@@ -30,29 +27,27 @@ export default async function LotesPage() {
     redirect("/dashboard");
   }
 
-  const [{ data: lots }, programByVariety] = await Promise.all([
+  const [{ data: lots }, programByVarietyId] = await Promise.all([
     supabase
       .from("planner_lots")
       .select(
-        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
+        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
       )
       .order("start_week")
       .order("lot_code")
       .limit(2000),
-    getVarietyProgramMap(supabase),
+    getProgramByPlannerVarietyId(supabase),
   ]);
 
   const rows: LotRow[] = (lots ?? []).map((l) => {
     const variety =
-      (l.planner_varieties as unknown as { name: string } | null)?.name ?? null;
+      (l.planner_varieties as unknown as { id: number; name: string } | null) ?? null;
     return {
       id: l.id,
       lot_code: l.lot_code,
       species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
-      variety,
-      program: variety
-        ? (programByVariety.get(normalizeVarietyName(variety)) ?? null)
-        : null,
+      variety: variety?.name ?? null,
+      program: variety ? (programByVarietyId.get(variety.id) ?? null) : null,
       year: l.year,
       start_week: l.start_week,
       end_week: l.end_week,

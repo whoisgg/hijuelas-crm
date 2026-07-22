@@ -8,10 +8,7 @@ import { PageHeader } from "@/components/page-header";
 import { AddScenarioLot } from "@/components/planner/add-scenario-lot";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
 import { getTimelineData } from "@/lib/planner/occupancy-data";
-import {
-  getVarietyProgramMap,
-  normalizeVarietyName,
-} from "@/lib/planner/variety-programs";
+import { getProgramByPlannerVarietyId } from "@/lib/planner/variety-programs";
 
 export const metadata = { title: "Simulación" };
 export const dynamic = "force-dynamic";
@@ -64,7 +61,7 @@ export default async function SimulacionPage({
     supabase
       .from("planner_scenario_lots")
       .select(
-        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(name), rooting:planner_areas!planner_scenario_lots_rooting_area_id_fkey(name)",
+        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_scenario_lots_rooting_area_id_fkey(name)",
       )
       .eq("scenario_id", scenarioId)
       .order("start_week")
@@ -72,19 +69,17 @@ export default async function SimulacionPage({
     supabase.from("planner_species").select("id, name").eq("active", true).order("name"),
     getTimelineData(supabase),
   ]);
-  const programByVariety = await getVarietyProgramMap(supabase);
+  const programByVarietyId = await getProgramByPlannerVarietyId(supabase);
 
   const lotRows: LotRow[] = (lots ?? []).map((l) => {
     const variety =
-      (l.planner_varieties as unknown as { name: string } | null)?.name ?? null;
+      (l.planner_varieties as unknown as { id: number; name: string } | null) ?? null;
     return {
       id: l.id,
       lot_code: l.lot_code,
       species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
-      variety,
-      program: variety
-        ? (programByVariety.get(normalizeVarietyName(variety)) ?? null)
-        : null,
+      variety: variety?.name ?? null,
+      program: variety ? (programByVarietyId.get(variety.id) ?? null) : null,
       year: l.year,
       start_week: l.start_week,
       end_week: l.end_week,

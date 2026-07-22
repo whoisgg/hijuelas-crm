@@ -2397,6 +2397,7 @@ export type Database = {
           color: string | null
           family: string | null
           id: number
+          master_species_id: string | null
           maturation_area_id: number | null
           maturation_weeks: number
           name: string
@@ -2413,6 +2414,7 @@ export type Database = {
           color?: string | null
           family?: string | null
           id?: number
+          master_species_id?: string | null
           maturation_area_id?: number | null
           maturation_weeks?: number
           name: string
@@ -2429,6 +2431,7 @@ export type Database = {
           color?: string | null
           family?: string | null
           id?: number
+          master_species_id?: string | null
           maturation_area_id?: number | null
           maturation_weeks?: number
           name?: string
@@ -2508,18 +2511,21 @@ export type Database = {
         Row: {
           code: string | null
           id: number
+          master_variety_id: string | null
           name: string
           species_id: number
         }
         Insert: {
           code?: string | null
           id?: number
+          master_variety_id?: string | null
           name: string
           species_id: number
         }
         Update: {
           code?: string | null
           id?: number
+          master_variety_id?: string | null
           name?: string
           species_id?: number
         }
@@ -2529,6 +2535,13 @@ export type Database = {
             columns: ["species_id"]
             isOneToOne: false
             referencedRelation: "planner_species"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_varieties_master_variety_id_fkey"
+            columns: ["master_variety_id"]
+            isOneToOne: false
+            referencedRelation: "varieties"
             referencedColumns: ["id"]
           },
         ]
