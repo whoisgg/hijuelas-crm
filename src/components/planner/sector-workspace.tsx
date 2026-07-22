@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   DndContext,
@@ -16,6 +17,8 @@ import {
 import {
   ArrowRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Inbox,
   Layers,
   Minus,
@@ -41,21 +44,37 @@ import type {
 } from "@/lib/planner/scenario-workspace";
 
 /**
- * Mesa de trabajo del sector (dentro de un escenario), vista "estadio":
- * cada mesón se expande a sus bandejas ("sillas"). Gris = vacío, verde =
- * lleno, azul = hover del lote, y el lote seleccionado queda resaltado en
- * todos los mesones. Al seleccionar un lote se puede mover una cantidad
- * ajustable a otro sector (cae en su inbox de recepción). El inbox de la
- * derecha se arrastra sobre los mesones para fijar (pin) dentro del sector.
+ * Mesa de trabajo del sector, vista "estadio" única (realidad + plan):
+ * cada mesón se expande a sus bandejas ("sillas") sobre la capacidad física.
+ * Verde = ocupado hoy, ámbar = el plan lo agrega la semana seleccionada,
+ * gris = vacío. Una marca vertical señala la cuota de planificación del
+ * mesón. El checkbox "salen esta semana" pinta de azul las bandejas que hoy
+ * están ocupadas pero el plan libera. Rojo se reserva para "sin espacio".
+ * Azul también es hover del lote; el seleccionado queda resaltado en todos
+ * los mesones. El toggle "Solo hoy" apaga la capa de plan y deja la foto
+ * real del snapshot. El inbox de la derecha se arrastra sobre los mesones
+ * para fijar (pin) dentro del sector.
  */
 
 const SEAT_EMPTY = "#c9ccd1";
 const SEAT_FULL = "#2f9e44";
+const SEAT_ENTER = "#EF9F27";
 const SEAT_HOVER = "#378ADD";
 const SEAT_SELECTED = "#185FA5";
 
 const lotKey = (lotId: number | null, stage: string | null) =>
   lotId !== null && stage ? `${lotId}:${stage}` : null;
+
+export type WorkspaceBar = {
+  weekLabel: string;
+  prevHref: string | null;
+  nextHref: string | null;
+  planTrays: number;
+  planPct: number;
+  realTrays: number;
+  realPct: number;
+  planCapacity: number;
+};
 
 export function SectorWorkspace({
   scenarioId,
@@ -63,6 +82,7 @@ export function SectorWorkspace({
   data,
   initialLotCode = null,
   workingMode = false,
+  bar = null,
 }: {
   scenarioId: number;
   scenarioName: string;
@@ -72,6 +92,8 @@ export function SectorWorkspace({
   initialLotCode?: string | null;
   /** mesa de trabajo invisible: suaviza el copy (no menciona "escenario") */
   workingMode?: boolean;
+  /** barra de KPIs de la semana (selector, plan, hoy real, capacidad, salidas) */
+  bar?: WorkspaceBar | null;
 }) {
   const router = useRouter();
 
@@ -96,9 +118,19 @@ export function SectorWorkspace({
     () => data.layout.modules.flatMap((m) => m.locations),
     [data.layout.modules],
   );
+  const snapshotDate = data.layout.snapshotDate
+    ? new Date(data.layout.snapshotDate).toLocaleDateString("es-CL", {
+        day: "2-digit",
+        month: "short",
+      })
+    : null;
   const allLocIds = React.useMemo(() => allLocs.map((l) => l.id), [allLocs]);
 
   const [busy, setBusy] = React.useState(false);
+  // Capa: false = realidad + plan de la semana; true = sólo la foto real.
+  const [soloHoy, setSoloHoy] = React.useState(false);
+  // Filtro: pinta de azul las bandejas ocupadas hoy que el plan libera.
+  const [marcarSalen, setMarcarSalen] = React.useState(false);
   const [dragging, setDragging] = React.useState<SectorLotChip | null>(null);
   const [expanded, setExpanded] = React.useState<Set<number>>(() => new Set(allLocIds));
   const [hoveredKey, setHoveredKey] = React.useState<string | null>(null);
@@ -306,6 +338,109 @@ export function SectorWorkspace({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
+      {bar ? (
+        <div className="mb-3 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border bg-card px-4 py-3 text-sm">
+          <div className="flex items-center gap-2">
+            {bar.prevHref ? (
+              <Link
+                href={bar.prevHref}
+                aria-label="Semana anterior"
+                className="rounded p-1 hover:bg-muted"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className="w-6" />
+            )}
+            <span className="font-medium tabular-nums">{bar.weekLabel}</span>
+            {bar.nextHref ? (
+              <Link
+                href={bar.nextHref}
+                aria-label="Semana siguiente"
+                className="rounded p-1 hover:bg-muted"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            ) : (
+              <span className="w-6" />
+            )}
+          </div>
+          <div title="Lotes planificados de la semana vs capacidad de planificación.">
+            <span className="text-muted-foreground">Plan semana: </span>
+            <span className="font-medium tabular-nums">
+              {bar.planTrays.toLocaleString("es-CL")} bandejas ({Math.round(bar.planPct)}%)
+            </span>
+          </div>
+          <div title="Foto del último snapshot, medida contra la capacidad física de los mesones.">
+            <span className="text-muted-foreground">
+              Hoy real{snapshotDate ? ` (${snapshotDate})` : ""}:{" "}
+            </span>
+            <span className="font-medium tabular-nums">
+              {bar.realTrays.toLocaleString("es-CL")} bandejas ({Math.round(bar.realPct)}% del físico)
+            </span>
+          </div>
+          <div title="Capacidad de planificación del área (Vivero Planner) — la base del plan, las alertas y la proyección.">
+            <span className="text-muted-foreground">Capacidad plan: </span>
+            <span className="font-medium tabular-nums">
+              {bar.planCapacity.toLocaleString("es-CL")} bandejas
+            </span>
+          </div>
+          {!soloHoy ? (
+            <label
+              className="flex cursor-pointer select-none items-center gap-1.5"
+              title="Pinta de azul las bandejas ocupadas hoy que el plan libera esta semana."
+            >
+              <input
+                type="checkbox"
+                checked={marcarSalen}
+                onChange={(e) => setMarcarSalen(e.target.checked)}
+                className="h-4 w-4 accent-[#378ADD]"
+              />
+              Salidas
+              <span
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ backgroundColor: SEAT_HOVER }}
+              />
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_FULL }} />
+          ocupado hoy
+        </span>
+        {!soloHoy ? (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_ENTER }} />
+            entra según plan
+          </span>
+        ) : null}
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_EMPTY }} />
+          vacío
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_HOVER }} />
+          hover
+        </span>
+        <button
+          type="button"
+          onClick={() => setSoloHoy((v) => !v)}
+          className={cn(
+            "ml-auto rounded-full border px-2.5 py-1 transition-colors",
+            soloHoy
+              ? "border-foreground bg-foreground font-medium text-background"
+              : "hover:border-foreground/40 hover:text-foreground",
+          )}
+        >
+          {soloHoy
+            ? "Volver al plan de la semana"
+            : `Solo hoy${snapshotDate ? ` (${snapshotDate})` : ""}`}
+        </button>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Plano estadio */}
         <div className="space-y-5">
@@ -355,6 +490,8 @@ export function SectorWorkspace({
                           key={loc.id}
                           loc={loc}
                           fill={data.fill[loc.id]}
+                          soloHoy={soloHoy}
+                          marcarSalen={marcarSalen}
                           expanded={expanded.has(loc.id)}
                           hoveredKey={hoveredKey}
                           selectedKey={selectedKey}
@@ -372,6 +509,8 @@ export function SectorWorkspace({
                     key={loc.id}
                     loc={loc}
                     fill={data.fill[loc.id]}
+                    soloHoy={soloHoy}
+                    marcarSalen={marcarSalen}
                     expanded={expanded.has(loc.id)}
                     hoveredKey={hoveredKey}
                     selectedKey={selectedKey}
@@ -400,20 +539,6 @@ export function SectorWorkspace({
             );
           })}
 
-          <div className="flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: SEAT_EMPTY }} /> vacío
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: SEAT_FULL }} /> lleno
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: SEAT_HOVER }} /> hover (lote)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: SEAT_SELECTED }} /> seleccionado
-            </span>
-          </div>
         </div>
 
         {/* Panel: en mobile arriba de los módulos; en desktop columna derecha. */}
@@ -655,16 +780,11 @@ export function SectorWorkspace({
   );
 }
 
-function seatColor(key: string | null, hoveredKey: string | null, selectedKey: string | null) {
-  if (!key) return SEAT_EMPTY;
-  if (key === selectedKey) return SEAT_SELECTED;
-  if (key === hoveredKey) return SEAT_HOVER;
-  return SEAT_FULL;
-}
-
 function MesonCell({
   loc,
   fill,
+  soloHoy,
+  marcarSalen,
   expanded,
   hoveredKey,
   selectedKey,
@@ -674,6 +794,10 @@ function MesonCell({
 }: {
   loc: SectorWorkspaceData["layout"]["modules"][number]["locations"][number];
   fill?: { trays: number; parts: FillPart[] };
+  /** capa: true = sólo la foto real del snapshot, sin plan */
+  soloHoy: boolean;
+  /** filtro: pinta de azul lo ocupado hoy que el plan libera esta semana */
+  marcarSalen: boolean;
   expanded: boolean;
   hoveredKey: string | null;
   selectedKey: string | null;
@@ -682,29 +806,80 @@ function MesonCell({
   onSelect: (key: string | null) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `loc:${loc.id}` });
-  const cap = loc.planCapacityTrays ?? 0;
-  const trays = fill?.trays ?? 0;
-  const pct = cap ? Math.round((trays / cap) * 100) : 0;
-  const free = Math.max(0, cap - trays);
+  const planCap = loc.planCapacityTrays ?? 0;
+  const physCap = loc.capacityTrays ?? planCap;
+  // La grilla es la capacidad física; la cuota de plan queda marcada dentro.
+  const gridCap = Math.max(physCap, planCap);
+  const planTrays = fill?.trays ?? 0;
+  const realTrays = loc.trays;
+  // Diff por totales de mesón: la proyección FIFO no sabe qué lote real es cuál.
+  const stay = Math.min(realTrays, planTrays);
+  const leave = Math.max(0, realTrays - planTrays);
+  const free = Math.max(0, planCap - planTrays);
   const parts = fill?.parts ?? [];
   const hasSelected = parts.some((p) => lotKey(p.lotId, p.stage) === selectedKey);
+  const pctOf = (n: number) => (gridCap ? Math.round((n / gridCap) * 100) : 0);
+  const quotaFull = planCap > 0 && planTrays >= planCap;
 
   // Sillas: una por bandeja (escaladas si el mesón es grande).
-  const perCell = cap > 320 ? Math.ceil(cap / 320) : 1;
-  const seats: (FillPart | null)[] = [];
-  for (const p of parts) {
-    const n = Math.round(p.trays / perCell);
-    for (let i = 0; i < n; i++) seats.push(p);
+  const perCell = gridCap > 320 ? Math.ceil(gridCap / 320) : 1;
+  const totalSeats = Math.max(1, Math.round(gridCap / perCell));
+  const quotaSeat =
+    !soloHoy && planCap > 0 && planCap < gridCap ? Math.round(planCap / perCell) : -1;
+
+  type Seat = { part: FillPart | null; kind: "stay" | "enter" | "leave" | "empty" };
+  let seats: Seat[] = [];
+  const staySeats = Math.round(stay / perCell);
+  if (soloHoy) {
+    for (const s of loc.species) {
+      const n = Math.round(s.trays / perCell);
+      for (let i = 0; i < n; i++)
+        seats.push({
+          part: { label: s.name, trays: s.trays, lotId: null, stage: null },
+          kind: "stay",
+        });
+    }
+  } else {
+    const partSeats: Seat[] = [];
+    for (const p of parts) {
+      const n = Math.round(p.trays / perCell);
+      for (let i = 0; i < n; i++)
+        partSeats.push({ part: p, kind: partSeats.length < staySeats ? "stay" : "enter" });
+    }
+    // Verde contiguo = ocupación de hoy: primero lo que permanece, luego lo
+    // que sale (verde/azul), y al final lo que el plan agrega (ámbar).
+    const leaveSeats: Seat[] = [];
+    for (let i = 0; i < Math.round(leave / perCell); i++)
+      leaveSeats.push({ part: null, kind: "leave" });
+    seats = [
+      ...partSeats.slice(0, staySeats),
+      ...leaveSeats,
+      ...partSeats.slice(staySeats),
+    ];
   }
-  const totalSeats = Math.round(cap / perCell);
-  while (seats.length < totalSeats) seats.push(null);
+  seats = seats.slice(0, totalSeats);
+  while (seats.length < totalSeats) seats.push({ part: null, kind: "empty" });
+
+  const seatStyle = (s: Seat): React.CSSProperties => {
+    if (s.kind === "leave")
+      return { backgroundColor: marcarSalen ? SEAT_HOVER : SEAT_FULL };
+    if (!s.part) return { backgroundColor: SEAT_EMPTY };
+    const key = lotKey(s.part.lotId, s.part.stage);
+    if (key && key === selectedKey) return { backgroundColor: SEAT_SELECTED };
+    if (key && key === hoveredKey) return { backgroundColor: SEAT_HOVER };
+    if (s.kind === "enter") return { backgroundColor: SEAT_ENTER };
+    return { backgroundColor: SEAT_FULL };
+  };
+
+  const enter = Math.max(0, planTrays - stay);
+  const barFree = Math.max(0, gridCap - (soloHoy ? realTrays : planTrays + leave));
 
   return (
     <div
       ref={setNodeRef}
       className={cn(
         "flex flex-col gap-1 rounded-md border bg-card p-1.5 text-[11px] transition-colors",
-        pct >= 100 && "border-red-400/60",
+        quotaFull && !soloHoy && "border-red-400/60",
         hasSelected && "border-[#185FA5]/60",
         // Al arrastrar encima: verde si hay espacio, rojo si está lleno.
         isOver && (free > 0 ? "ring-2 ring-emerald-500" : "ring-2 ring-red-500"),
@@ -716,38 +891,97 @@ function MesonCell({
         className="flex items-center justify-between px-0.5 tabular-nums hover:text-foreground"
       >
         <span className="font-medium">{loc.code}</span>
-        <span className="text-muted-foreground">{cap ? `${pct}%` : trays}</span>
+        <span
+          className="text-muted-foreground"
+          title={
+            soloHoy
+              ? "ocupación real vs capacidad física"
+              : "hoy → plan de la semana, ambos sobre la capacidad física"
+          }
+        >
+          {!gridCap
+            ? soloHoy
+              ? realTrays
+              : planTrays
+            : soloHoy
+              ? `${pctOf(realTrays)}%`
+              : `${pctOf(realTrays)}→${pctOf(planTrays)}%`}
+        </span>
       </button>
       {expanded ? (
-        <div className="flex flex-wrap gap-[2px]">
-          {seats.map((p, i) => {
-            const key = p ? lotKey(p.lotId, p.stage) : null;
+        <div className="flex flex-wrap items-center gap-[2px]">
+          {seats.map((s, i) => {
+            const key = s.part ? lotKey(s.part.lotId, s.part.stage) : null;
             return (
-              <span
-                key={i}
-                onMouseEnter={() => onHover(key)}
-                onMouseLeave={() => onHover(null)}
-                onClick={() => p && onSelect(key)}
-                title={p?.label ?? "vacío"}
-                className={cn("h-3 w-3 rounded-[2px] transition-colors", p && "cursor-pointer")}
-                style={{ backgroundColor: seatColor(key, hoveredKey, selectedKey) }}
-              />
+              <React.Fragment key={i}>
+                {i === quotaSeat ? (
+                  <span
+                    title={`cuota de plan: ${planCap.toLocaleString("es-CL")} bandejas`}
+                    className="h-3 w-[2px] rounded-full bg-foreground/40"
+                  />
+                ) : null}
+                <span
+                  onMouseEnter={() => onHover(key)}
+                  onMouseLeave={() => onHover(null)}
+                  onClick={() => key && !s.part?.sim && onSelect(key)}
+                  title={
+                    s.kind === "leave"
+                      ? "ocupado hoy · sale esta semana según el plan"
+                      : s.part?.sim
+                        ? `${s.part.label} · simulación`
+                        : (s.part?.label ?? "vacío")
+                  }
+                  className={cn(
+                    "h-3 w-3 rounded-[2px] transition-colors",
+                    key && "cursor-pointer",
+                  )}
+                  style={seatStyle(s)}
+                />
+              </React.Fragment>
             );
           })}
         </div>
       ) : (
         <div className="flex h-3.5 overflow-hidden rounded-sm">
-          {trays > 0 ? (
-            <div
-              style={{
-                flexGrow: trays,
-                flexBasis: 0,
-                backgroundColor: hasSelected ? SEAT_SELECTED : SEAT_FULL,
-              }}
-            />
-          ) : null}
-          {free > 0 ? (
-            <div style={{ flexGrow: free, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
+          {soloHoy ? (
+            realTrays > 0 ? (
+              <div
+                style={{ flexGrow: realTrays, flexBasis: 0, backgroundColor: SEAT_FULL }}
+              />
+            ) : null
+          ) : (
+            <>
+              {stay > 0 ? (
+                <div
+                  style={{
+                    flexGrow: stay,
+                    flexBasis: 0,
+                    backgroundColor: hasSelected ? SEAT_SELECTED : SEAT_FULL,
+                  }}
+                />
+              ) : null}
+              {leave > 0 ? (
+                <div
+                  style={{
+                    flexGrow: leave,
+                    flexBasis: 0,
+                    backgroundColor: marcarSalen ? SEAT_HOVER : SEAT_FULL,
+                  }}
+                />
+              ) : null}
+              {enter > 0 ? (
+                <div
+                  style={{
+                    flexGrow: enter,
+                    flexBasis: 0,
+                    backgroundColor: hasSelected ? SEAT_SELECTED : SEAT_ENTER,
+                  }}
+                />
+              ) : null}
+            </>
+          )}
+          {barFree > 0 ? (
+            <div style={{ flexGrow: barFree, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
           ) : null}
         </div>
       )}
@@ -776,28 +1010,40 @@ function LotCard({
 }) {
   const { setNodeRef, attributes, listeners, isDragging } = useDraggable({
     id: item.lotId,
+    disabled: item.sim,
   });
   const isOverflow = item.overflowTrays > 0;
-  const accent = selected ? SEAT_SELECTED : isOverflow ? "#e24b4a" : SEAT_FULL;
+  const accent = item.sim
+    ? SEAT_ENTER
+    : selected
+      ? SEAT_SELECTED
+      : isOverflow
+        ? "#e24b4a"
+        : SEAT_FULL;
   return (
     <div
       ref={setNodeRef}
-      {...attributes}
-      {...listeners}
-      role="button"
-      tabIndex={0}
-      onClick={onSelect}
+      {...(item.sim ? {} : attributes)}
+      {...(item.sim ? {} : listeners)}
+      role={item.sim ? undefined : "button"}
+      tabIndex={item.sim ? undefined : 0}
+      onClick={item.sim ? undefined : onSelect}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect();
+        if (!item.sim && (e.key === "Enter" || e.key === " ")) onSelect();
       }}
-      aria-pressed={selected}
-      title="Clic para el menú · arrastra a un mesón"
+      aria-pressed={item.sim ? undefined : selected}
+      title={
+        item.sim
+          ? "Orden simulada — se edita en el Simulador"
+          : "Clic para el menú · arrastra a un mesón"
+      }
       className={cn(
-        "relative w-[230px] shrink-0 cursor-grab touch-none overflow-hidden rounded-lg border bg-card py-2.5 pl-4 pr-3 text-left shadow-sm transition-colors active:cursor-grabbing lg:w-auto",
+        "relative w-[230px] shrink-0 touch-none overflow-hidden rounded-lg border bg-card py-2.5 pl-4 pr-3 text-left shadow-sm transition-colors lg:w-auto",
+        !item.sim && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-40",
         selected
           ? "border-[#185FA5]/60 bg-[#185FA5]/[0.06] dark:bg-[#185FA5]/10"
-          : "hover:border-foreground/20 hover:bg-muted/40",
+          : !item.sim && "hover:border-foreground/20 hover:bg-muted/40",
       )}
     >
       <span
@@ -808,6 +1054,15 @@ function LotCard({
       <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground tabular-nums">
         <span>{item.trays.toLocaleString("es-CL")} band.</span>
         {item.variety ? <span>· {item.variety}</span> : null}
+        {item.sim ? (
+          <span
+            className="max-w-40 truncate rounded border px-1.5 py-0.5 font-medium"
+            style={{ borderColor: SEAT_ENTER, color: SEAT_ENTER }}
+            title={`Simulación: ${item.simName ?? ""}`}
+          >
+            {item.simName ?? "Simulación"}
+          </span>
+        ) : null}
         {isOverflow ? (
           <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-950/60 dark:text-red-300">
             {item.overflowTrays.toLocaleString("es-CL")} sin espacio
