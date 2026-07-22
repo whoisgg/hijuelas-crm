@@ -57,6 +57,36 @@ export async function createScenario(
   return { ok: true, id: scenario.id };
 }
 
+/**
+ * Simulación: grupo de órdenes what-if que se suma al plan vigente. Nace
+ * vacío y en borrador — NO copia el plan (a diferencia de createScenario).
+ */
+export async function createSimulation(
+  name: string,
+  description: string | null,
+): Promise<{ ok: boolean; id?: number; error?: string }> {
+  const { supabase, userId } = await requireAccess();
+  const trimmed = name.trim();
+  if (trimmed.length < 3) return { ok: false, error: "Nombre muy corto." };
+
+  const { data: sim, error } = await supabase
+    .from("planner_scenarios")
+    .insert({
+      name: trimmed,
+      description,
+      created_by: userId,
+      status: "borrador",
+      is_simulation: true,
+    })
+    .select("id")
+    .single();
+  if (error || !sim) return { ok: false, error: error?.message };
+
+  revalidatePath("/planner/simulador");
+  revalidatePath("/planner/ocupacion");
+  return { ok: true, id: sim.id };
+}
+
 const SCENARIO_STATUSES = new Set(["borrador", "evaluacion", "aprobado", "descartado"]);
 
 export async function updateScenarioStatus(
@@ -405,5 +435,7 @@ export async function createScenarioLot(
   if (error) return { ok: false, error: error.message };
 
   revalidatePath(`/planner/simulador/${input.scenarioId}`);
+  revalidatePath("/planner/simulador");
+  revalidatePath("/planner/ocupacion");
   return { ok: true };
 }

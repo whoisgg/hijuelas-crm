@@ -40,7 +40,7 @@ const MONTHS_ES = [
 
 export async function getTimelineData(
   supabase: SupabaseClient<Database>,
-  opts: { scenarioId?: number } = {},
+  opts: { scenarioId?: number; addScenarioIds?: number[] } = {},
 ): Promise<TimelineData | null> {
   const lotColumns =
     "trays, status, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week";
@@ -57,7 +57,18 @@ export async function getTimelineData(
         .eq("status", "ACTIVO")
         .limit(10000);
 
-  const [areasRes, lotsRes, paramsRes, calendarRes] = await Promise.all([
+  // Overlay aditivo (simulaciones): lotes de escenarios que se SUMAN a la
+  // base en lugar de reemplazarla.
+  const addQuery = opts.addScenarioIds?.length
+    ? supabase
+        .from("planner_scenario_lots")
+        .select(lotColumns)
+        .in("scenario_id", opts.addScenarioIds)
+        .eq("status", "ACTIVO")
+        .limit(10000)
+    : null;
+
+  const [areasRes, lotsRes, paramsRes, calendarRes, addRes] = await Promise.all([
     supabase
       .from("planner_areas")
       .select("id, name, stage, capacity_trays, priority, active")
@@ -70,10 +81,11 @@ export async function getTimelineData(
       .select("campaign_week, year, week, start_date, end_date")
       .order("year")
       .order("week"),
+    addQuery ?? Promise.resolve({ data: null }),
   ]);
 
   const areasRaw = areasRes.data ?? [];
-  const lots = lotsRes.data ?? [];
+  const lots = [...(lotsRes.data ?? []), ...(addRes?.data ?? [])];
   if (!areasRaw.length || !lots.length) return null;
 
   // Orden de columnas: por etapa del flujo, luego prioridad.

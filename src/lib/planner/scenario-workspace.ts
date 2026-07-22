@@ -25,6 +25,10 @@ export type SectorLotChip = {
   /** mesón donde el usuario fijó el lote (null = automático FIFO) */
   pinnedLocationId: number | null;
   pinnedCode: string | null;
+  /** orden del overlay de simulación (demanda what-if, no del plan) */
+  sim: boolean;
+  /** nombre de la simulación a la que pertenece (solo si sim) */
+  simName: string | null;
 };
 
 export type TargetSector = {
@@ -39,6 +43,8 @@ export type FillPart = {
   trays: number;
   lotId: number | null;
   stage: Stage | null;
+  /** parte de una orden simulada */
+  sim?: boolean;
 };
 
 export type SectorWorkspaceData = {
@@ -54,6 +60,7 @@ export type SectorWorkspaceData = {
 
 type ScenarioLotRow = {
   id: number;
+  scenario_id: number;
   lot_code: string;
   trays: number | null;
   rooting_area_id: number | null;
@@ -83,6 +90,7 @@ export async function getScenarioWorkspace(
   scenarioId: number,
   areaId: number,
   week: number,
+  opts: { simScenarios?: { id: number; name: string }[] } = {},
 ): Promise<SectorWorkspaceData | null> {
   const layout = await getSectorLayout(supabase, areaId);
   if (!layout) return null;
@@ -94,20 +102,38 @@ export async function getScenarioWorkspace(
   const areaById = new Map((areas ?? []).map((a) => [a.id, a]));
   const thisStage = areaById.get(areaId)?.stage as string | undefined;
 
-  const { data: lots } = await supabase
-    .from("planner_scenario_lots")
-    .select(
-      "id, lot_code, trays, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, planner_species(name), planner_varieties(name)",
-    )
-    .eq("scenario_id", scenarioId)
-    .eq("status", "ACTIVO")
-    .limit(10000);
+  const lotSelect =
+    "id, scenario_id, lot_code, trays, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, planner_species(name), planner_varieties(name)";
+  const simIds = (opts.simScenarios ?? []).map((s) => s.id);
+  const [{ data: lots }, simRes] = await Promise.all([
+    supabase
+      .from("planner_scenario_lots")
+      .select(lotSelect)
+      .eq("scenario_id", scenarioId)
+      .eq("status", "ACTIVO")
+      .limit(10000),
+    simIds.length
+      ? supabase
+          .from("planner_scenario_lots")
+          .select(lotSelect)
+          .in("scenario_id", simIds)
+          .eq("status", "ACTIVO")
+          .limit(10000)
+      : Promise.resolve({ data: null }),
+  ]);
 
   const rows = (lots ?? []) as unknown as ScenarioLotRow[];
+  const simRows = (simRes.data ?? []) as unknown as ScenarioLotRow[];
+  const simLotIds = new Set(simRows.map((r) => r.id));
+  const simNameByScenario = new Map((opts.simScenarios ?? []).map((s) => [s.id, s.name]));
+  const simNameByLot = new Map(
+    simRows.map((r) => [r.id, simNameByScenario.get(r.scenario_id) ?? "Simulación"]),
+  );
 
   // Lotes presentes en ESTE sector esta semana (por la etapa que corresponda).
+  // Las órdenes simuladas van al final: rellenan lo que el plan deja libre.
   const here: { row: ScenarioLotRow; stage: Stage }[] = [];
-  for (const row of rows) {
+  for (const row of [...rows, ...simRows]) {
     for (const stage of STAGES) {
       if (stageAreaId(row, stage) === areaId && stageActive(row, stage, week)) {
         here.push({ row, stage });
@@ -135,13 +161,15 @@ export async function getScenarioWorkspace(
     m.locations.map((l) => ({ id: l.id, capacityTrays: l.planCapacityTrays ?? 0 })),
   );
 
-  const items: AllocLot[] = here
+  type WorkItem = AllocLot & { sim: boolean };
+  const items: WorkItem[] = here
     .filter(({ row }) => (row.trays ?? 0) > 0)
     .map(({ row, stage }) => ({
       label: `${row.planner_species?.name ?? "¿?"}${row.planner_varieties?.name ? ` ${row.planner_varieties.name}` : ""} · ${row.lot_code}`,
       trays: row.trays ?? 0,
       arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
       ref: { lotId: row.id, stage },
+      sim: simLotIds.has(row.id),
     }));
 
   // Colocación pin-aware: primero los lotes fijados en su mesón, luego el
@@ -158,7 +186,7 @@ export async function getScenarioWorkspace(
   const capOf = (locId: number) =>
     orderedLocations.find((l) => l.id === locId)?.capacityTrays ?? 0;
 
-  const queue: AllocLot[] = [];
+  const queue: WorkItem[] = [];
   for (const it of items) {
     const pin = it.ref ? pinByLot.get(`${it.ref.lotId}:${it.ref.stage}`) : undefined;
     if (pin !== undefined) {
@@ -170,7 +198,13 @@ export async function getScenarioWorkspace(
       queue.push(it);
     }
   }
-  queue.sort((a, b) => a.arrivalWeek - b.arrivalWeek || a.label.localeCompare(b.label));
+  // FIFO del plan primero; la simulación rellena el espacio que sobra.
+  queue.sort(
+    (a, b) =>
+      Number(a.sim) - Number(b.sim) ||
+      a.arrivalWeek - b.arrivalWeek ||
+      a.label.localeCompare(b.label),
+  );
   let li = 0;
   for (const it of queue) {
     let rem = it.trays;
@@ -200,6 +234,7 @@ export async function getScenarioWorkspace(
         trays: p.trays,
         lotId: p.ref?.lotId ?? null,
         stage: (p.ref?.stage as Stage | undefined) ?? null,
+        sim: p.ref ? simLotIds.has(p.ref.lotId) : false,
       })),
     };
   }
@@ -225,6 +260,8 @@ export async function getScenarioWorkspace(
         const pid = pinByLot.get(`${row.id}:${stage}`);
         return pid ? (codeByLocId.get(pid) ?? null) : null;
       })(),
+      sim: simLotIds.has(row.id),
+      simName: simNameByLot.get(row.id) ?? null,
     }))
     .sort(
       (a, b) =>

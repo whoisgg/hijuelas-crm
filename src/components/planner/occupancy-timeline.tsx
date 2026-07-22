@@ -23,10 +23,13 @@ const STAGE_SHORT: Record<string, string> = {
 export function OccupancyTimeline({
   data,
   scenarioId,
+  simQuery = null,
 }: {
   data: TimelineData;
   /** si se ve una proyección, los clics llevan a la mesa de trabajo del escenario */
   scenarioId?: number;
+  /** simulación incluida: query (`sim=1&off=…`) que los clics propagan al sector */
+  simQuery?: string | null;
 }) {
   const { areas, weeks, maxUtilization } = data;
 
@@ -158,7 +161,7 @@ export function OccupancyTimeline({
                           href={
                             scenarioId
                               ? `/planner/sector/${a.id}?week=${w.campaignWeek}&escenario=${scenarioId}`
-                              : `/planner/sector/${a.id}?week=${w.campaignWeek}`
+                              : `/planner/sector/${a.id}?week=${w.campaignWeek}${simQuery ? `&${simQuery}` : ""}`
                           }
                           className={cn(
                             "relative flex h-6 items-center justify-center rounded-sm tabular-nums transition-transform hover:scale-[1.04]",

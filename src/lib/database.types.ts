@@ -2355,6 +2355,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: number
+          is_simulation: boolean
           is_working: boolean
           name: string
           status: string
@@ -2364,6 +2365,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: number
+          is_simulation?: boolean
           is_working?: boolean
           name: string
           status?: string
@@ -2373,6 +2375,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: number
+          is_simulation?: boolean
           is_working?: boolean
           name?: string
           status?: string
