@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Building2, Dna, Shield, Sprout } from "lucide-react";
+import { Building2, Dna, Plug, Shield, Sprout } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
@@ -18,12 +18,20 @@ import {
   ProgramsEditor,
   type MasterProgramRow,
 } from "@/components/admin/programs-editor";
+import { ConnectClaudeTab } from "@/components/compartir/connect-claude-tab";
+import { listMcpTokens } from "@/lib/actions/mcp-tokens";
 
 export const metadata = { title: "Datos maestros" };
 export const dynamic = "force-dynamic";
 
-const SECTIONS = ["catalogo", "programas"] as const;
+const SECTIONS = ["catalogo", "programas", "mcp"] as const;
 type SectionKey = (typeof SECTIONS)[number];
+
+function resolveSiteUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "http://localhost:3000"
+  );
+}
 
 export default async function AdminMaestrosPage({
   searchParams,
@@ -161,6 +169,13 @@ export default async function AdminMaestrosPage({
               label="Organizaciones"
               sub="Razones sociales y datos legales para contratos"
             />
+            <SettingsRow
+              href="/admin/maestros?tab=mcp"
+              icon={Plug}
+              iconClass="bg-sky-500/10 text-sky-600 dark:text-sky-400"
+              label="Conectar con Claude"
+              sub="Tokens MCP — CRM y Planner consultables desde Claude"
+            />
           </SettingsSection>
         </div>
       </AppShell>
@@ -168,23 +183,43 @@ export default async function AdminMaestrosPage({
   }
 
   // ── Subsección con volver ──
+  const SECTION_META: Record<SectionKey, { title: string; description: string }> = {
+    catalogo: {
+      title: "Especies y variedades",
+      description:
+        "Catálogo compartido por todas las apps; el programa genético se asigna por variedad.",
+    },
+    programas: {
+      title: "Programas genéticos",
+      description:
+        "Titulares de las variedades. «Re-vincular planner» cruza los catálogos del Planner con estos maestros.",
+    },
+    mcp: {
+      title: "Conectar con Claude",
+      description:
+        "Tokens del servidor MCP de Hijuelas One — da acceso de consulta al CRM (clientes, contratos, forecast) y al Planner (ocupación, alertas, lotes, salidas) desde Claude.",
+    },
+  };
+
+  const tokens = section === "mcp" ? await listMcpTokens() : [];
+
   return (
     <AppShell>
       <PageHeader
-        title={section === "catalogo" ? "Especies y variedades" : "Programas genéticos"}
-        description={
-          section === "catalogo"
-            ? "Catálogo compartido por todas las apps; el programa genético se asigna por variedad."
-            : "Titulares de las variedades. «Re-vincular planner» cruza los catálogos del Planner con estos maestros."
-        }
+        title={SECTION_META[section].title}
+        description={SECTION_META[section].description}
         actions={<SettingsBack href="/admin/maestros" label="Datos maestros" />}
       />
       <div className="mt-4">
         {section === "catalogo" ? (
           <MastersEditor species={species} programs={programOptions} />
-        ) : (
-          <ProgramsEditor programs={programs} />
-        )}
+        ) : null}
+        {section === "programas" ? <ProgramsEditor programs={programs} /> : null}
+        {section === "mcp" ? (
+          <div className="space-y-6">
+            <ConnectClaudeTab tokens={tokens} siteUrl={resolveSiteUrl()} />
+          </div>
+        ) : null}
       </div>
     </AppShell>
   );

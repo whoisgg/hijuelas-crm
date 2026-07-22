@@ -92,6 +92,42 @@ export function registerPlannerTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "planner_salidas",
+    {
+      title: "Salidas programadas",
+      description:
+        "Salidas del plan por semana: cambios de sección entre etapas de crecimiento y despachos finales. Los despachos incluyen los contratos/clientes del CRM asociados por variedad y semana de entrega.",
+      inputSchema: {
+        semanas: z
+          .number()
+          .int()
+          .min(1)
+          .max(70)
+          .optional()
+          .describe("Horizonte en semanas desde la actual (default 8)"),
+        tipo: z
+          .enum(["despacho", "cambio_seccion"])
+          .optional()
+          .describe("Filtrar por tipo de salida (default: ambas)"),
+      },
+    },
+    (async (
+      { semanas, tipo }: { semanas?: number; tipo?: "despacho" | "cambio_seccion" },
+      extra: ToolExtra,
+    ) => {
+      const auth = getAuthExtra(extra?.authInfo);
+      if (!auth) return notAuthed();
+      const { data, error } = await rpc("mcp_planner_salidas", {
+        p_user_id: auth.userId,
+        p_semanas: semanas ?? 8,
+        p_tipo: tipo ?? null,
+      });
+      if (error) return errorContent(error.message);
+      return jsonContent(data);
+    }) as ToolHandler,
+  );
+
+  server.registerTool(
     "planner_lotes",
     {
       title: "Lotes planificados",
