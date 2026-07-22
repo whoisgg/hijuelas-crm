@@ -115,11 +115,12 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
         </p>
       ) : (
         <div className="space-y-3">
-          {groups.map((g, idx) => (
+          {groups.map((g) => (
             <details
               // Remount al cambiar el modo búsqueda para re-aplicar `open`.
+              // Por defecto todo colapsado; buscar expande los grupos con match.
               key={`${g.species}-${q ? "s" : "g"}`}
-              open={q ? true : idx === 0}
+              open={!!q}
               className="group/especie overflow-hidden rounded-lg border bg-card"
             >
               <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
@@ -159,7 +160,7 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
                   {g.programs.map((pg) => (
                     <details
                       key={`${g.species}-${pg.program}`}
-                      open
+                      open={!!q}
                       className="group/programa mb-1 overflow-hidden rounded-md last:mb-0"
                     >
                       <summary className="flex cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
