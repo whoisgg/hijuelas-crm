@@ -48,7 +48,7 @@ import type {
  * cada mesón se expande a sus bandejas ("sillas") sobre la capacidad física.
  * Verde = ocupado hoy, ámbar = el plan lo agrega la semana seleccionada,
  * gris = vacío. Una marca vertical señala la cuota de planificación del
- * mesón. El checkbox "salen esta semana" pinta de azul las bandejas que hoy
+ * mesón. El checkbox "salen esta semana" pinta de violeta las bandejas que hoy
  * están ocupadas pero el plan libera. Rojo se reserva para "sin espacio".
  * Azul también es hover del lote; el seleccionado queda resaltado en todos
  * los mesones. El toggle "Solo hoy" apaga la capa de plan y deja la foto
@@ -61,6 +61,9 @@ const SEAT_FULL = "#2f9e44";
 const SEAT_ENTER = "#EF9F27";
 const SEAT_HOVER = "#378ADD";
 const SEAT_SELECTED = "#185FA5";
+// Violeta para "sale esta semana": distinto del azul de hover/selección y del
+// rojo (reservado a "sin espacio").
+const SEAT_LEAVE = "#8b5cf6";
 
 const lotKey = (lotId: number | null, stage: string | null) =>
   lotId !== null && stage ? `${lotId}:${stage}` : null;
@@ -403,18 +406,18 @@ export function SectorWorkspace({
           {!soloHoy ? (
             <label
               className="flex cursor-pointer select-none items-center gap-1.5"
-              title="Pinta de azul las bandejas ocupadas hoy que el plan libera esta semana."
+              title="Pinta de violeta las bandejas ocupadas hoy que el plan libera esta semana."
             >
               <input
                 type="checkbox"
                 checked={marcarSalen}
                 onChange={(e) => setMarcarSalen(e.target.checked)}
-                className="h-4 w-4 accent-[#378ADD]"
+                className="h-4 w-4 accent-[#8b5cf6]"
               />
               Salidas
               <span
                 className="h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: SEAT_HOVER }}
+                style={{ backgroundColor: SEAT_LEAVE }}
               />
             </label>
           ) : null}
@@ -440,6 +443,12 @@ export function SectorWorkspace({
           <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_HOVER }} />
           hover
         </span>
+        {marcarSalen && !soloHoy ? (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_LEAVE }} />
+            sale esta semana
+          </span>
+        ) : null}
         <button
           type="button"
           onClick={() => setSoloHoy((v) => !v)}
@@ -883,7 +892,7 @@ function MesonCell({
 
   const seatStyle = (s: Seat): React.CSSProperties => {
     if (s.kind === "leave")
-      return { backgroundColor: marcarSalen ? SEAT_HOVER : SEAT_FULL };
+      return { backgroundColor: marcarSalen ? SEAT_LEAVE : SEAT_FULL };
     if (!s.part) return { backgroundColor: SEAT_EMPTY };
     const key = lotKey(s.part.lotId, s.part.stage);
     if (key && key === selectedKey) return { backgroundColor: SEAT_SELECTED };
@@ -918,16 +927,33 @@ function MesonCell({
           title={
             soloHoy
               ? "ocupación real vs capacidad física"
-              : "hoy → plan de la semana, ambos sobre la capacidad física"
+              : leave > 0
+                ? "hoy → con lo que entra según plan → tras las salidas de la semana, sobre la capacidad física"
+                : "hoy → plan de la semana, ambos sobre la capacidad física"
           }
         >
-          {!gridCap
-            ? soloHoy
-              ? realTrays
-              : planTrays
-            : soloHoy
-              ? `${pctOf(realTrays)}%`
-              : `${pctOf(realTrays)}→${pctOf(planTrays)}%`}
+          {!gridCap ? (
+            soloHoy ? (
+              realTrays
+            ) : (
+              planTrays
+            )
+          ) : soloHoy ? (
+            `${pctOf(realTrays)}%`
+          ) : (
+            <>
+              {pctOf(realTrays)}→{pctOf(realTrays + enter)}
+              {leave > 0 ? (
+                <>
+                  →
+                  <span className="font-medium" style={{ color: SEAT_LEAVE }}>
+                    {pctOf(planTrays)}
+                  </span>
+                </>
+              ) : null}
+              %
+            </>
+          )}
         </span>
       </button>
       {expanded ? (
@@ -987,7 +1013,7 @@ function MesonCell({
                   style={{
                     flexGrow: leave,
                     flexBasis: 0,
-                    backgroundColor: marcarSalen ? SEAT_HOVER : SEAT_FULL,
+                    backgroundColor: marcarSalen ? SEAT_LEAVE : SEAT_FULL,
                   }}
                 />
               ) : null}
