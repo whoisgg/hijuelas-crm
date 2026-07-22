@@ -4,6 +4,10 @@ import { createClient } from "@/lib/supabase/server";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
+import {
+  getVarietyProgramMap,
+  normalizeVarietyName,
+} from "@/lib/planner/variety-programs";
 
 export const metadata = { title: "Lotes" };
 export const dynamic = "force-dynamic";
@@ -26,28 +30,38 @@ export default async function LotesPage() {
     redirect("/dashboard");
   }
 
-  const { data: lots } = await supabase
-    .from("planner_lots")
-    .select(
-      "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
-    )
-    .order("start_week")
-    .order("lot_code")
-    .limit(2000);
+  const [{ data: lots }, programByVariety] = await Promise.all([
+    supabase
+      .from("planner_lots")
+      .select(
+        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
+      )
+      .order("start_week")
+      .order("lot_code")
+      .limit(2000),
+    getVarietyProgramMap(supabase),
+  ]);
 
-  const rows: LotRow[] = (lots ?? []).map((l) => ({
-    id: l.id,
-    lot_code: l.lot_code,
-    species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
-    variety: (l.planner_varieties as unknown as { name: string } | null)?.name ?? null,
-    year: l.year,
-    start_week: l.start_week,
-    end_week: l.end_week,
-    plants: l.plants,
-    trays: l.trays,
-    rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
-    status: l.status,
-  }));
+  const rows: LotRow[] = (lots ?? []).map((l) => {
+    const variety =
+      (l.planner_varieties as unknown as { name: string } | null)?.name ?? null;
+    return {
+      id: l.id,
+      lot_code: l.lot_code,
+      species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
+      variety,
+      program: variety
+        ? (programByVariety.get(normalizeVarietyName(variety)) ?? null)
+        : null,
+      year: l.year,
+      start_week: l.start_week,
+      end_week: l.end_week,
+      plants: l.plants,
+      trays: l.trays,
+      rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
+      status: l.status,
+    };
+  });
 
   return (
     <AppShell>

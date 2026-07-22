@@ -8,6 +8,10 @@ import { PageHeader } from "@/components/page-header";
 import { AddScenarioLot } from "@/components/planner/add-scenario-lot";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
 import { getTimelineData } from "@/lib/planner/occupancy-data";
+import {
+  getVarietyProgramMap,
+  normalizeVarietyName,
+} from "@/lib/planner/variety-programs";
 
 export const metadata = { title: "Simulación" };
 export const dynamic = "force-dynamic";
@@ -68,20 +72,28 @@ export default async function SimulacionPage({
     supabase.from("planner_species").select("id, name").eq("active", true).order("name"),
     getTimelineData(supabase),
   ]);
+  const programByVariety = await getVarietyProgramMap(supabase);
 
-  const lotRows: LotRow[] = (lots ?? []).map((l) => ({
-    id: l.id,
-    lot_code: l.lot_code,
-    species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
-    variety: (l.planner_varieties as unknown as { name: string } | null)?.name ?? null,
-    year: l.year,
-    start_week: l.start_week,
-    end_week: l.end_week,
-    plants: l.plants,
-    trays: l.trays,
-    rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
-    status: l.status,
-  }));
+  const lotRows: LotRow[] = (lots ?? []).map((l) => {
+    const variety =
+      (l.planner_varieties as unknown as { name: string } | null)?.name ?? null;
+    return {
+      id: l.id,
+      lot_code: l.lot_code,
+      species: (l.planner_species as unknown as { name: string } | null)?.name ?? "—",
+      variety,
+      program: variety
+        ? (programByVariety.get(normalizeVarietyName(variety)) ?? null)
+        : null,
+      year: l.year,
+      start_week: l.start_week,
+      end_week: l.end_week,
+      plants: l.plants,
+      trays: l.trays,
+      rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
+      status: l.status,
+    };
+  });
 
   const currentWeek = timeline?.weeks.find((w) => w.isCurrent);
   const loads = LOADS.has(scenario.status);

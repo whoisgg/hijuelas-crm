@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Pencil, Search, Sprout } from "lucide-react";
+import { ChevronRight, Dna, Pencil, Search, Sprout } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +23,8 @@ export type LotRow = {
   lot_code: string;
   species: string;
   variety: string | null;
+  /** programa genético (cruce con los maestros del CRM por variedad) */
+  program: string | null;
   year: number;
   start_week: number;
   end_week: number | null;
@@ -31,6 +33,8 @@ export type LotRow = {
   rooting_area: string | null;
   status: string;
 };
+
+const SIN_PROGRAMA = "Sin programa";
 
 export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario?: boolean }) {
   const [query, setQuery] = React.useState("");
@@ -42,12 +46,13 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
         (l) =>
           l.lot_code.toLowerCase().includes(q) ||
           l.species.toLowerCase().includes(q) ||
-          (l.variety ?? "").toLowerCase().includes(q),
+          (l.variety ?? "").toLowerCase().includes(q) ||
+          (l.program ?? "").toLowerCase().includes(q),
       )
     : lots;
 
-  // Agrupado por especie (mismo patrón que /kam con los contratos):
-  // header con totales, primer grupo abierto, búsqueda expande todos.
+  // Agrupado especie → programa genético (mismo patrón que /kam con los
+  // contratos): headers con totales, primer grupo abierto, búsqueda expande.
   const groups = React.useMemo(() => {
     const bySpecies = new Map<string, LotRow[]>();
     for (const l of filtered) {
@@ -56,13 +61,39 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
       bySpecies.set(l.species, arr);
     }
     return [...bySpecies.entries()]
-      .map(([species, rows]) => ({
-        species,
-        rows,
-        plants: rows.reduce((s, r) => s + r.plants, 0),
-        trays: rows.reduce((s, r) => s + (r.trays ?? 0), 0),
-        varieties: new Set(rows.map((r) => r.variety).filter(Boolean)).size,
-      }))
+      .map(([species, rows]) => {
+        const byProgram = new Map<string, LotRow[]>();
+        for (const r of rows) {
+          const key = r.program ?? SIN_PROGRAMA;
+          const arr = byProgram.get(key) ?? [];
+          arr.push(r);
+          byProgram.set(key, arr);
+        }
+        const programs = [...byProgram.entries()]
+          .map(([program, prows]) => ({
+            program,
+            rows: prows,
+            plants: prows.reduce((s, r) => s + r.plants, 0),
+            trays: prows.reduce((s, r) => s + (r.trays ?? 0), 0),
+          }))
+          .sort((a, b) =>
+            a.program === SIN_PROGRAMA
+              ? 1
+              : b.program === SIN_PROGRAMA
+                ? -1
+                : b.plants - a.plants,
+          );
+        return {
+          species,
+          rows,
+          plants: rows.reduce((s, r) => s + r.plants, 0),
+          trays: rows.reduce((s, r) => s + (r.trays ?? 0), 0),
+          varieties: new Set(rows.map((r) => r.variety).filter(Boolean)).size,
+          programs,
+          // Sin ningún programa conocido, el subnivel no aporta — tabla plana.
+          hasPrograms: programs.some((p) => p.program !== SIN_PROGRAMA),
+        };
+      })
       .sort((a, b) => b.plants - a.plants);
   }, [filtered]);
 
@@ -123,62 +154,45 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
                 </div>
               </summary>
 
-              <div className="overflow-x-auto border-t">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 text-left font-medium">Lote</th>
-                      <th className="px-3 py-2 text-left font-medium">Variedad</th>
-                      <th className="px-3 py-2 text-right font-medium">Semanas</th>
-                      <th className="px-3 py-2 text-right font-medium">Plantas</th>
-                      <th className="px-3 py-2 text-right font-medium">Bandejas</th>
-                      <th className="px-3 py-2 text-left font-medium">Enraiza en</th>
-                      <th className="px-3 py-2 text-left font-medium">Estado</th>
-                      <th className="px-3 py-2 text-right font-medium" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {g.rows.map((l) => (
-                      <tr key={l.id} className="hover:bg-muted/30">
-                        <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-                          {l.lot_code}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {l.variety ?? "—"}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                          S{l.start_week}
-                          {l.end_week !== null ? ` → S${l.end_week}` : ""}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {l.plants.toLocaleString("es-CL")}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {l.trays?.toLocaleString("es-CL") ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-muted-foreground">
-                          {l.rooting_area ?? "—"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Badge variant="outline" className="text-[10px]">
-                            {l.status}
-                          </Badge>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={`Editar ${l.lot_code}`}
-                            onClick={() => setEditing(l)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {g.hasPrograms ? (
+                <div className="border-t bg-background/50 px-2 py-2">
+                  {g.programs.map((pg) => (
+                    <details
+                      key={`${g.species}-${pg.program}`}
+                      open
+                      className="group/programa mb-1 overflow-hidden rounded-md last:mb-0"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/40">
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open/programa:rotate-90" />
+                        <Dna className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <span
+                          className={
+                            pg.program === SIN_PROGRAMA
+                              ? "min-w-0 flex-1 truncate text-sm text-muted-foreground"
+                              : "min-w-0 flex-1 truncate text-sm font-medium"
+                          }
+                        >
+                          {pg.program}
+                          <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                            {pg.rows.length} {pg.rows.length === 1 ? "lote" : "lotes"}
+                          </span>
+                        </span>
+                        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">
+                          {pg.plants.toLocaleString("es-CL")}{" "}
+                          <span className="font-normal text-muted-foreground">pl ·</span>{" "}
+                          {pg.trays.toLocaleString("es-CL")}{" "}
+                          <span className="font-normal text-muted-foreground">band.</span>
+                        </span>
+                      </summary>
+                      <RowsTable rows={pg.rows} onEdit={setEditing} />
+                    </details>
+                  ))}
+                </div>
+              ) : (
+                <div className="border-t">
+                  <RowsTable rows={g.rows} onEdit={setEditing} />
+                </div>
+              )}
             </details>
           ))}
         </div>
@@ -191,6 +205,63 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
       {editing ? (
         <LotEditDialog lot={editing} scenario={scenario} onClose={() => setEditing(null)} />
       ) : null}
+    </div>
+  );
+}
+
+function RowsTable({ rows, onEdit }: { rows: LotRow[]; onEdit: (l: LotRow) => void }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 text-left font-medium">Lote</th>
+            <th className="px-3 py-2 text-left font-medium">Variedad</th>
+            <th className="px-3 py-2 text-right font-medium">Semanas</th>
+            <th className="px-3 py-2 text-right font-medium">Plantas</th>
+            <th className="px-3 py-2 text-right font-medium">Bandejas</th>
+            <th className="px-3 py-2 text-left font-medium">Enraiza en</th>
+            <th className="px-3 py-2 text-left font-medium">Estado</th>
+            <th className="px-3 py-2 text-right font-medium" />
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {rows.map((l) => (
+            <tr key={l.id} className="hover:bg-muted/30">
+              <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                {l.lot_code}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">{l.variety ?? "—"}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                S{l.start_week}
+                {l.end_week !== null ? ` → S${l.end_week}` : ""}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {l.plants.toLocaleString("es-CL")}
+              </td>
+              <td className="px-3 py-2 text-right tabular-nums">
+                {l.trays?.toLocaleString("es-CL") ?? "—"}
+              </td>
+              <td className="px-3 py-2 text-muted-foreground">{l.rooting_area ?? "—"}</td>
+              <td className="px-3 py-2">
+                <Badge variant="outline" className="text-[10px]">
+                  {l.status}
+                </Badge>
+              </td>
+              <td className="px-3 py-2 text-right">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Editar ${l.lot_code}`}
+                  onClick={() => onEdit(l)}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
