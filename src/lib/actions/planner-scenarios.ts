@@ -87,6 +87,66 @@ export async function createSimulation(
   return { ok: true, id: sim.id };
 }
 
+/**
+ * Aprobar la mesa de trabajo: el plan vigente (planner_lots) se reemplaza con
+ * los lotes de la mesa del usuario en una sola transacción (RPC). Después de
+ * aprobar, mesa y plan quedan idénticos (0 cambios sin aprobar).
+ */
+export async function approveWorkingScenario(): Promise<{
+  ok: boolean;
+  applied?: number;
+  error?: string;
+}> {
+  const { supabase, userId } = await requireAccess();
+
+  const { data: working } = await supabase
+    .from("planner_scenarios")
+    .select("id")
+    .eq("is_working", true)
+    .eq("created_by", userId)
+    .maybeSingle();
+  if (!working) return { ok: false, error: "No tienes mesa de trabajo." };
+
+  const { data: applied, error } = await supabase.rpc(
+    "planner_apply_scenario_to_plan",
+    { p_scenario_id: working.id },
+  );
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/planner/ocupacion");
+  revalidatePath("/planner");
+  return { ok: true, applied: applied ?? 0 };
+}
+
+/**
+ * Descartar la mesa de trabajo: se elimina el escenario (cascade borra lotes
+ * y pins) y el próximo load la recrea como copia fresca del plan vigente.
+ * También sirve para re-sincronizar la mesa tras subir un Planner nuevo.
+ */
+export async function discardWorkingScenario(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
+  const { supabase, userId } = await requireAccess();
+
+  const { data: working } = await supabase
+    .from("planner_scenarios")
+    .select("id")
+    .eq("is_working", true)
+    .eq("created_by", userId)
+    .maybeSingle();
+  if (!working) return { ok: false, error: "No tienes mesa de trabajo." };
+
+  const { error } = await supabase
+    .from("planner_scenarios")
+    .delete()
+    .eq("id", working.id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/planner/ocupacion");
+  return { ok: true };
+}
+
 const SCENARIO_STATUSES = new Set(["borrador", "evaluacion", "aprobado", "descartado"]);
 
 export async function updateScenarioStatus(

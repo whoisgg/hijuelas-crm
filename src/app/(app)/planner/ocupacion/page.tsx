@@ -6,8 +6,11 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { OccupancyTimeline } from "@/components/planner/occupancy-timeline";
 import { SimulationToggle } from "@/components/planner/simulation-toggle";
+import { WorkingChangesBanner } from "@/components/planner/working-changes-banner";
 import { getTimelineData } from "@/lib/planner/occupancy-data";
 import { getSimulations, loadedSimulationIds } from "@/lib/planner/simulation";
+import { ensureWorkingScenario } from "@/lib/planner/working-scenario";
+import { getWorkspaceDiff } from "@/lib/planner/workspace-diff";
 
 export const metadata = { title: "Ocupación" };
 export const dynamic = "force-dynamic";
@@ -17,7 +20,7 @@ const PLANNER_ROLES = new Set(["admin", "produccion"]);
 export default async function OcupacionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sim?: string; off?: string }>;
+  searchParams: Promise<{ sim?: string; off?: string; base?: string }>;
 }) {
   const supabase = await createClient();
   const {
@@ -37,7 +40,17 @@ export default async function OcupacionPage({
   const sp = await searchParams;
   const simOn = sp.sim === "1";
 
-  const simulations = await getSimulations(supabase);
+  // La timeline muestra por defecto la MESA DE TRABAJO del usuario (el plan
+  // más sus movimientos sin aprobar); ?base=plan vuelve al plan vigente puro.
+  const working = await ensureWorkingScenario(supabase, user.id);
+  const viewPlan = sp.base === "plan" || !working;
+
+  const [simulations, diff] = await Promise.all([
+    getSimulations(supabase),
+    working
+      ? getWorkspaceDiff(supabase, working.id)
+      : Promise.resolve({ count: 0, changes: [] }),
+  ]);
   const loadedIds = simOn ? loadedSimulationIds(simulations, sp.off) : [];
   const offIds = simulations
     .filter((s) => s.loadable && !loadedIds.includes(s.id))
@@ -46,15 +59,21 @@ export default async function OcupacionPage({
     .filter((s) => loadedIds.includes(s.id))
     .reduce((sum, s) => sum + s.trays, 0);
 
-  const data = await getTimelineData(
-    supabase,
-    loadedIds.length ? { addScenarioIds: loadedIds } : {},
-  );
+  const data = await getTimelineData(supabase, {
+    ...(viewPlan ? {} : { scenarioId: working!.id }),
+    ...(loadedIds.length ? { addScenarioIds: loadedIds } : {}),
+  });
 
   const simActive = simOn && loadedIds.length > 0;
   const simQuery = simActive
     ? `sim=1${offIds.length ? `&off=${offIds.join(",")}` : ""}`
     : null;
+
+  const baseLabel = viewPlan
+    ? "el plan vigente"
+    : diff.count > 0
+      ? "tu mesa de trabajo (plan + movimientos sin aprobar)"
+      : "tu mesa de trabajo (igual al plan vigente)";
 
   return (
     <AppShell>
@@ -62,15 +81,21 @@ export default async function OcupacionPage({
         title="Ocupación"
         description={
           simActive
-            ? `Plan vigente + ${loadedIds.length} ${loadedIds.length === 1 ? "simulación" : "simulaciones"} (${loadedTrays.toLocaleString("es-CL")} bandejas). Clic en una celda abre el sector con la simulación incluida.`
-            : "Bandejas ocupadas por área y semana según los lotes planificados. Clic en una celda abre el layout del sector."
+            ? `${viewPlan ? "Plan vigente" : "Mesa de trabajo"} + ${loadedIds.length} ${loadedIds.length === 1 ? "simulación" : "simulaciones"} (${loadedTrays.toLocaleString("es-CL")} bandejas). Clic en una celda abre el sector con la simulación incluida.`
+            : `Bandejas ocupadas por área y semana según ${baseLabel}. Clic en una celda abre el layout del sector.`
         }
         badge={simActive ? "Simulación" : undefined}
         actions={
           <SimulationToggle checked={simOn} simulations={simulations} offIds={offIds} />
         }
       />
-      <div className="mt-4">
+      <div className="mt-4 space-y-4">
+        <WorkingChangesBanner
+          count={diff.count}
+          changes={diff.changes}
+          viewingPlan={viewPlan}
+          query={simQuery}
+        />
         {data ? (
           <OccupancyTimeline data={data} simQuery={simQuery} />
         ) : (

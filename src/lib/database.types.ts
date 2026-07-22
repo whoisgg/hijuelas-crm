@@ -3387,6 +3387,10 @@ export type Database = {
           user_id: string
         }[]
       }
+      planner_apply_scenario_to_plan: {
+        Args: { p_scenario_id: number }
+        Returns: number
+      }
       planner_copy_lots_to_scenario: {
         Args: { p_scenario_id: number }
         Returns: number
