@@ -49,7 +49,7 @@ export async function updatePlannerArea(input: {
     .eq("id", input.id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/planner/ajustes");
+  revalidatePath("/planner/maestros");
   revalidatePath("/planner/ocupacion");
   return { ok: true };
 }
@@ -88,7 +88,7 @@ export async function updatePlannerSpecies(input: {
     .eq("id", input.id);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/planner/ajustes");
+  revalidatePath("/planner/maestros");
   return { ok: true };
 }
 
@@ -106,7 +106,7 @@ export async function updatePlannerParameter(input: {
     .eq("key", input.key);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/planner/ajustes");
+  revalidatePath("/planner/maestros");
   revalidatePath("/planner/ocupacion");
   return { ok: true };
 }

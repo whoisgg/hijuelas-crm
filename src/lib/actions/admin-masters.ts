@@ -220,7 +220,7 @@ export async function relinkPlannerCatalogs(): Promise<{
   }
 
   revalidatePath("/admin/maestros");
-  revalidatePath("/planner/ajustes");
+  revalidatePath("/planner/maestros");
   revalidatePath("/planner/lotes");
   return { ok: true, speciesLinked, varietiesLinked };
 }

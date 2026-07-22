@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowRightLeft,
+  Database,
   Droplets,
   LayoutDashboard,
   Users,
@@ -52,7 +53,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Simulador", href: "/planner/simulador", icon: FlaskConical, module: "produccion" },
   { label: "Reporte", href: "/planner/reporte", icon: FileText, module: "produccion" },
   { label: "Carga", href: "/planner/carga", icon: FileUp, module: "produccion" },
-  { label: "Ajustes", href: "/planner/ajustes", icon: Settings, module: "produccion" },
+  { label: "Datos maestros", href: "/planner/maestros", icon: Database, module: "produccion" },
 ];
 
 /**
