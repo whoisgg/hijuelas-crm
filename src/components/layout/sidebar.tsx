@@ -39,7 +39,10 @@ export function Sidebar({ role = null }: { role?: string | null }) {
           // Mobile usa <BottomNav> tipo iOS, sidebar oculto.
           "group/sidebar fixed inset-y-0 left-0 z-30 hidden md:flex flex-col",
           "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-          "w-14 hover:w-56 transition-[width] duration-200 ease-out",
+          "w-14 hover:w-56 transition-[width,box-shadow] duration-200 ease-out",
+          // Expandido flota SOBRE el contenido: la sombra lo separa de la página
+          // para que no parezca que el layout quedó cortado.
+          "hover:shadow-[8px_0_32px_-8px_rgba(0,0,0,0.25)]",
           "pt-14",
         )}
       >
