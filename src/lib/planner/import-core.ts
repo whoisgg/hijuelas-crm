@@ -10,6 +10,15 @@ import type { ParsedHoteleriaFile } from "@/lib/planner/parse-hoteleria";
  * archivos se pisan — cada carga reemplaza demanda/lotes/snapshot, pero los
  * maestros (áreas, especies, variedades, calendario) solo se upsertean,
  * nunca se borran.
+ *
+ * CONTRATO (no romper): los vínculos a los maestros compartidos del CRM
+ * (planner_species.master_species_id, planner_varieties.master_variety_id,
+ * migración 00045) deben sobrevivir cada carga. Hoy se cumple solo porque
+ * los upserts NO incluyen esas columnas en el payload (PostgREST solo
+ * actualiza las columnas enviadas). Si algún día se cambia el upsert por
+ * delete+insert o se agregan esas columnas al payload, hay que preservar
+ * los vínculos explícitamente. Las tablas maestras del CRM (species,
+ * varieties, genetic_programs) nunca se tocan desde acá.
  */
 
 export type ImportSummary = {
