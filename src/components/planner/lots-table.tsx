@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Search } from "lucide-react";
+import { ChevronRight, Pencil, Search, Sprout } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,26 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
       )
     : lots;
 
+  // Agrupado por especie (mismo patrón que /kam con los contratos):
+  // header con totales, primer grupo abierto, búsqueda expande todos.
+  const groups = React.useMemo(() => {
+    const bySpecies = new Map<string, LotRow[]>();
+    for (const l of filtered) {
+      const arr = bySpecies.get(l.species) ?? [];
+      arr.push(l);
+      bySpecies.set(l.species, arr);
+    }
+    return [...bySpecies.entries()]
+      .map(([species, rows]) => ({
+        species,
+        rows,
+        plants: rows.reduce((s, r) => s + r.plants, 0),
+        trays: rows.reduce((s, r) => s + (r.trays ?? 0), 0),
+        varieties: new Set(rows.map((r) => r.variety).filter(Boolean)).size,
+      }))
+      .sort((a, b) => b.plants - a.plants);
+  }, [filtered]);
+
   return (
     <div className="space-y-3">
       <div className="relative max-w-sm">
@@ -58,74 +78,114 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
         />
       </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2 text-left font-medium">Lote</th>
-              <th className="px-3 py-2 text-left font-medium">Especie</th>
-              <th className="px-3 py-2 text-left font-medium">Variedad</th>
-              <th className="px-3 py-2 text-right font-medium">Semanas</th>
-              <th className="px-3 py-2 text-right font-medium">Plantas</th>
-              <th className="px-3 py-2 text-right font-medium">Bandejas</th>
-              <th className="px-3 py-2 text-left font-medium">Enraiza en</th>
-              <th className="px-3 py-2 text-left font-medium">Estado</th>
-              <th className="px-3 py-2 text-right font-medium" />
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {filtered.map((l) => (
-              <tr key={l.id} className="hover:bg-muted/30">
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-                  {l.lot_code}
-                </td>
-                <td className="px-3 py-2">{l.species}</td>
-                <td className="px-3 py-2 text-muted-foreground">{l.variety ?? "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                  S{l.start_week}
-                  {l.end_week !== null ? ` → S${l.end_week}` : ""}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {l.plants.toLocaleString("es-CL")}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {l.trays?.toLocaleString("es-CL") ?? "—"}
-                </td>
-                <td className="px-3 py-2 text-muted-foreground">
-                  {l.rooting_area ?? "—"}
-                </td>
-                <td className="px-3 py-2">
-                  <Badge
-                    variant="outline"
-                    className="text-[10px]"
-                  >
-                    {l.status}
-                  </Badge>
-                </td>
-                <td className="px-3 py-2 text-right">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Editar ${l.lot_code}`}
-                    onClick={() => setEditing(l)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                  Sin lotes para ese filtro.
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
+      {groups.length === 0 ? (
+        <p className="rounded-lg border bg-card px-3 py-6 text-center text-sm text-muted-foreground">
+          Sin lotes para ese filtro.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map((g, idx) => (
+            <details
+              // Remount al cambiar el modo búsqueda para re-aplicar `open`.
+              key={`${g.species}-${q ? "s" : "g"}`}
+              open={q ? true : idx === 0}
+              className="group/especie overflow-hidden rounded-lg border bg-card"
+            >
+              <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40">
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open/especie:rotate-90" />
+                <Sprout className="h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-semibold">{g.species}</div>
+                  <div className="text-[11px] text-muted-foreground">
+                    {g.rows.length} {g.rows.length === 1 ? "lote" : "lotes"}
+                    {g.varieties
+                      ? ` · ${g.varieties} ${g.varieties === 1 ? "variedad" : "variedades"}`
+                      : ""}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-4 text-right">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Plantas
+                    </div>
+                    <div className="font-mono text-sm font-bold tabular-nums">
+                      {g.plants.toLocaleString("es-CL")}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Bandejas
+                    </div>
+                    <div className="font-mono text-sm font-bold tabular-nums">
+                      {g.trays.toLocaleString("es-CL")}
+                    </div>
+                  </div>
+                </div>
+              </summary>
+
+              <div className="overflow-x-auto border-t">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium">Lote</th>
+                      <th className="px-3 py-2 text-left font-medium">Variedad</th>
+                      <th className="px-3 py-2 text-right font-medium">Semanas</th>
+                      <th className="px-3 py-2 text-right font-medium">Plantas</th>
+                      <th className="px-3 py-2 text-right font-medium">Bandejas</th>
+                      <th className="px-3 py-2 text-left font-medium">Enraiza en</th>
+                      <th className="px-3 py-2 text-left font-medium">Estado</th>
+                      <th className="px-3 py-2 text-right font-medium" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {g.rows.map((l) => (
+                      <tr key={l.id} className="hover:bg-muted/30">
+                        <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                          {l.lot_code}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {l.variety ?? "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
+                          S{l.start_week}
+                          {l.end_week !== null ? ` → S${l.end_week}` : ""}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {l.plants.toLocaleString("es-CL")}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {l.trays?.toLocaleString("es-CL") ?? "—"}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {l.rooting_area ?? "—"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline" className="text-[10px]">
+                            {l.status}
+                          </Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Editar ${l.lot_code}`}
+                            onClick={() => setEditing(l)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
       <p className="text-xs text-muted-foreground">
-        {filtered.length.toLocaleString("es-CL")} de {lots.length.toLocaleString("es-CL")} asignaciones
+        {filtered.length.toLocaleString("es-CL")} de {lots.length.toLocaleString("es-CL")}{" "}
+        asignaciones · {groups.length} {groups.length === 1 ? "especie" : "especies"}
       </p>
 
       {editing ? (
