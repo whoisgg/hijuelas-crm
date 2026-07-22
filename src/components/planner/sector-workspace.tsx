@@ -171,6 +171,21 @@ export function SectorWorkspace({
     [data],
   );
 
+  // Clic fuera del plano y del panel → deseleccionar. Vale también en touch:
+  // un tap en el fondo limpia la selección y el scroll no dispara click.
+  // Las zonas "seguras" (mesones, panel lateral, overlay de drag) llevan
+  // data-keep-selection.
+  React.useEffect(() => {
+    if (!selectedKey) return;
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (target?.closest("[data-keep-selection]")) return;
+      setSelectedKey(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [selectedKey]);
+
   const selectLot = (key: string | null) => {
     if (!key || key === selectedKey) {
       setSelectedKey(null);
@@ -542,7 +557,10 @@ export function SectorWorkspace({
         </div>
 
         {/* Panel: en mobile arriba de los módulos; en desktop columna derecha. */}
-        <aside className="order-first lg:order-none lg:sticky lg:top-16 lg:self-start">
+        <aside
+          data-keep-selection
+          className="order-first lg:order-none lg:sticky lg:top-16 lg:self-start"
+        >
           {pendingPin ? (
             <div className="mb-3 rounded-xl border border-[#185FA5]/50 bg-[#185FA5]/[0.06] p-3 dark:bg-[#185FA5]/10">
               <p className="text-[11px] text-muted-foreground">Confirmar movimiento</p>
@@ -770,7 +788,10 @@ export function SectorWorkspace({
 
       <DragOverlay dropAnimation={null}>
         {dragging ? (
-          <div className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs shadow-lg">
+          <div
+            data-keep-selection
+            className="flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1.5 text-xs shadow-lg"
+          >
             <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: SEAT_FULL }} />
             {dragging.species} · {dragging.trays.toLocaleString("es-CL")} band.
           </div>
@@ -877,6 +898,7 @@ function MesonCell({
   return (
     <div
       ref={setNodeRef}
+      data-keep-selection
       className={cn(
         "flex flex-col gap-1 rounded-md border bg-card p-1.5 text-[11px] transition-colors",
         quotaFull && !soloHoy && "border-red-400/60",
