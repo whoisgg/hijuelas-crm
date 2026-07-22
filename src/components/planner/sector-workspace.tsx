@@ -1117,9 +1117,17 @@ function LotCard({
           </span>
         ) : null}
         {isOverflow ? (
-          <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-950/60 dark:text-red-300">
-            {item.overflowTrays.toLocaleString("es-CL")} sin espacio
-          </span>
+          <>
+            {/* Lote partido: parte quedó ubicada y parte no cabe. */}
+            {item.trays - item.overflowTrays > 0 ? (
+              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                {(item.trays - item.overflowTrays).toLocaleString("es-CL")} ubicadas
+              </span>
+            ) : null}
+            <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-700 dark:bg-red-950/60 dark:text-red-300">
+              {item.overflowTrays.toLocaleString("es-CL")} sin espacio
+            </span>
+          </>
         ) : null}
         {item.pinnedCode ? (
           <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 px-1.5 py-0.5 text-primary">

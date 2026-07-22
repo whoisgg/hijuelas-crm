@@ -69,7 +69,21 @@ export async function applyPlannerImport(formData: FormData): Promise<ImportSumm
   const { supabase, userId } = await requireAccess();
   const { name, buffer } = await fileFromForm(formData);
   const result = await applyPlannerCore(supabase, parsePlannerWorkbook(buffer), name, userId);
-  if (result.ok) revalidatePlanner();
+  if (result.ok) {
+    // Re-sync de las mesas de trabajo: el plan cambió, así que los sandbox
+    // por usuario quedarían obsoletos. Se eliminan (cascade borra lotes y
+    // pins) y el próximo load los recrea como copia fresca del plan nuevo.
+    const { count } = await supabase
+      .from("planner_scenarios")
+      .delete({ count: "exact" })
+      .eq("is_working", true);
+    if (count) {
+      result.warnings.push(
+        `${count} ${count === 1 ? "mesa de trabajo re-sincronizada" : "mesas de trabajo re-sincronizadas"} con el plan nuevo — los movimientos sin aprobar se descartaron.`,
+      );
+    }
+    revalidatePlanner();
+  }
   return result;
 }
 
