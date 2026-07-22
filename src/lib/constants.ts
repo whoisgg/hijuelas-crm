@@ -13,6 +13,7 @@ import {
   FlaskConical,
   Layers,
   Settings,
+  Shield,
   SprayCan,
   Sprout,
   Share2,
@@ -86,10 +87,13 @@ export type AppModule = {
 export const MODULE_GROUPS: { key: ModuleGroup; label: string }[] = [
   { key: "comercial", label: "Comercial" },
   { key: "agricola", label: "Operaciones agrícolas" },
+  { key: "plataforma", label: "Plataforma" },
 ];
 
-// Cada módulo maneja sus propios maestros (conectados entre sí), pero se ven
-// y editan dentro del módulo — no hay un módulo "Maestros" separado.
+// Maestros en dos niveles: los COMPARTIDOS (especies, variedades, programas,
+// organizaciones, usuarios) viven en Administración a nivel plataforma; cada
+// módulo mantiene sus maestros OPERACIONALES (ej. sectores y ficha de especie
+// del Planner en /planner/ajustes) referenciando los ids compartidos.
 export const MODULES: AppModule[] = [
   {
     key: "crm",
@@ -139,6 +143,17 @@ export const MODULES: AppModule[] = [
     group: "agricola",
     status: "soon",
     roles: ["admin", "produccion"],
+  },
+  {
+    key: "admin",
+    label: "Administración",
+    description: "Usuarios, organizaciones y datos maestros compartidos.",
+    icon: Shield,
+    group: "plataforma",
+    status: "live",
+    href: "/admin/maestros",
+    roles: ["admin"],
+    navModule: "comercial",
   },
 ];
 

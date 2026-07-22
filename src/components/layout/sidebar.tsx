@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, CircleHelp, Shield } from "lucide-react";
+import { Building2, CircleHelp, Database, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { moduleForPathname, navItemsFor, type NavItem } from "@/lib/constants";
@@ -19,6 +19,12 @@ const ADMIN_NAV: NavItem[] = [
     label: "Organizaciones",
     href: "/admin/organizaciones",
     icon: Building2,
+    module: "comercial",
+  },
+  {
+    label: "Datos maestros",
+    href: "/admin/maestros",
+    icon: Database,
     module: "comercial",
   },
 ];
