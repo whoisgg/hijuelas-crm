@@ -85,9 +85,7 @@ export default async function OcupacionPage({
             : `Bandejas ocupadas por área y semana según ${baseLabel}. Clic en una celda abre el layout del sector.`
         }
         badge={simActive ? "Simulación" : undefined}
-        actions={
-          <SimulationToggle checked={simOn} simulations={simulations} offIds={offIds} />
-        }
+        actions={<SimulationToggle checked={simOn} simulations={simulations} />}
       />
       <div className="mt-4 space-y-4">
         <WorkingChangesBanner

@@ -910,7 +910,8 @@ function MesonCell({
       data-keep-selection
       className={cn(
         "flex flex-col gap-1 rounded-md border bg-card p-1.5 text-[11px] transition-colors",
-        quotaFull && !soloHoy && "border-red-400/60",
+        // Cuota llena: borde negro (foreground) — el rojo saturaba el plano.
+        quotaFull && !soloHoy && "border-foreground/70",
         hasSelected && "border-[#185FA5]/60",
         // Al arrastrar encima: verde si hay espacio, rojo si está lleno.
         isOver && (free > 0 ? "ring-2 ring-emerald-500" : "ring-2 ring-red-500"),
@@ -927,7 +928,7 @@ function MesonCell({
           title={
             soloHoy
               ? "ocupación real vs capacidad física"
-              : leave > 0
+              : marcarSalen && leave > 0
                 ? "hoy → con lo que entra según plan → tras las salidas de la semana, sobre la capacidad física"
                 : "hoy → plan de la semana, ambos sobre la capacidad física"
           }
@@ -942,15 +943,19 @@ function MesonCell({
             `${pctOf(realTrays)}%`
           ) : (
             <>
-              {pctOf(realTrays)}→{pctOf(realTrays + enter)}
-              {leave > 0 ? (
+              {/* La cadena de tres (…→tras salidas) solo con el filtro Salidas activo. */}
+              {marcarSalen && leave > 0 ? (
                 <>
-                  →
+                  {pctOf(realTrays)}→{pctOf(realTrays + enter)}→
                   <span className="font-medium" style={{ color: SEAT_LEAVE }}>
                     {pctOf(planTrays)}
                   </span>
                 </>
-              ) : null}
+              ) : (
+                <>
+                  {pctOf(realTrays)}→{pctOf(planTrays)}
+                </>
+              )}
               %
             </>
           )}
