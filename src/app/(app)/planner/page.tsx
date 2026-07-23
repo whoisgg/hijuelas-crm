@@ -61,9 +61,9 @@ export default async function PlannerPage() {
     redirect("/dashboard");
   }
 
-  const [timeline, lotsCount, speciesCount, lastUpload] = await Promise.all([
+  const [timeline, lots, speciesCount, lastUpload] = await Promise.all([
     getTimelineData(supabase),
-    supabase.from("planner_lots").select("id, plants", { count: "exact", head: false }).limit(1),
+    supabase.from("planner_lots").select("plants", { count: "exact" }),
     supabase.from("planner_species").select("id", { count: "exact", head: true }),
     supabase
       .from("planner_uploads")
@@ -73,10 +73,7 @@ export default async function PlannerPage() {
       .limit(1)
       .maybeSingle(),
   ]);
-  const { data: sums } = await supabase
-    .from("planner_lots")
-    .select("plants.sum()")
-    .maybeSingle();
+  const totalPlants = (lots.data ?? []).reduce((acc, l) => acc + (l.plants ?? 0), 0);
 
   const alertWeeks = (timeline?.weeks ?? []).filter((w) =>
     (timeline?.areas ?? []).some((a) => {
@@ -86,11 +83,8 @@ export default async function PlannerPage() {
   ).length;
 
   const kpis = [
-    { label: "Lotes planificados", value: lotsCount.count ?? 0 },
-    {
-      label: "Plantas",
-      value: (sums as { sum: number | null } | null)?.sum ?? 0,
-    },
+    { label: "Lotes planificados", value: lots.count ?? 0 },
+    { label: "Plantas", value: totalPlants },
     { label: "Especies", value: speciesCount.count ?? 0 },
     { label: "Semanas en alerta", value: alertWeeks, alert: alertWeeks > 0 },
   ];
