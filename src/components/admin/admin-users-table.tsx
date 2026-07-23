@@ -61,6 +61,64 @@ const LEVEL_BADGE: Record<AccessLevel, string> = {
   viewer: "border-border bg-muted text-muted-foreground",
 };
 
+const LEVEL_TEXT: Record<AccessLevel, { label: string; tone: string }> = {
+  admin: { label: "Admin", tone: "text-purple-700 dark:text-purple-300" },
+  editor: { label: "Edición", tone: "text-primary" },
+  viewer: { label: "Vista", tone: "text-muted-foreground" },
+};
+
+type AccessLine = {
+  key: string;
+  moduleName: string;
+  isPlatform: boolean;
+  level: AccessLevel;
+  roleLabel: string | null;
+};
+
+/** Una línea por módulo (o una sola "Plataforma"), para las 3 columnas alineadas. */
+function accessLines(u: AdminUserRow): AccessLine[] {
+  if (u.is_platform_admin) {
+    return [
+      {
+        key: "platform",
+        moduleName: "Plataforma",
+        isPlatform: true,
+        level: "admin",
+        roleLabel: null,
+      },
+    ];
+  }
+  return Object.entries(u.accesses).map(([moduleKey, a]) => ({
+    key: moduleKey,
+    moduleName: moduleLabel(moduleKey),
+    isPlatform: false,
+    level: a.level,
+    roleLabel: moduleRoleLabel(moduleKey, a.moduleRole),
+  }));
+}
+
+/** Celda apilada: una línea de 22px por módulo, para que las columnas calcen. */
+function StackedCell({
+  lines,
+  children,
+}: {
+  lines: AccessLine[];
+  children: (line: AccessLine) => React.ReactNode;
+}) {
+  if (!lines.length) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {lines.map((line) => (
+        <div key={line.key} className="flex h-[22px] items-center">
+          {children(line)}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function moduleLabel(key: string): string {
   return PLATFORM_MODULES.find((m) => m.key === key)?.label ?? key;
 }
@@ -94,7 +152,9 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
             <tr>
               <th className="px-3 py-2 text-left font-medium">Nombre</th>
               <th className="px-3 py-2 text-left font-medium">Email</th>
-              <th className="px-3 py-2 text-left font-medium">Accesos</th>
+              <th className="px-3 py-2 text-left font-medium">Módulos</th>
+              <th className="px-3 py-2 text-left font-medium">Permiso</th>
+              <th className="px-3 py-2 text-left font-medium">Rol</th>
               <th className="px-3 py-2 text-left font-medium">Estado</th>
               <th className="px-3 py-2 text-left font-medium">Último login</th>
               <th className="px-3 py-2 text-right font-medium">Acciones</th>
@@ -106,33 +166,38 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
                 <td className="px-3 py-2.5 font-medium">{u.full_name ?? "—"}</td>
                 <td className="px-3 py-2.5 text-muted-foreground">{u.email}</td>
                 <td className="px-3 py-2.5">
-                  <div className="flex flex-wrap gap-1">
-                    {u.is_platform_admin ? (
+                  <StackedCell lines={accessLines(u)}>
+                    {(line) => (
                       <Badge
                         variant="outline"
-                        className={cn("gap-1 text-[10px] font-medium", LEVEL_BADGE.admin)}
+                        className={cn(
+                          "text-[10px] font-medium",
+                          line.isPlatform ? cn("gap-1", LEVEL_BADGE.admin) : LEVEL_BADGE[line.level],
+                        )}
                       >
-                        <ShieldCheck className="size-3" /> Plataforma
+                        {line.isPlatform ? <ShieldCheck className="size-3" /> : null}
+                        {line.moduleName}
                       </Badge>
-                    ) : null}
-                    {Object.entries(u.accesses).map(([moduleKey, a]) => {
-                      const roleLabel = moduleRoleLabel(moduleKey, a.moduleRole);
-                      return (
-                        <Badge
-                          key={moduleKey}
-                          variant="outline"
-                          className={cn("text-[10px] font-medium", LEVEL_BADGE[a.level])}
-                        >
-                          {moduleLabel(moduleKey)}
-                          {roleLabel ? ` · ${roleLabel}` : ""}
-                          {a.level !== "editor" ? ` (${a.level})` : ""}
-                        </Badge>
-                      );
-                    })}
-                    {!u.is_platform_admin && Object.keys(u.accesses).length === 0 ? (
-                      <span className="text-xs text-muted-foreground">Sin accesos</span>
-                    ) : null}
-                  </div>
+                    )}
+                  </StackedCell>
+                </td>
+                <td className="px-3 py-2.5">
+                  <StackedCell lines={accessLines(u)}>
+                    {(line) => (
+                      <span className={cn("text-xs font-medium", LEVEL_TEXT[line.level].tone)}>
+                        {line.isPlatform ? "Admin total" : LEVEL_TEXT[line.level].label}
+                      </span>
+                    )}
+                  </StackedCell>
+                </td>
+                <td className="px-3 py-2.5">
+                  <StackedCell lines={accessLines(u)}>
+                    {(line) => (
+                      <span className="text-xs">
+                        {line.roleLabel ?? <span className="text-muted-foreground">—</span>}
+                      </span>
+                    )}
+                  </StackedCell>
                 </td>
                 <td className="px-3 py-2.5">
                   {u.is_active ? (
@@ -177,7 +242,7 @@ export function AdminUsersTable({ users }: { users: AdminUserRow[] }) {
             ))}
             {users.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                <td colSpan={8} className="px-3 py-6 text-center text-sm text-muted-foreground">
                   Sin usuarios.
                 </td>
               </tr>
