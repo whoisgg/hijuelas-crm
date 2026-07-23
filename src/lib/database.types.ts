@@ -114,6 +114,220 @@ export type Database = {
           },
         ]
       }
+      bodega_bodegas: {
+        Row: {
+          activo: boolean
+          created_at: string
+          id: string
+          nombre: string
+          sucursal: string | null
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string
+          id?: string
+          nombre: string
+          sucursal?: string | null
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string
+          id?: string
+          nombre?: string
+          sucursal?: string | null
+        }
+        Relationships: []
+      }
+      bodega_ingresos: {
+        Row: {
+          bodega: string | null
+          cantidad: number
+          codigo_ingreso: string
+          codigo_producto: string
+          created_at: string
+          created_by: string | null
+          fecha_ingreso: string
+          id: string
+          nota: string | null
+          numero_documento: string | null
+          numero_semana: string | null
+          origen: string | null
+          precio_unitario: number | null
+          proveedor: string | null
+          sucursal: string | null
+        }
+        Insert: {
+          bodega?: string | null
+          cantidad: number
+          codigo_ingreso?: string
+          codigo_producto: string
+          created_at?: string
+          created_by?: string | null
+          fecha_ingreso?: string
+          id?: string
+          nota?: string | null
+          numero_documento?: string | null
+          numero_semana?: string | null
+          origen?: string | null
+          precio_unitario?: number | null
+          proveedor?: string | null
+          sucursal?: string | null
+        }
+        Update: {
+          bodega?: string | null
+          cantidad?: number
+          codigo_ingreso?: string
+          codigo_producto?: string
+          created_at?: string
+          created_by?: string | null
+          fecha_ingreso?: string
+          id?: string
+          nota?: string | null
+          numero_documento?: string | null
+          numero_semana?: string | null
+          origen?: string | null
+          precio_unitario?: number | null
+          proveedor?: string | null
+          sucursal?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bodega_ingresos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_productos"
+            referencedColumns: ["codigo_producto"]
+          },
+        ]
+      }
+      bodega_productos: {
+        Row: {
+          activo: boolean
+          categoria: string | null
+          codigo_producto: string
+          created_at: string
+          created_by: string | null
+          cuenta_contable: string | null
+          descripcion: string | null
+          id: string
+          nombre_prod: string
+          ranking_notas: string | null
+          stock_minimo: number
+          tipo_inventario: string | null
+          unidad_medida: string | null
+          updated_at: string
+        }
+        Insert: {
+          activo?: boolean
+          categoria?: string | null
+          codigo_producto?: string
+          created_at?: string
+          created_by?: string | null
+          cuenta_contable?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre_prod: string
+          ranking_notas?: string | null
+          stock_minimo?: number
+          tipo_inventario?: string | null
+          unidad_medida?: string | null
+          updated_at?: string
+        }
+        Update: {
+          activo?: boolean
+          categoria?: string | null
+          codigo_producto?: string
+          created_at?: string
+          created_by?: string | null
+          cuenta_contable?: string | null
+          descripcion?: string | null
+          id?: string
+          nombre_prod?: string
+          ranking_notas?: string | null
+          stock_minimo?: number
+          tipo_inventario?: string | null
+          unidad_medida?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bodega_salidas: {
+        Row: {
+          area_destino: string | null
+          bodega: string | null
+          cantidad: number
+          codigo_producto: string
+          created_at: string
+          created_by: string | null
+          fecha_salida: string
+          id: string
+          nota: string | null
+          numero_documento: string | null
+          numero_semana: string | null
+          sucursal: string | null
+          unidad_salida: string | null
+        }
+        Insert: {
+          area_destino?: string | null
+          bodega?: string | null
+          cantidad: number
+          codigo_producto: string
+          created_at?: string
+          created_by?: string | null
+          fecha_salida?: string
+          id?: string
+          nota?: string | null
+          numero_documento?: string | null
+          numero_semana?: string | null
+          sucursal?: string | null
+          unidad_salida?: string | null
+        }
+        Update: {
+          area_destino?: string | null
+          bodega?: string | null
+          cantidad?: number
+          codigo_producto?: string
+          created_at?: string
+          created_by?: string | null
+          fecha_salida?: string
+          id?: string
+          nota?: string | null
+          numero_documento?: string | null
+          numero_semana?: string | null
+          sucursal?: string | null
+          unidad_salida?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bodega_salidas_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_productos"
+            referencedColumns: ["codigo_producto"]
+          },
+        ]
+      }
+      bodega_unidades: {
+        Row: {
+          activo: boolean
+          created_at: string
+          id: string
+          nombre: string
+        }
+        Insert: {
+          activo?: boolean
+          created_at?: string
+          id?: string
+          nombre: string
+        }
+        Update: {
+          activo?: boolean
+          created_at?: string
+          id?: string
+          nombre?: string
+        }
+        Relationships: []
+      }
       attachments: {
         Row: {
           created_at: string
@@ -2927,6 +3141,45 @@ export type Database = {
       }
     }
     Views: {
+      bodega_stock_disponible: {
+        Row: {
+          activo: boolean | null
+          categoria: string | null
+          codigo_producto: string | null
+          descripcion: string | null
+          estado_stock: string | null
+          id: string | null
+          nombre_prod: string | null
+          porcentaje_stock_min: number | null
+          stock_disponible: number | null
+          stock_minimo: number | null
+          tipo_inventario: string | null
+          total_ingresos: number | null
+          total_salidas: number | null
+          unidad_medida: string | null
+        }
+        Relationships: []
+      }
+      bodega_stock_por_bodega: {
+        Row: {
+          activo: boolean | null
+          bodega: string | null
+          categoria: string | null
+          codigo_producto: string | null
+          descripcion: string | null
+          estado_stock: string | null
+          id: string | null
+          nombre_prod: string | null
+          stock_disponible: number | null
+          stock_minimo: number | null
+          sucursal: string | null
+          tipo_inventario: string | null
+          total_ingresos: number | null
+          total_salidas: number | null
+          unidad_medida: string | null
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           client_id: string | null

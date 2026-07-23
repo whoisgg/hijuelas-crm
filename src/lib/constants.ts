@@ -13,6 +13,7 @@ import {
   FileUp,
   FlaskConical,
   Layers,
+  Package,
   Settings,
   Shield,
   SprayCan,
@@ -28,7 +29,7 @@ export const APP_NAME = "Hijuelas One";
 export const APP_DESCRIPTION =
   "Plataforma integral de Grupo Hijuelas — comercial y operaciones agrícolas.";
 
-export type NavModule = "comercial" | "produccion";
+export type NavModule = "comercial" | "produccion" | "bodega";
 
 export type NavItem = {
   label: string;
@@ -57,6 +58,8 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Reporte", href: "/planner/reporte", icon: FileText, module: "produccion" },
   { label: "Carga", href: "/planner/carga", icon: FileUp, module: "produccion" },
   { label: "Datos maestros", href: "/planner/maestros", icon: Database, module: "produccion" },
+  { label: "Resumen", href: "/bodega", icon: LayoutDashboard, module: "bodega" },
+  { label: "Productos", href: "/bodega/productos", icon: Package, module: "bodega" },
 ];
 
 /**
@@ -151,11 +154,13 @@ export const MODULES: AppModule[] = [
   {
     key: "bodega",
     label: "Bodega e Insumos",
-    description: "Inventario de insumos, entradas y salidas de bodega, stock por sector.",
+    description: "Inventario de insumos, ingresos y salidas, stock por bodega.",
     icon: Warehouse,
     group: "agricola",
-    status: "soon",
+    status: "live",
+    href: "/bodega",
     roles: ["admin", "produccion"],
+    navModule: "bodega",
   },
   {
     key: "admin",
@@ -199,6 +204,11 @@ export const MODULE_ROLE_OPTIONS: Record<string, { value: string; label: string 
     { value: "soporte", label: "Soporte comercial" },
     { value: "finanzas", label: "Finanzas" },
   ],
+  bodega: [
+    { value: "gerente", label: "Gerente" },
+    { value: "almacenista", label: "Almacenista" },
+    { value: "solicitante", label: "Solicitante" },
+  ],
 };
 
 /** Lo que la UI necesita saber del acceso del usuario (serializable). */
@@ -236,17 +246,20 @@ export function liveModulesForAccess(access: ModuleAccessInfo | null): AppModule
 
 /** Módulos de nav internos (sidebar/bottom-nav) según acceso. */
 export function navModulesForAccess(access: ModuleAccessInfo | null): NavModule[] {
-  if (access?.isPlatformAdmin) return ["comercial", "produccion"];
+  if (access?.isPlatformAdmin) return ["comercial", "produccion", "bodega"];
   const out: NavModule[] = [];
   if (access?.modules["crm"]) out.push("comercial");
   if (access?.modules["planner"]) out.push("produccion");
+  if (access?.modules["bodega"]) out.push("bodega");
   // Fallback histórico: sin filas de acceso, comportamiento CRM.
   return out.length ? out : ["comercial"];
 }
 
-/** App activa según la URL: todo lo que cuelga de /planner es producción. */
+/** App activa según la URL: /planner es producción, /bodega es bodega. */
 export function moduleForPathname(pathname: string): NavModule {
-  return pathname.startsWith("/planner") ? "produccion" : "comercial";
+  if (pathname.startsWith("/planner")) return "produccion";
+  if (pathname.startsWith("/bodega")) return "bodega";
+  return "comercial";
 }
 
 /**
