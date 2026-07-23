@@ -26,7 +26,9 @@ export default function LoginPage() {
 function LoginPageInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const nextPath = params.get("next") ?? "/apps";
+  // Siempre aterrizar en el selector de módulos (Hijuelas One), ignorando
+  // cualquier ?next= heredado de bookmarks o deep links pre-login.
+  const nextPath = "/apps";
   const oauthError = params.get("error");
 
   const [mode, setMode] = React.useState<Mode>("password");
