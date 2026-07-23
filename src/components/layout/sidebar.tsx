@@ -6,7 +6,6 @@ import { Building2, CircleHelp, Database, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import {
-  moduleForPathname,
   navItemsFor,
   type ModuleAccessInfo,
   type NavItem,
@@ -37,11 +36,12 @@ const ADMIN_NAV: NavItem[] = [
 export function Sidebar({ access = null }: { access?: ModuleAccessInfo | null }) {
   const pathname = usePathname();
   const appItems = navItemsFor(access, pathname);
-  // Entradas admin solo dentro del CRM (app comercial).
+  // Administración es módulo de plataforma: sus entradas viven SOLO dentro
+  // de /admin (se llega por la card Administración del selector), no en el
+  // sidebar del CRM.
+  const inAdmin = pathname.startsWith("/admin");
   const items =
-    access?.isPlatformAdmin && moduleForPathname(pathname) === "comercial"
-      ? [...appItems, ...ADMIN_NAV]
-      : appItems;
+    inAdmin && access?.isPlatformAdmin ? ADMIN_NAV : appItems;
 
   return (
     <TooltipProvider delay={200}>
