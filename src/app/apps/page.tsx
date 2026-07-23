@@ -41,10 +41,8 @@ export default async function AppsPage() {
   const visibleCustom = custom.filter(
     (m) => m.status === "live" || isBuilder,
   );
-  const live = modules.filter((m) => m.status === "live");
-  if (live.length === 1 && modules.length === 1 && visibleCustom.length === 0) {
-    redirect(live[0].href ?? "/dashboard");
-  }
+  // Todos los usuarios ven el selector de Hijuelas One, aunque su rol solo
+  // tenga un módulo live — da identidad de plataforma y muestra lo que viene.
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
