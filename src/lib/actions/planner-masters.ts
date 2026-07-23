@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireModuleAccess } from "@/lib/access";
 
 /**
  * Maestros operacionales del Planner (/planner/ajustes): sectores y sus
@@ -11,23 +11,8 @@ import { createClient } from "@/lib/supabase/server";
  * administran en /admin — acá solo lo que es propio del módulo.
  */
 
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
-
 async function requireAccess() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado.");
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    throw new Error("Sin permisos para el Planner.");
-  }
-  return { supabase };
+  return requireModuleAccess("planner", "editor");
 }
 
 export async function updatePlannerArea(input: {

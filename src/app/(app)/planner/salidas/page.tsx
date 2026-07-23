@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { ArrowRight, FileText, Truck } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { cn } from "@/lib/utils";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
@@ -10,8 +11,6 @@ import { getSalidasData, type SalidaEvent } from "@/lib/planner/salidas-data";
 
 export const metadata = { title: "Salidas del Planner" };
 export const dynamic = "force-dynamic";
-
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
 
 const FILTERS = [
   { key: "todas", label: "Todas" },
@@ -31,13 +30,9 @@ export default async function SalidasPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const sp = await searchParams;

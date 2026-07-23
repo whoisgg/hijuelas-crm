@@ -14,17 +14,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { modulesForRole, moduleForPathname } from "@/lib/constants";
+import {
+  modulesForAccess,
+  moduleForPathname,
+  type ModuleAccessInfo,
+} from "@/lib/constants";
 
 /**
- * Switcher de módulos: lista todos los módulos que el rol puede ver (barras,
- * no cuadros). Los "próximamente" salen atenuados; los enlaces abren fuera.
+ * Switcher de módulos: lista todos los módulos que el acceso permite ver
+ * (barras, no cuadros). Los "próximamente" salen atenuados; los enlaces
+ * abren fuera.
  */
-export function AppLauncher({ role = null }: { role?: string | null }) {
+export function AppLauncher({ access = null }: { access?: ModuleAccessInfo | null }) {
   const [open, setOpen] = React.useState(false);
   const pathname = usePathname();
 
-  const modules = modulesForRole(role);
+  const modules = modulesForAccess(access);
   const liveCount = modules.filter((m) => m.status === "live").length;
   if (liveCount < 2 && modules.length < 2) return null;
 

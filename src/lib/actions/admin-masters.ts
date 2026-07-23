@@ -19,10 +19,12 @@ async function requireAdmin() {
   if (!user) throw new Error("No autenticado.");
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("role")
+    .select("role, is_platform_admin")
     .eq("id", user.id)
     .maybeSingle();
-  if (appUser?.role !== "admin") throw new Error("Solo admin puede editar maestros.");
+  if (appUser?.role !== "admin" && !appUser?.is_platform_admin) {
+    throw new Error("Solo admin puede editar maestros.");
+  }
   return { supabase, userId: user.id };
 }
 

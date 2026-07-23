@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -12,8 +13,6 @@ import { getTimelineData } from "@/lib/planner/occupancy-data";
 export const metadata = { title: "Movimientos" };
 export const dynamic = "force-dynamic";
 
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
-
 export default async function MovimientosPage() {
   const supabase = await createClient();
   const {
@@ -21,13 +20,9 @@ export default async function MovimientosPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const [{ data: movements }, { data: areas }, timeline] = await Promise.all([

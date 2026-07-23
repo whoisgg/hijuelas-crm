@@ -13,7 +13,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command";
-import { navItemsFor } from "@/lib/constants";
+import { navItemsFor, type ModuleAccessInfo } from "@/lib/constants";
 import { usePathname, useRouter } from "next/navigation";
 import {
   globalSearch,
@@ -28,7 +28,7 @@ const EMPTY: GlobalSearchResults = {
   variedades: [],
 };
 
-export function GlobalSearch({ role = null }: { role?: string | null }) {
+export function GlobalSearch({ access = null }: { access?: ModuleAccessInfo | null }) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [results, setResults] = React.useState<GlobalSearchResults>(EMPTY);
@@ -89,7 +89,7 @@ export function GlobalSearch({ role = null }: { role?: string | null }) {
   };
 
   const trimmed = query.trim();
-  const navItems = navItemsFor(role, pathname);
+  const navItems = navItemsFor(access, pathname);
   const navMatches =
     trimmed.length === 0
       ? navItems

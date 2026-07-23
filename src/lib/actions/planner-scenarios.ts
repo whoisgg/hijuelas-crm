@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireModuleAccess } from "@/lib/access";
 
 /**
  * Simulador de escenarios: copias sandbox del plan base para probar
@@ -10,23 +10,8 @@ import { createClient } from "@/lib/supabase/server";
  * sin tocar producción.
  */
 
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
-
 async function requireAccess() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) throw new Error("No autenticado.");
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    throw new Error("Sin permisos para el Planner.");
-  }
-  return { supabase, userId: user.id };
+  return requireModuleAccess("planner", "editor");
 }
 
 export async function createScenario(

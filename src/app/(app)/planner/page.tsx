@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { CalendarRange, FileUp, Layers, Map } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +11,6 @@ import { getTimelineData } from "@/lib/planner/occupancy-data";
 
 export const metadata = { title: "Planner" };
 export const dynamic = "force-dynamic";
-
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
 
 const MODULES = [
   {
@@ -51,14 +50,9 @@ export default async function PlannerPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const [timeline, lots, speciesCount, lastUpload] = await Promise.all([

@@ -6,7 +6,11 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { navItemsFor, type NavItem } from "@/lib/constants";
+import {
+  navItemsFor,
+  type ModuleAccessInfo,
+  type NavItem,
+} from "@/lib/constants";
 
 // 4 ítems principales en el bottom-bar (iOS-style). El resto vive en "Más".
 // Orden mobile: Dashboard, Calendario, Contratos, Oportunidades.
@@ -24,11 +28,11 @@ const PRIMARY_HREFS = [
  * Bottom navigation tipo iOS app — sólo visible en mobile.
  * Hasta 4 ítems principales + un "Más" que abre un sheet con el resto.
  */
-export function BottomNav({ role = null }: { role?: string | null }) {
+export function BottomNav({ access = null }: { access?: ModuleAccessInfo | null }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  const items = navItemsFor(role, pathname);
+  const items = navItemsFor(access, pathname);
 
   const primaryItems = PRIMARY_HREFS.map((href) =>
     items.find((i) => i.href === href),

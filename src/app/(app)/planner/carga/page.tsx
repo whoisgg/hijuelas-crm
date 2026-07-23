@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AlertTriangle, Download } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -16,8 +17,6 @@ import {
 
 export const metadata = { title: "Carga de datos" };
 export const dynamic = "force-dynamic";
-
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString("es-CL", {
@@ -35,13 +34,9 @@ export default async function CargaPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const uploads = await listPlannerUploads();

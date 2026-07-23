@@ -5,7 +5,12 @@ import { usePathname } from "next/navigation";
 import { Building2, CircleHelp, Database, Shield } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { moduleForPathname, navItemsFor, type NavItem } from "@/lib/constants";
+import {
+  moduleForPathname,
+  navItemsFor,
+  type ModuleAccessInfo,
+  type NavItem,
+} from "@/lib/constants";
 import {
   Tooltip,
   TooltipContent,
@@ -29,12 +34,12 @@ const ADMIN_NAV: NavItem[] = [
   },
 ];
 
-export function Sidebar({ role = null }: { role?: string | null }) {
+export function Sidebar({ access = null }: { access?: ModuleAccessInfo | null }) {
   const pathname = usePathname();
-  const appItems = navItemsFor(role, pathname);
+  const appItems = navItemsFor(access, pathname);
   // Entradas admin solo dentro del CRM (app comercial).
   const items =
-    role === "admin" && moduleForPathname(pathname) === "comercial"
+    access?.isPlatformAdmin && moduleForPathname(pathname) === "comercial"
       ? [...appItems, ...ADMIN_NAV]
       : appItems;
 

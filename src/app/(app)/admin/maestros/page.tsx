@@ -46,10 +46,10 @@ export default async function AdminMaestrosPage({
 
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("role")
+    .select("role, is_platform_admin")
     .eq("id", user.id)
     .maybeSingle();
-  if (appUser?.role !== "admin") redirect("/dashboard");
+  if (appUser?.role !== "admin" && !appUser?.is_platform_admin) redirect("/apps");
 
   const sp = await searchParams;
   const section: SectionKey | null =

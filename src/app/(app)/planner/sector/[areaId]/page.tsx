@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { SectorLayout } from "@/components/planner/sector-layout";
@@ -15,8 +16,6 @@ import { getTimelineData } from "@/lib/planner/occupancy-data";
 
 export const metadata = { title: "Layout por sector" };
 export const dynamic = "force-dynamic";
-
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
 
 export default async function SectorPage({
   params,
@@ -37,13 +36,9 @@ export default async function SectorPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const areaId = Number((await params).areaId);

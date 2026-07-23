@@ -17,9 +17,10 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   APP_NAME,
-  liveModulesForRole,
+  liveModulesForAccess,
   moduleForPathname,
   QUICK_CREATE_ITEMS,
+  type ModuleAccessInfo,
 } from "@/lib/constants";
 import { createClient } from "@/lib/supabase/client";
 import { AppLauncher } from "./app-launcher";
@@ -29,17 +30,17 @@ import { cn } from "@/lib/utils";
 
 type TopbarProps = {
   userEmail: string | null;
-  role?: string | null;
+  access?: ModuleAccessInfo | null;
 };
 
-export function Topbar({ userEmail, role = null }: TopbarProps) {
+export function Topbar({ userEmail, access = null }: TopbarProps) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
 
   const initial = (userEmail?.[0] ?? "U").toUpperCase();
   const pathname = usePathname();
   const activeModule = moduleForPathname(pathname);
-  const liveModules = liveModulesForRole(role);
+  const liveModules = liveModulesForAccess(access);
   const activeApp =
     liveModules.find((m) => m.navModule === activeModule) ?? liveModules[0];
   // El logo lleva al home del módulo activo; el switcher cambia de módulo.
@@ -59,7 +60,7 @@ export function Topbar({ userEmail, role = null }: TopbarProps) {
 
   return (
     <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center gap-3 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <AppLauncher role={role} />
+      <AppLauncher access={access} />
 
       <Link href={homeHref} className="flex items-center gap-2 font-semibold">
         <Sprout className="h-5 w-5 text-primary" />
@@ -74,7 +75,7 @@ export function Topbar({ userEmail, role = null }: TopbarProps) {
       </Link>
 
       <div className="ml-4 flex-1">
-        <GlobalSearch role={role} />
+        <GlobalSearch access={access} />
       </div>
 
       {/* Nuevo dropdown — trigger estilizado directo (no render={<Button>})

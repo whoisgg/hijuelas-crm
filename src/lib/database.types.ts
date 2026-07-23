@@ -63,6 +63,7 @@ export type Database = {
           id: string
           is_active: boolean
           is_module_builder: boolean
+          is_platform_admin: boolean
           organization_id: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
@@ -79,6 +80,7 @@ export type Database = {
           id: string
           is_active?: boolean
           is_module_builder?: boolean
+          is_platform_admin?: boolean
           organization_id?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -95,6 +97,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           is_module_builder?: boolean
+          is_platform_admin?: boolean
           organization_id?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
@@ -1207,6 +1210,44 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "mcp_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_access: {
+        Row: {
+          created_at: string
+          id: string
+          level: Database["public"]["Enums"]["module_access_level"]
+          module_key: string
+          module_role: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level?: Database["public"]["Enums"]["module_access_level"]
+          module_key: string
+          module_role?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: Database["public"]["Enums"]["module_access_level"]
+          module_key?: string
+          module_role?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_access_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "app_users"
@@ -3432,6 +3473,7 @@ export type Database = {
       currency_code: "CLP" | "USD" | "EUR"
       delivery_status: "pendiente" | "en_proceso" | "finalizado" | "eliminado"
       material_type: "vitro" | "raiz_cubierta" | "otros"
+      module_access_level: "admin" | "editor" | "viewer"
       payment_status: "pendiente" | "pagado" | "vencido"
       payment_type: "anticipo_1" | "anticipo_2" | "saldo"
       royalty_status: "no_califica" | "pendiente" | "pagado"
@@ -3588,6 +3630,7 @@ export const Constants = {
       currency_code: ["CLP", "USD", "EUR"],
       delivery_status: ["pendiente", "en_proceso", "finalizado", "eliminado"],
       material_type: ["vitro", "raiz_cubierta", "otros"],
+      module_access_level: ["admin", "editor", "viewer"],
       payment_status: ["pendiente", "pagado", "vencido"],
       payment_type: ["anticipo_1", "anticipo_2", "saldo"],
       royalty_status: ["no_califica", "pendiente", "pagado"],

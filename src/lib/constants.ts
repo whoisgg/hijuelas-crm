@@ -170,35 +170,78 @@ export const MODULES: AppModule[] = [
   },
 ];
 
-/**
- * Módulos de nav internos disponibles según rol. `produccion` ve solo el
- * Planner; `admin` ve todo; el resto de los roles mantiene el comportamiento
- * histórico: app comercial completa.
- */
-export function navModulesForRole(role: string | null | undefined): NavModule[] {
-  if (role === "admin") return ["comercial", "produccion"];
-  if (role === "produccion") return ["produccion"];
-  return ["comercial"];
-}
+/* -------------------------------------------------------------------------- */
+/* Acceso multi-módulo: niveles estándar + rol propio de cada módulo.         */
+/* La fuente de verdad es la tabla module_access (ver lib/access.ts).         */
+/* -------------------------------------------------------------------------- */
 
-/** ¿El rol ve este módulo? admin ve todo; "all" = cualquiera. */
-export function roleCanSeeModule(
-  role: string | null | undefined,
+export type AccessLevel = "admin" | "editor" | "viewer";
+
+export const ACCESS_LEVEL_RANK: Record<AccessLevel, number> = {
+  viewer: 0,
+  editor: 1,
+  admin: 2,
+};
+
+export const ACCESS_LEVEL_OPTIONS: { value: AccessLevel; label: string }[] = [
+  { value: "admin", label: "Admin del módulo" },
+  { value: "editor", label: "Editor" },
+  { value: "viewer", label: "Viewer" },
+];
+
+/**
+ * Roles propios de cada módulo — la "función" del usuario dentro del módulo,
+ * separada del nivel de acceso. Cada módulo define los suyos.
+ */
+export const MODULE_ROLE_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  crm: [
+    { value: "kam", label: "KAM" },
+    { value: "soporte", label: "Soporte comercial" },
+    { value: "finanzas", label: "Finanzas" },
+  ],
+};
+
+/** Lo que la UI necesita saber del acceso del usuario (serializable). */
+export type ModuleAccessInfo = {
+  isPlatformAdmin: boolean;
+  modules: Record<string, { level: AccessLevel; moduleRole: string | null }>;
+};
+
+/** ¿El usuario ve este módulo en selector/switcher? */
+export function accessCanSeeModule(
+  access: ModuleAccessInfo | null,
   m: AppModule,
 ): boolean {
-  if (role === "admin") return true;
-  if (m.roles === "all") return true;
-  return !!role && m.roles.includes(role);
+  if (access?.isPlatformAdmin) return true;
+  if (m.key === "admin") return false; // Administración: solo platform admin
+  if (m.status === "soon") {
+    // Los "próximamente" se muestran a quien ya tiene un módulo del grupo.
+    return MODULES.some(
+      (x) =>
+        x.group === m.group && x.status !== "soon" && !!access?.modules[x.key],
+    );
+  }
+  return !!access?.modules[m.key];
 }
 
-/** Módulos visibles para el rol (todos los estados). */
-export function modulesForRole(role: string | null | undefined): AppModule[] {
-  return MODULES.filter((m) => roleCanSeeModule(role, m));
+/** Módulos visibles para el acceso (todos los estados). */
+export function modulesForAccess(access: ModuleAccessInfo | null): AppModule[] {
+  return MODULES.filter((m) => accessCanSeeModule(access, m));
 }
 
 /** Módulos nativos "live" — para el switcher de apps. */
-export function liveModulesForRole(role: string | null | undefined): AppModule[] {
-  return modulesForRole(role).filter((m) => m.status === "live");
+export function liveModulesForAccess(access: ModuleAccessInfo | null): AppModule[] {
+  return modulesForAccess(access).filter((m) => m.status === "live");
+}
+
+/** Módulos de nav internos (sidebar/bottom-nav) según acceso. */
+export function navModulesForAccess(access: ModuleAccessInfo | null): NavModule[] {
+  if (access?.isPlatformAdmin) return ["comercial", "produccion"];
+  const out: NavModule[] = [];
+  if (access?.modules["crm"]) out.push("comercial");
+  if (access?.modules["planner"]) out.push("produccion");
+  // Fallback histórico: sin filas de acceso, comportamiento CRM.
+  return out.length ? out : ["comercial"];
 }
 
 /** App activa según la URL: todo lo que cuelga de /planner es producción. */
@@ -207,14 +250,14 @@ export function moduleForPathname(pathname: string): NavModule {
 }
 
 /**
- * Ítems de nav para la app activa (por pathname), acotados a lo que el rol
- * puede ver.
+ * Ítems de nav para la app activa (por pathname), acotados a lo que el
+ * acceso permite ver.
  */
 export function navItemsFor(
-  role: string | null | undefined,
+  access: ModuleAccessInfo | null,
   pathname: string,
 ): NavItem[] {
-  const allowed = navModulesForRole(role);
+  const allowed = navModulesForAccess(access);
   const current = moduleForPathname(pathname);
   if (!allowed.includes(current)) return [];
   return NAV_ITEMS.filter((item) => item.module === current);

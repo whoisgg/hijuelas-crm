@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { CalendarRange, SlidersHorizontal, Sprout, Warehouse } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import {
@@ -25,8 +26,6 @@ import {
 
 export const metadata = { title: "Datos maestros del Planner" };
 export const dynamic = "force-dynamic";
-
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
 
 const SECTIONS = ["sectores", "especies", "calendario", "parametros"] as const;
 type SectionKey = (typeof SECTIONS)[number];
@@ -64,13 +63,9 @@ export default async function PlannerMaestrosPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const sp = await searchParams;

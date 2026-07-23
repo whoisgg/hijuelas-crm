@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 
 /**
  * Exportación round-trip del plan vigente: genera un .xlsx con las mismas
@@ -11,8 +12,6 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
-
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -20,12 +19,8 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
     return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
   }
 

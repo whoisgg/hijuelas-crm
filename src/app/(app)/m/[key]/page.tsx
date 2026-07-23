@@ -32,13 +32,14 @@ export default async function CustomModulePage({
 
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("role, is_module_builder")
+    .select("role, is_platform_admin, is_module_builder")
     .eq("id", user.id)
     .maybeSingle();
-  const isBuilder = appUser?.role === "admin" || !!appUser?.is_module_builder;
+  const isAdmin = appUser?.role === "admin" || !!appUser?.is_platform_admin;
+  const isBuilder = isAdmin || !!appUser?.is_module_builder;
 
   // Un draft solo lo ve su dueño o un admin.
-  if (mod.status === "draft" && !(isBuilder && (mod.ownerId === user.id || appUser?.role === "admin"))) {
+  if (mod.status === "draft" && !(isBuilder && (mod.ownerId === user.id || isAdmin))) {
     notFound();
   }
 

@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { Boxes, ExternalLink, Sprout } from "lucide-react";
 
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { getAccessProfile } from "@/lib/access";
 import {
   APP_NAME,
   MODULE_GROUPS,
-  modulesForRole,
+  modulesForAccess,
   type AppModule,
 } from "@/lib/constants";
 import { listCustomModules } from "@/lib/custom/data";
@@ -24,19 +25,17 @@ export default async function AppsPage() {
   if (!isSupabaseConfigured()) redirect("/login");
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const profile = await getAccessProfile(supabase);
+  if (!profile) redirect("/login");
 
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("role, is_module_builder")
-    .eq("id", user.id)
+    .select("is_module_builder")
+    .eq("id", profile.userId)
     .maybeSingle();
-  const isBuilder = appUser?.role === "admin" || !!appUser?.is_module_builder;
+  const isBuilder = profile.isPlatformAdmin || !!appUser?.is_module_builder;
 
-  const modules = modulesForRole(appUser?.role ?? null);
+  const modules = modulesForAccess(profile);
   const custom = await listCustomModules(supabase);
   const visibleCustom = custom.filter(
     (m) => m.status === "live" || isBuilder,

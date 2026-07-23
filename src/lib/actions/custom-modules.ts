@@ -20,11 +20,11 @@ async function getAccess() {
   if (!user) throw new Error("No autenticado.");
   const { data: appUser } = await supabase
     .from("app_users")
-    .select("role, is_module_builder")
+    .select("role, is_platform_admin, is_module_builder")
     .eq("id", user.id)
     .maybeSingle();
-  const isBuilder = appUser?.role === "admin" || !!appUser?.is_module_builder;
-  const isAdmin = appUser?.role === "admin";
+  const isAdmin = appUser?.role === "admin" || !!appUser?.is_platform_admin;
+  const isBuilder = isAdmin || !!appUser?.is_module_builder;
   return { supabase, userId: user.id, isBuilder, isAdmin };
 }
 

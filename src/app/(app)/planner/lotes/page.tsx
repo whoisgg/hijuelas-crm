@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
@@ -9,8 +10,6 @@ import { getProgramByPlannerVarietyId } from "@/lib/planner/variety-programs";
 export const metadata = { title: "Lotes" };
 export const dynamic = "force-dynamic";
 
-const PLANNER_ROLES = new Set(["admin", "produccion"]);
-
 export default async function LotesPage() {
   const supabase = await createClient();
   const {
@@ -18,13 +17,9 @@ export default async function LotesPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: appUser } = await supabase
-    .from("app_users")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!appUser?.role || !PLANNER_ROLES.has(appUser.role)) {
-    redirect("/dashboard");
+  const profile = await getAccessProfile(supabase);
+  if (!hasModuleAccess(profile, "planner")) {
+    redirect("/apps");
   }
 
   const [{ data: lots }, programByVarietyId] = await Promise.all([
