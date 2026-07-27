@@ -7,6 +7,7 @@ import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { SectorLayout } from "@/components/planner/sector-layout";
+import { AgeDistribution } from "@/components/planner/age-distribution";
 import { SectorWorkspace } from "@/components/planner/sector-workspace";
 import { getSectorLayout, getSectorPlanFill } from "@/lib/planner/layout-data";
 import { getScenarioWorkspace } from "@/lib/planner/scenario-workspace";
@@ -242,6 +243,17 @@ export default async function SectorPage({
             }
           />
         )}
+
+        {/* La leyenda es la estadística global de antigüedad del sector: sale del
+            detalle del inventario, que es lo único que trae fecha de plantación. */}
+        {layout.modules.length ? (
+          <div className="rounded-lg border bg-card px-4 py-3">
+            <AgeDistribution
+              distribution={layout.ageDistribution}
+              unknownTrays={layout.ageUnknownTrays}
+            />
+          </div>
+        ) : null}
       </div>
     </AppShell>
   );

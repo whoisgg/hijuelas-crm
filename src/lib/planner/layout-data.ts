@@ -21,7 +21,24 @@ export type LayoutLocation = {
   trays: number;
   plants: number;
   species: { name: string; trays: number }[];
+  /** antigüedad promedio del material del mesón, ponderada por bandejas */
+  ageMonthsAvg: number | null;
+  /** distribución de bandejas por tramo de meses dentro del mesón */
+  ageBuckets: AgeBucket[];
 };
+
+/** Tramo de antigüedad en meses; 6 significa "6 o más". */
+export type AgeBucket = { months: number; trays: number; plants: number };
+
+export const AGE_MAX_BUCKET = 6;
+
+/** Meses cumplidos desde la plantación, tope en AGE_MAX_BUCKET. */
+export function ageMonthsFrom(plantedAt: string, today = new Date()): number {
+  const d = new Date(`${plantedAt}T00:00:00`);
+  const days = (today.getTime() - d.getTime()) / 86_400_000;
+  if (!Number.isFinite(days) || days < 0) return 0;
+  return Math.min(AGE_MAX_BUCKET, Math.floor(days / 30.44));
+}
 
 export type LayoutModule = {
   id: number;
@@ -35,6 +52,14 @@ export type SectorLayoutData = {
   snapshotDate: string | null;
   snapshotFile: string | null;
   totals: { trays: number; physicalCapacity: number; planCapacity: number };
+  /**
+   * Distribución de antigüedad de todo el sector — es la "estadística global"
+   * que la leyenda muestra por tramo. Vacía si el snapshot activo no trae fechas
+   * de plantación (el archivo viejo de hotelería no las tenía).
+   */
+  ageDistribution: AgeBucket[];
+  /** bandejas del sector sin fecha de plantación conocida */
+  ageUnknownTrays: number;
 };
 
 export type SectorPlanFill = {
@@ -172,6 +197,56 @@ export async function getSectorLayout(
     }
   }
 
+  // Antigüedad: sale del detalle del inventario (`planner_inventory_items`), que
+  // es lo que trae la fecha de plantación. El snapshot agregado no la tiene, y el
+  // archivo viejo de hotelería tampoco — con esa fuente la distribución queda
+  // vacía y la UI lo dice en vez de inventar una edad.
+  const ageByLocation = new Map<number, Map<number, { trays: number; plants: number }>>();
+  const ageTotals = new Map<number, { trays: number; plants: number }>();
+  let ageUnknownTrays = 0;
+  if (lastUpload && locationIds.length) {
+    const { data: items } = await supabase
+      .from("planner_inventory_items")
+      .select("location_id, trays, plants, planted_at")
+      .eq("upload_id", lastUpload.id)
+      .in("location_id", locationIds)
+      .limit(5000);
+    for (const it of items ?? []) {
+      if (it.location_id === null) continue;
+      if (!it.planted_at) {
+        ageUnknownTrays += it.trays;
+        continue;
+      }
+      const months = ageMonthsFrom(it.planted_at);
+      let byLoc = ageByLocation.get(it.location_id);
+      if (!byLoc) {
+        byLoc = new Map();
+        ageByLocation.set(it.location_id, byLoc);
+      }
+      const cell = byLoc.get(months) ?? { trays: 0, plants: 0 };
+      cell.trays += it.trays;
+      cell.plants += it.plants;
+      byLoc.set(months, cell);
+
+      const tot = ageTotals.get(months) ?? { trays: 0, plants: 0 };
+      tot.trays += it.trays;
+      tot.plants += it.plants;
+      ageTotals.set(months, tot);
+    }
+  }
+
+  const bucketsOf = (locationId: number): AgeBucket[] =>
+    [...(ageByLocation.get(locationId) ?? new Map()).entries()]
+      .map(([months, v]) => ({ months, trays: v.trays, plants: v.plants }))
+      .sort((a, b) => a.months - b.months);
+
+  /** Promedio ponderado por bandejas; null si el mesón no tiene fechas. */
+  const avgOf = (buckets: AgeBucket[]): number | null => {
+    const trays = buckets.reduce((s, b) => s + b.trays, 0);
+    if (!trays) return null;
+    return buckets.reduce((s, b) => s + b.months * b.trays, 0) / trays;
+  };
+
   // La capacidad que manda es la de planificación (Vivero Planner). La suma
   // física de los mesones (Hotelería) puede ser mayor; cada mesón usa su
   // cuota proporcional para que el plano sume exactamente la capacidad del
@@ -208,6 +283,7 @@ export async function getSectorLayout(
         totalTrays += occ?.trays ?? 0;
         totalPhysical += l.capacity_trays ?? 0;
         totalPlanCapacity += planCapacity ?? 0;
+        const ageBuckets = bucketsOf(l.id);
         return {
           id: l.id,
           code: l.code,
@@ -220,6 +296,8 @@ export async function getSectorLayout(
           species: [...(occ?.species ?? new Map())]
             .map(([name, trays]) => ({ name, trays }))
             .sort((a, b) => b.trays - a.trays),
+          ageBuckets,
+          ageMonthsAvg: avgOf(ageBuckets),
         };
       }),
   }));
@@ -239,5 +317,9 @@ export async function getSectorLayout(
       physicalCapacity: totalPhysical,
       planCapacity: totalPlanCapacity,
     },
+    ageDistribution: [...ageTotals.entries()]
+      .map(([months, v]) => ({ months, trays: v.trays, plants: v.plants }))
+      .sort((a, b) => a.months - b.months),
+    ageUnknownTrays,
   };
 }
