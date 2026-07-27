@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   CalendarDays,
+  ChevronDown,
   ChevronRight,
   FileText,
   Link2,
@@ -279,6 +280,17 @@ function MovesTable({
   kind: PlannedMoveKind;
   canLinkMasters: boolean;
 }) {
+  const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
+  const colSpan = kind === "despacho" ? 7 : 6;
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -294,68 +306,153 @@ function MovesTable({
             {kind === "despacho" ? (
               <th className="px-3 py-2 text-left font-medium">Contrato</th>
             ) : null}
+            <th className="px-3 py-2 text-right font-medium" />
           </tr>
         </thead>
         <tbody className="divide-y">
-          {moves.map((m, i) => (
-            <tr key={`${m.lotId}-${m.kind}-${i}`} className="hover:bg-muted/30">
-              <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{m.lotCode}</td>
-              <td className="px-3 py-2 text-muted-foreground">{m.variety ?? "—"}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{num(m.trays)}</td>
-              <td className="px-3 py-2 text-right tabular-nums">{num(m.plants)}</td>
-              <td className="px-3 py-2">
-                {kind === "traslado" ? (
-                  <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
-                    {m.fromArea}
-                    <ArrowRight className="h-3 w-3 shrink-0" />
-                    <span className="font-medium text-foreground">{m.toArea}</span>
-                  </span>
-                ) : (
-                  <span className="whitespace-nowrap text-xs text-muted-foreground">
-                    {kind === "ingreso" ? m.toArea : m.fromArea}
-                  </span>
-                )}
-              </td>
-              {kind === "despacho" ? (
-                <td className="px-3 py-2">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    {m.matches.length ? (
-                      m.matches.map((c) => (
-                        <Link
-                          key={c.contractId}
-                          href={`/contratos/${c.contractId}`}
-                          title={`${c.clientName} · ${num(c.qtyPlants)} plantas${c.deliveryWeek ? ` · S${c.deliveryWeek}` : ""}`}
-                          className="inline-flex max-w-56 items-center gap-1 truncate rounded-full border border-[#8b5cf6]/40 bg-[#8b5cf6]/[0.06] px-2 py-0.5 text-[11px] text-foreground transition-colors hover:border-[#8b5cf6]"
-                        >
-                          <FileText className="h-3 w-3 shrink-0 text-[#8b5cf6]" />
-                          <span className="truncate">
-                            {c.contractNumber} · {c.clientName}
-                          </span>
-                        </Link>
-                      ))
-                    ) : m.unlinkedVariety ? (
-                      canLinkMasters && m.varietyId !== null ? (
-                        <LinkVarietyButton varietyId={m.varietyId} name={m.variety} />
-                      ) : (
-                        <span
-                          className="text-[11px] text-amber-600 dark:text-amber-400"
-                          title="La variedad del lote no está vinculada a los maestros — vincúlala en Administración → Datos maestros para poder cruzar."
-                        >
-                          variedad sin vínculo
-                        </span>
-                      )
+          {moves.map((m, i) => {
+            const key = `${m.lotId}-${m.kind}-${i}`;
+            const isOpen = expanded.has(key);
+            return (
+              <React.Fragment key={key}>
+                <tr className="hover:bg-muted/30">
+                  <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{m.lotCode}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{m.variety ?? "—"}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{num(m.trays)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{num(m.plants)}</td>
+                  <td className="px-3 py-2">
+                    {kind === "traslado" ? (
+                      <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
+                        {m.fromArea}
+                        <ArrowRight className="h-3 w-3 shrink-0" />
+                        <span className="font-medium text-foreground">{m.toArea}</span>
+                      </span>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">
-                        sin contrato asociado
+                      <span className="whitespace-nowrap text-xs text-muted-foreground">
+                        {kind === "ingreso" ? m.toArea : m.fromArea}
                       </span>
                     )}
-                  </span>
-                </td>
-              ) : null}
-            </tr>
-          ))}
+                  </td>
+                  {kind === "despacho" ? (
+                    <td className="px-3 py-2">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        {m.matches.length ? (
+                          m.matches.map((c) => (
+                            <Link
+                              key={c.contractId}
+                              href={`/contratos/${c.contractId}`}
+                              title={`${c.clientName} · ${num(c.qtyPlants)} plantas${c.deliveryWeek ? ` · S${c.deliveryWeek}` : ""}`}
+                              className="inline-flex max-w-56 items-center gap-1 truncate rounded-full border border-[#8b5cf6]/40 bg-[#8b5cf6]/[0.06] px-2 py-0.5 text-[11px] text-foreground transition-colors hover:border-[#8b5cf6]"
+                            >
+                              <FileText className="h-3 w-3 shrink-0 text-[#8b5cf6]" />
+                              <span className="truncate">
+                                {c.contractNumber} · {c.clientName}
+                              </span>
+                            </Link>
+                          ))
+                        ) : m.unlinkedVariety ? (
+                          canLinkMasters && m.varietyId !== null ? (
+                            <LinkVarietyButton varietyId={m.varietyId} name={m.variety} />
+                          ) : (
+                            <span
+                              className="text-[11px] text-amber-600 dark:text-amber-400"
+                              title="La variedad del lote no está vinculada a los maestros — vincúlala en Administración → Datos maestros para poder cruzar."
+                            >
+                              variedad sin vínculo
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">
+                            sin contrato asociado
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                  ) : null}
+                  <td className="px-3 py-2 text-right">
+                    {m.changes.length ? (
+                      <button
+                        type="button"
+                        onClick={() => toggle(key)}
+                        aria-expanded={isOpen}
+                        title={`${m.changes.length} ${m.changes.length === 1 ? "modificación" : "modificaciones"} al plan de este lote`}
+                        className="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        {m.changes.length}
+                        <ChevronDown
+                          className={cn("h-3 w-3 shrink-0 transition-transform", isOpen && "rotate-180")}
+                        />
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+                {isOpen ? (
+                  <tr className="bg-muted/20">
+                    <td colSpan={colSpan} className="px-3 py-2">
+                      <LotChangeHistory changes={m.changes} />
+                    </td>
+                  </tr>
+                ) : null}
+              </React.Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+const SOURCE_LABEL: Record<"manual" | "carga", string> = {
+  manual: "edición manual",
+  carga: "carga de Excel",
+};
+
+function formatChangedAt(iso: string): string {
+  return new Date(iso).toLocaleString("es-CL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+/** Historial de un lote: un bloque por modificación, más reciente primero. */
+function LotChangeHistory({ changes }: { changes: PlannedMove["changes"] }) {
+  return (
+    <ul className="space-y-2">
+      {changes.map((c) => (
+        <li key={c.batchId} className="text-xs">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
+            <span className="font-medium text-foreground">{formatChangedAt(c.changedAt)}</span>
+            <span>·</span>
+            <span>{c.changedByName ?? "—"}</span>
+            <span>·</span>
+            <span className="inline-flex items-center rounded-full border px-1.5 py-0 text-[10px] uppercase tracking-wide">
+              {SOURCE_LABEL[c.source]}
+            </span>
+            {c.uploadFileName ? (
+              <span className="truncate" title={c.uploadFileName}>
+                ({c.uploadFileName})
+              </span>
+            ) : null}
+          </div>
+          <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-0.5 pl-0.5">
+            {c.fields.map((f, fi) => (
+              <React.Fragment key={fi}>
+                <dt className="text-muted-foreground">{f.label}</dt>
+                <dd className="flex items-center gap-1 font-medium">
+                  <span className="text-muted-foreground line-through decoration-muted-foreground/50">
+                    {f.oldValue ?? "—"}
+                  </span>
+                  <ArrowRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+                  <span>{f.newValue ?? "—"}</span>
+                </dd>
+              </React.Fragment>
+            ))}
+          </dl>
+        </li>
+      ))}
+    </ul>
   );
 }

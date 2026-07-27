@@ -36,7 +36,16 @@ export type LotRow = {
 
 const SIN_PROGRAMA = "Sin programa";
 
-export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario?: boolean }) {
+export function LotsTable({
+  lots,
+  scenario = false,
+  canEdit = true,
+}: {
+  lots: LotRow[];
+  scenario?: boolean;
+  /** Editar el plan vigente (no un escenario) es solo para admin — ver /planner/movimientos. */
+  canEdit?: boolean;
+}) {
   const [query, setQuery] = React.useState("");
   const [editing, setEditing] = React.useState<LotRow | null>(null);
 
@@ -185,13 +194,13 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
                           <span className="font-normal text-muted-foreground">band.</span>
                         </span>
                       </summary>
-                      <RowsTable rows={pg.rows} onEdit={setEditing} />
+                      <RowsTable rows={pg.rows} onEdit={canEdit ? setEditing : null} />
                     </details>
                   ))}
                 </div>
               ) : (
                 <div className="border-t">
-                  <RowsTable rows={g.rows} onEdit={setEditing} />
+                  <RowsTable rows={g.rows} onEdit={canEdit ? setEditing : null} />
                 </div>
               )}
             </details>
@@ -210,7 +219,14 @@ export function LotsTable({ lots, scenario = false }: { lots: LotRow[]; scenario
   );
 }
 
-function RowsTable({ rows, onEdit }: { rows: LotRow[]; onEdit: (l: LotRow) => void }) {
+function RowsTable({
+  rows,
+  onEdit,
+}: {
+  rows: LotRow[];
+  /** null: sin permiso para editar — no se muestra el lápiz. */
+  onEdit: ((l: LotRow) => void) | null;
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -250,14 +266,16 @@ function RowsTable({ rows, onEdit }: { rows: LotRow[]; onEdit: (l: LotRow) => vo
                 </Badge>
               </td>
               <td className="px-3 py-2 text-right">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Editar ${l.lot_code}`}
-                  onClick={() => onEdit(l)}
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
+                {onEdit ? (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Editar ${l.lot_code}`}
+                    onClick={() => onEdit(l)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
               </td>
             </tr>
           ))}

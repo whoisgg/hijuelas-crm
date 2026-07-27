@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
 import type { ParsedPlannerFile } from "@/lib/planner/parse-planner";
 import type { ParsedHoteleriaFile } from "@/lib/planner/parse-hoteleria";
+import { diffLotPlan, toLotPlanSnapshot } from "@/lib/planner/lot-plan-history";
 
 /**
  * Núcleo de los importadores del Planner — funciones puras sobre un
@@ -164,6 +166,7 @@ export async function applyPlannerCore(
   }
   const { data: areaRows } = await supabase.from("planner_areas").select("id, name");
   const areaId = new Map((areaRows ?? []).map((a) => [a.name.toLowerCase(), a.id]));
+  const areaNameById = new Map((areaRows ?? []).map((a) => [a.id, a.name]));
   const resolveArea = (raw: string | null): number | null => {
     const c = canon(aliases, "area", raw);
     if (!c) return null;
@@ -286,6 +289,17 @@ export async function applyPlannerCore(
 
   // 6. Reemplazo total de demanda y lotes (los archivos se pisan)
   {
+    // Snapshot del plan ANTES de reemplazarlo: es la única forma de detectar
+    // qué cambió respecto de la carga anterior, porque planner_lots se borra
+    // e inserta entero (el id no sobrevive entre cargas) — se compara por
+    // lot_code, que sí es estable.
+    const { data: previousLots } = await supabase
+      .from("planner_lots")
+      .select(
+        "lot_code, status, plants, trays, start_week, end_week, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week",
+      );
+    const previousByCode = new Map((previousLots ?? []).map((l) => [l.lot_code, l]));
+
     const del1 = await supabase.from("planner_demand").delete().gte("id", 0);
     if (del1.error) throw new Error(`Limpiando demanda: ${del1.error.message}`);
     const del2 = await supabase.from("planner_lots").delete().gte("id", 0);
@@ -365,6 +379,35 @@ export async function applyPlannerCore(
     }
     if (skippedLots) {
       errors.push(`${skippedLots} lotes con especie desconocida — omitidos.`);
+    }
+
+    // Auditoría: un batch por lote cuyo plan cambió respecto de la carga
+    // anterior (mismo lot_code presente antes y ahora, con algún campo
+    // distinto). Lotes nuevos o que dejaron de estar en el archivo no cuentan
+    // como "modificación" — no hay un antes o un después con qué compararlos.
+    const changeRows = lotRows.flatMap((row) => {
+      const previous = previousByCode.get(row.lot_code);
+      if (!previous) return [];
+      const diffs = diffLotPlan(
+        toLotPlanSnapshot(previous, areaNameById),
+        toLotPlanSnapshot(row, areaNameById),
+      );
+      if (!diffs.length) return [];
+      const changeBatchId = randomUUID();
+      return diffs.map((d) => ({
+        lot_code: row.lot_code,
+        change_batch_id: changeBatchId,
+        source: "carga" as const,
+        field: d.field,
+        old_value: d.oldValue,
+        new_value: d.newValue,
+        changed_by: userId,
+        upload_id: upload.id,
+      }));
+    });
+    for (const batch of chunks(changeRows, CHUNK)) {
+      const { error } = await supabase.from("planner_lot_plan_changes").insert(batch);
+      if (error) throw new Error(`Historial de cambios: ${error.message}`);
     }
   }
 

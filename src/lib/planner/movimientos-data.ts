@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
+import { getLotPlanHistory, type LotPlanChangeEvent } from "@/lib/planner/lot-plan-history";
 
 /**
  * Movimientos PLANIFICADOS del vivero: se derivan del plan vigente (no son el
@@ -48,6 +49,8 @@ export type PlannedMove = {
   matches: PlannedMoveMatch[];
   /** despacho sin variedad vinculada a maestros: no se puede cruzar */
   unlinkedVariety: boolean;
+  /** historial de cambios del plan de este lote, más reciente primero */
+  changes: LotPlanChangeEvent[];
 };
 
 export type PlannedMovesWeek = {
@@ -96,7 +99,7 @@ const WEEK_TOLERANCE = 2;
 export async function getPlannedMovesData(
   supabase: SupabaseClient<Database>,
 ): Promise<PlannedMovesData | null> {
-  const [lotsRes, areasRes, calendarRes] = await Promise.all([
+  const [lotsRes, areasRes, calendarRes, changesByLot] = await Promise.all([
     supabase
       .from("planner_lots")
       .select(
@@ -109,6 +112,7 @@ export async function getPlannedMovesData(
       .from("planner_calendar_weeks")
       .select("campaign_week, year, week, start_date, end_date")
       .order("campaign_week"),
+    getLotPlanHistory(supabase),
   ]);
 
   const lots = (lotsRes.data ?? []) as unknown as LotRow[];
@@ -219,6 +223,7 @@ export async function getPlannedMovesData(
       // los maestros no se puede cruzar con el CRM. Se marca en los tres tipos
       // para que el aviso sirva también en Ingresos y Traslados.
       unlinkedVariety: !lot.planner_varieties?.master_variety_id,
+      changes: changesByLot.get(lot.lot_code) ?? [],
     };
 
     // Ingreso: el lote entra al vivero y arranca enraizamiento.

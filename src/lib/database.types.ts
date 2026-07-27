@@ -2519,6 +2519,60 @@ export type Database = {
           },
         ]
       }
+      planner_lot_plan_changes: {
+        Row: {
+          change_batch_id: string
+          changed_by: string | null
+          created_at: string
+          field: string
+          id: number
+          lot_code: string
+          new_value: string | null
+          old_value: string | null
+          source: string
+          upload_id: string | null
+        }
+        Insert: {
+          change_batch_id: string
+          changed_by?: string | null
+          created_at?: string
+          field: string
+          id?: never
+          lot_code: string
+          new_value?: string | null
+          old_value?: string | null
+          source: string
+          upload_id?: string | null
+        }
+        Update: {
+          change_batch_id?: string
+          changed_by?: string | null
+          created_at?: string
+          field?: string
+          id?: never
+          lot_code?: string
+          new_value?: string | null
+          old_value?: string | null
+          source?: string
+          upload_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_lot_plan_changes_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_lot_plan_changes_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "planner_uploads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planner_lots: {
         Row: {
           end_week: number | null

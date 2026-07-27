@@ -60,7 +60,7 @@ export default async function LotesPage() {
         description="Asignaciones planificadas por lote y etapa. Edita plantas, semana de inicio o estado — la ocupación se recalcula al instante."
       />
       <div className="mt-6">
-        <LotsTable lots={rows} />
+        <LotsTable lots={rows} canEdit={hasModuleAccess(profile, "planner", "admin")} />
       </div>
     </AppShell>
   );
