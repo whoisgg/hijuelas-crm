@@ -114,6 +114,62 @@ export type Database = {
           },
         ]
       }
+      attachments: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          entity_id: string
+          entity_type: string
+          filename: string
+          id: string
+          mime_type: string | null
+          path: string
+          size_bytes: number | null
+          updated_at: string
+          updated_by: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_id: string
+          entity_type: string
+          filename: string
+          id?: string
+          mime_type?: string | null
+          path: string
+          size_bytes?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          entity_id?: string
+          entity_type?: string
+          filename?: string
+          id?: string
+          mime_type?: string | null
+          path?: string
+          size_bytes?: number | null
+          updated_at?: string
+          updated_by?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bodega_bodegas: {
         Row: {
           activo: boolean
@@ -198,6 +254,27 @@ export type Database = {
             referencedRelation: "bodega_productos"
             referencedColumns: ["codigo_producto"]
           },
+          {
+            foreignKeyName: "bodega_ingresos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_disponible"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_ingresos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_por_bodega"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_ingresos_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       bodega_productos: {
@@ -249,7 +326,15 @@ export type Database = {
           unidad_medida?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bodega_productos_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bodega_salidas: {
         Row: {
@@ -305,6 +390,255 @@ export type Database = {
             referencedRelation: "bodega_productos"
             referencedColumns: ["codigo_producto"]
           },
+          {
+            foreignKeyName: "bodega_salidas_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_disponible"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_salidas_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_por_bodega"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_salidas_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bodega_solicitud_items: {
+        Row: {
+          cantidad: number
+          cantidad_despachada: number | null
+          codigo_producto: string
+          id: string
+          nota: string | null
+          solicitud_id: string
+          unidad: string | null
+        }
+        Insert: {
+          cantidad: number
+          cantidad_despachada?: number | null
+          codigo_producto: string
+          id?: string
+          nota?: string | null
+          solicitud_id: string
+          unidad?: string | null
+        }
+        Update: {
+          cantidad?: number
+          cantidad_despachada?: number | null
+          codigo_producto?: string
+          id?: string
+          nota?: string | null
+          solicitud_id?: string
+          unidad?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bodega_solicitud_items_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_productos"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_solicitud_items_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_disponible"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_solicitud_items_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_por_bodega"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_solicitud_items_solicitud_id_fkey"
+            columns: ["solicitud_id"]
+            isOneToOne: false
+            referencedRelation: "bodega_solicitudes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bodega_solicitudes: {
+        Row: {
+          area: string | null
+          bodega: string | null
+          cerrado_por: string | null
+          codigo_solicitud: string
+          created_at: string
+          despachado_por: string | null
+          estado: string
+          fecha_cierre: string | null
+          fecha_despacho: string | null
+          fecha_preparacion: string | null
+          fecha_solicitud: string
+          id: string
+          motivo_rechazo: string | null
+          nota: string | null
+          numero_semana: string | null
+          solicitante_id: string
+          sucursal: string | null
+          tomado_por: string | null
+        }
+        Insert: {
+          area?: string | null
+          bodega?: string | null
+          cerrado_por?: string | null
+          codigo_solicitud?: string
+          created_at?: string
+          despachado_por?: string | null
+          estado?: string
+          fecha_cierre?: string | null
+          fecha_despacho?: string | null
+          fecha_preparacion?: string | null
+          fecha_solicitud?: string
+          id?: string
+          motivo_rechazo?: string | null
+          nota?: string | null
+          numero_semana?: string | null
+          solicitante_id: string
+          sucursal?: string | null
+          tomado_por?: string | null
+        }
+        Update: {
+          area?: string | null
+          bodega?: string | null
+          cerrado_por?: string | null
+          codigo_solicitud?: string
+          created_at?: string
+          despachado_por?: string | null
+          estado?: string
+          fecha_cierre?: string | null
+          fecha_despacho?: string | null
+          fecha_preparacion?: string | null
+          fecha_solicitud?: string
+          id?: string
+          motivo_rechazo?: string | null
+          nota?: string | null
+          numero_semana?: string | null
+          solicitante_id?: string
+          sucursal?: string | null
+          tomado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bodega_solicitudes_cerrado_por_fkey"
+            columns: ["cerrado_por"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bodega_solicitudes_despachado_por_fkey"
+            columns: ["despachado_por"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bodega_solicitudes_solicitante_id_fkey"
+            columns: ["solicitante_id"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bodega_solicitudes_tomado_por_fkey"
+            columns: ["tomado_por"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bodega_traspasos: {
+        Row: {
+          bodega_destino: string
+          bodega_origen: string
+          cantidad: number
+          codigo_producto: string
+          codigo_traspaso: string
+          created_at: string
+          created_by: string | null
+          fecha_traspaso: string
+          id: string
+          nota: string | null
+          numero_semana: string | null
+          sucursal_destino: string | null
+          sucursal_origen: string | null
+        }
+        Insert: {
+          bodega_destino: string
+          bodega_origen: string
+          cantidad: number
+          codigo_producto: string
+          codigo_traspaso?: string
+          created_at?: string
+          created_by?: string | null
+          fecha_traspaso?: string
+          id?: string
+          nota?: string | null
+          numero_semana?: string | null
+          sucursal_destino?: string | null
+          sucursal_origen?: string | null
+        }
+        Update: {
+          bodega_destino?: string
+          bodega_origen?: string
+          cantidad?: number
+          codigo_producto?: string
+          codigo_traspaso?: string
+          created_at?: string
+          created_by?: string | null
+          fecha_traspaso?: string
+          id?: string
+          nota?: string | null
+          numero_semana?: string | null
+          sucursal_destino?: string | null
+          sucursal_origen?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bodega_traspasos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_productos"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_traspasos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_disponible"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_traspasos_codigo_producto_fkey"
+            columns: ["codigo_producto"]
+            isOneToOne: false
+            referencedRelation: "bodega_stock_por_bodega"
+            referencedColumns: ["codigo_producto"]
+          },
+          {
+            foreignKeyName: "bodega_traspasos_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "app_users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       bodega_unidades: {
@@ -327,62 +661,6 @@ export type Database = {
           nombre?: string
         }
         Relationships: []
-      }
-      attachments: {
-        Row: {
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          entity_id: string
-          entity_type: string
-          filename: string
-          id: string
-          mime_type: string | null
-          path: string
-          size_bytes: number | null
-          updated_at: string
-          updated_by: string | null
-          uploaded_by: string | null
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          entity_id: string
-          entity_type: string
-          filename: string
-          id?: string
-          mime_type?: string | null
-          path: string
-          size_bytes?: number | null
-          updated_at?: string
-          updated_by?: string | null
-          uploaded_by?: string | null
-        }
-        Update: {
-          created_at?: string
-          created_by?: string | null
-          deleted_at?: string | null
-          entity_id?: string
-          entity_type?: string
-          filename?: string
-          id?: string
-          mime_type?: string | null
-          path?: string
-          size_bytes?: number | null
-          updated_at?: string
-          updated_by?: string | null
-          uploaded_by?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attachments_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            isOneToOne: false
-            referencedRelation: "app_users"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       client_addresses: {
         Row: {
@@ -2093,6 +2371,116 @@ export type Database = {
           },
         ]
       }
+      planner_inventory_items: {
+        Row: {
+          age_weeks: number | null
+          barcode: string | null
+          clump: boolean
+          created_at: string
+          delivery_note: string | null
+          estado: string | null
+          id: number
+          location_id: number | null
+          material_raw: string | null
+          medio: string | null
+          observacion: string | null
+          planted_at: string | null
+          plants: number
+          saldos: number
+          species_id: number | null
+          species_name: string | null
+          sustrato: boolean
+          tamano: string | null
+          tray_format: number | null
+          trays: number
+          upload_id: string
+          variety_id: number | null
+          variety_name: string | null
+          week: number | null
+        }
+        Insert: {
+          age_weeks?: number | null
+          barcode?: string | null
+          clump?: boolean
+          created_at?: string
+          delivery_note?: string | null
+          estado?: string | null
+          id?: number
+          location_id?: number | null
+          material_raw?: string | null
+          medio?: string | null
+          observacion?: string | null
+          planted_at?: string | null
+          plants?: number
+          saldos?: number
+          species_id?: number | null
+          species_name?: string | null
+          sustrato?: boolean
+          tamano?: string | null
+          tray_format?: number | null
+          trays?: number
+          upload_id: string
+          variety_id?: number | null
+          variety_name?: string | null
+          week?: number | null
+        }
+        Update: {
+          age_weeks?: number | null
+          barcode?: string | null
+          clump?: boolean
+          created_at?: string
+          delivery_note?: string | null
+          estado?: string | null
+          id?: number
+          location_id?: number | null
+          material_raw?: string | null
+          medio?: string | null
+          observacion?: string | null
+          planted_at?: string | null
+          plants?: number
+          saldos?: number
+          species_id?: number | null
+          species_name?: string | null
+          sustrato?: boolean
+          tamano?: string | null
+          tray_format?: number | null
+          trays?: number
+          upload_id?: string
+          variety_id?: number | null
+          variety_name?: string | null
+          week?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_inventory_items_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "planner_locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_inventory_items_species_id_fkey"
+            columns: ["species_id"]
+            isOneToOne: false
+            referencedRelation: "planner_species"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_inventory_items_upload_id_fkey"
+            columns: ["upload_id"]
+            isOneToOne: false
+            referencedRelation: "planner_uploads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_inventory_items_variety_id_fkey"
+            columns: ["variety_id"]
+            isOneToOne: false
+            referencedRelation: "planner_varieties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planner_locations: {
         Row: {
           capacity_trays: number | null
@@ -2699,6 +3087,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "planner_species_master_species_id_fkey"
+            columns: ["master_species_id"]
+            isOneToOne: false
+            referencedRelation: "species"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "planner_species_maturation_area_id_fkey"
             columns: ["maturation_area_id"]
             isOneToOne: false
@@ -2786,17 +3181,17 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "planner_varieties_species_id_fkey"
-            columns: ["species_id"]
-            isOneToOne: false
-            referencedRelation: "planner_species"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "planner_varieties_master_variety_id_fkey"
             columns: ["master_variety_id"]
             isOneToOne: false
             referencedRelation: "varieties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_varieties_species_id_fkey"
+            columns: ["species_id"]
+            isOneToOne: false
+            referencedRelation: "planner_species"
             referencedColumns: ["id"]
           },
         ]
@@ -3201,6 +3596,15 @@ export type Database = {
       }
     }
     Functions: {
+      _bodega_access: {
+        Args: never
+        Returns: {
+          level: string
+          module_role: string
+        }[]
+      }
+      _bodega_can_manage: { Args: never; Returns: boolean }
+      _bodega_can_read: { Args: never; Returns: boolean }
       _mcp_contract_status_match: {
         Args: { p_filter: string; p_status: string }
         Returns: boolean
@@ -3217,6 +3621,11 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: Database["public"]["Enums"]["user_role"]
       }
+      _mcp_token_fresh: {
+        Args: { p_max_age?: string; p_user_id: string }
+        Returns: boolean
+      }
+      _planner_norm_name: { Args: { p: string }; Returns: string }
       _require_admin: { Args: never; Returns: string }
       admin_create_user: {
         Args: {
@@ -3240,6 +3649,19 @@ export type Database = {
           last_sign_in_at: string
           role: Database["public"]["Enums"]["user_role"]
         }[]
+      }
+      admin_set_module_access: {
+        Args: {
+          p_level: string
+          p_module_key: string
+          p_module_role?: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      admin_set_platform_admin: {
+        Args: { p_user_id: string; p_value: boolean }
+        Returns: undefined
       }
       admin_update_organization_legal: {
         Args: {
@@ -3267,6 +3689,21 @@ export type Database = {
           p_role: Database["public"]["Enums"]["user_role"]
         }
         Returns: undefined
+      }
+      bodega_registrar_traspaso: {
+        Args: {
+          p_bodega_destino: string
+          p_bodega_origen: string
+          p_cantidad: number
+          p_codigo_producto: string
+          p_fecha: string
+          p_nota: string
+          p_semana: string
+          p_sucursal_destino: string
+          p_sucursal_origen: string
+          p_unidad: string
+        }
+        Returns: string
       }
       create_client_share_link: {
         Args: { p_client_id: string; p_ttl_days?: number }
@@ -3568,6 +4005,10 @@ export type Database = {
         Returns: Json
       }
       mcp_planner_role_ok: { Args: { p_user_id: string }; Returns: boolean }
+      mcp_planner_salidas: {
+        Args: { p_semanas?: number; p_tipo?: string; p_user_id: string }
+        Returns: Json
+      }
       mcp_register_payment: {
         Args: {
           p_amount: number

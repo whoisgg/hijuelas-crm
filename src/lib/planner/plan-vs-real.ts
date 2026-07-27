@@ -30,10 +30,12 @@ export async function getPlanVsReal(
   const current = timeline.weeks.find((w) => w.isCurrent);
   if (!current) return null;
 
+  // Fuente de la ocupación real: la carga más reciente, sea del inventario de
+  // hardening o del archivo viejo de hotelería. Ver la nota en `layout-data.ts`.
   const { data: lastUpload } = await supabase
     .from("planner_uploads")
     .select("id, created_at")
-    .eq("kind", "hoteleria")
+    .in("kind", ["inventario", "hoteleria"])
     .eq("status", "applied")
     .order("created_at", { ascending: false })
     .limit(1)

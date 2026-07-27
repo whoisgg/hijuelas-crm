@@ -9,10 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { UploadCard } from "@/components/planner/upload-card";
 import {
   applyHoteleriaImport,
-  applyPlannerImport,
+  applyInventarioImport,
   listPlannerUploads,
   previewHoteleriaImport,
-  previewPlannerImport,
+  previewInventarioImport,
 } from "@/lib/actions/planner-import";
 
 export const metadata = { title: "Carga de datos" };
@@ -45,7 +45,7 @@ export default async function CargaPage() {
     <AppShell>
       <PageHeader
         title="Carga de datos"
-        description="Sube los Excel de planificación y hotelería. Los maestros se actualizan; demanda, lotes y snapshot se reemplazan con cada carga."
+        description="Sube el Excel de hotelería para actualizar la ocupación real. El plan de producción se mantiene dentro de la app, no se re-importa."
         actions={
           // eslint-disable-next-line @next/next/no-html-link-for-pages -- descarga de archivo, no navegación
           <a
@@ -57,18 +57,27 @@ export default async function CargaPage() {
         }
       />
 
+      {/* Solo hotelería: la carga del "Vivero Planner" se retiró de la UI a
+          pedido del usuario (2026-07-27) porque en la práctica nunca se vuelve a
+          subir y el botón era peligroso — `applyPlannerCore` borra TODA la
+          demanda y TODOS los lotes (delete + reinsert) y `applyPlannerImport`
+          elimina además las mesas de trabajo. Hoy eso significaría perder los
+          314 lotes / 21,1M plantas y el trabajo sin aprobar de todos.
+          Las server actions siguen existiendo (`previewPlannerImport` /
+          `applyPlannerImport`) para un re-baseline futuro; se exponen de nuevo
+          solo si se necesita, a sabiendas de que reemplazan el plan completo. */}
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <UploadCard
-          kind="planner"
-          title="Vivero Planner"
-          description="Modelo de planificación (hojas 01–06): parámetros, especies, áreas, demanda, lotes y calendario."
-          preview={previewPlannerImport}
-          apply={applyPlannerImport}
+          kind="inventario"
+          title="Inventario de hardening"
+          description="El Excel «Inventario Hrd» (hoja Inventario 2026). Una fila por barcode con delivery note, variedad, medio de cultivo y fecha de plantación. Cubre todo el vivero y es la fuente recomendada de la ocupación real."
+          preview={previewInventarioImport}
+          apply={applyInventarioImport}
         />
         <UploadCard
           kind="hoteleria"
           title="Hotelería (snapshot)"
-          description="Ocupación real por ubicación y especie (Resumen General + detalle). Requiere haber cargado el Planner antes."
+          description="Formato anterior, ya resumido en tablas dinámicas (Resumen General + detalle). Solo cubría Góticos, Zona Clara y Zona Oscura. Se mantiene por compatibilidad."
           preview={previewHoteleriaImport}
           apply={applyHoteleriaImport}
         />
@@ -80,7 +89,8 @@ export default async function CargaPage() {
       <div className="mt-2 overflow-hidden rounded-lg border bg-card">
         {uploads.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">
-            Aún no hay cargas. Sube el Vivero Planner para partir.
+            Aún no hay cargas. Sube el Excel de hotelería para registrar la
+            ocupación real.
           </p>
         ) : (
           <table className="w-full text-sm">

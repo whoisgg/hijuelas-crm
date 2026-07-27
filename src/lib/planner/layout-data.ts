@@ -125,10 +125,17 @@ export async function getSectorLayout(
     .eq("area_id", areaId)
     .order("sort");
 
+  // Fuente de la ocupación real: la carga más reciente, sea del inventario de
+  // hardening (fuente actual) o del archivo viejo de hotelería.
+  //
+  // Se conmutó al inventario el 2026-07-27 por decisión del usuario ("los últimos
+  // archivos que pasé son los datos más reales que tengo"). Cubre todo el vivero
+  // —antes 5 de 8 áreas mostraban 0, entre ellas Módulo 2 que está al 91%— y trae
+  // el grano fino (delivery note, variedad, medio, fecha de plantación).
   const { data: lastUpload } = await supabase
     .from("planner_uploads")
     .select("id, created_at, file_name")
-    .eq("kind", "hoteleria")
+    .in("kind", ["inventario", "hoteleria"])
     .eq("status", "applied")
     .order("created_at", { ascending: false })
     .limit(1)

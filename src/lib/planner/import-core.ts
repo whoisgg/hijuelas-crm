@@ -23,7 +23,7 @@ import type { ParsedHoteleriaFile } from "@/lib/planner/parse-hoteleria";
 
 export type ImportSummary = {
   ok: boolean;
-  kind: "planner" | "hoteleria";
+  kind: "planner" | "hoteleria" | "inventario";
   fileName: string;
   stats: Record<string, number>;
   newMasters: Record<string, string[]>;
@@ -42,13 +42,13 @@ export type UploadRow = {
   uploaded_by_name: string | null;
 };
 
-const CHUNK = 500;
+export const CHUNK = 500;
 
 export type PlannerClient = SupabaseClient<Database>;
 
-type AliasMap = Map<string, Map<string, string>>;
+export type AliasMap = Map<string, Map<string, string>>;
 
-async function loadAliases(supabase: PlannerClient): Promise<AliasMap> {
+export async function loadAliases(supabase: PlannerClient): Promise<AliasMap> {
   const { data } = await supabase.from("planner_aliases").select("kind, alias, canonical");
   const map: AliasMap = new Map();
   for (const row of data ?? []) {
@@ -58,13 +58,13 @@ async function loadAliases(supabase: PlannerClient): Promise<AliasMap> {
   return map;
 }
 
-function canon(aliases: AliasMap, kind: string, raw: string | null): string | null {
+export function canon(aliases: AliasMap, kind: string, raw: string | null): string | null {
   if (!raw) return null;
   const s = raw.trim();
   return aliases.get(kind)?.get(s.toLowerCase()) ?? s;
 }
 
-function chunks<T>(arr: T[], size: number): T[][] {
+export function chunks<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;

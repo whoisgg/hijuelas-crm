@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireModuleAccess } from "@/lib/access";
 import { parsePlannerWorkbook } from "@/lib/planner/parse-planner";
 import { parseHoteleriaWorkbook } from "@/lib/planner/parse-hoteleria";
+import { parseInventarioWorkbook } from "@/lib/planner/parse-inventario";
 import {
   applyHoteleriaCore,
   applyPlannerCore,
@@ -12,6 +13,10 @@ import {
   previewPlannerCore,
   type ImportSummary,
 } from "@/lib/planner/import-core";
+import {
+  applyInventarioCore,
+  previewInventarioCore,
+} from "@/lib/planner/import-inventario";
 
 export type { ImportSummary } from "@/lib/planner/import-core";
 
@@ -44,6 +49,26 @@ function revalidatePlanner() {
   revalidatePath("/planner/carga");
 }
 
+/**
+ * ⚠️ NO EXPUESTAS EN LA UI (decisión del usuario, 2026-07-27).
+ *
+ * La carga del "Vivero Planner" se retiró de /planner/carga porque en la
+ * práctica nunca se vuelve a subir y aplicarla es DESTRUCTIVO: `applyPlannerCore`
+ * hace `delete()` de toda `planner_demand` y toda `planner_lots` antes de
+ * reinsertar desde el Excel, y `applyPlannerImport` borra además todas las mesas
+ * de trabajo (`planner_scenarios.is_working`). Con los datos de hoy eso
+ * significa perder 314 lotes / 21,1M plantas y el trabajo sin aprobar de todos.
+ *
+ * El plan se mantiene dentro de la app (edición de lotes, mesa de trabajo,
+ * simulaciones). Estas funciones quedan para un re-baseline deliberado; si se
+ * vuelven a exponer, hacerlo solo para admin y con confirmación explícita de que
+ * reemplazan el plan completo.
+ *
+ * Ojo con el efecto lateral: los maestros del planner (áreas, especies,
+ * variedades y el CALENDARIO) venían de este Excel. Como ya no se re-importa,
+ * hay que mantenerlos por migración o desde la app — de hecho el calendario
+ * quedó corto en 53 semanas y hubo que extenderlo así (migración 00052).
+ */
 export async function previewPlannerImport(formData: FormData): Promise<ImportSummary> {
   const { supabase } = await requireAccess();
   const { name, buffer } = await fileFromForm(formData);
@@ -69,6 +94,25 @@ export async function applyPlannerImport(formData: FormData): Promise<ImportSumm
     }
     revalidatePlanner();
   }
+  return result;
+}
+
+export async function previewInventarioImport(formData: FormData): Promise<ImportSummary> {
+  const { supabase } = await requireAccess();
+  const { name, buffer } = await fileFromForm(formData);
+  return previewInventarioCore(supabase, parseInventarioWorkbook(buffer), name);
+}
+
+export async function applyInventarioImport(formData: FormData): Promise<ImportSummary> {
+  const { supabase, userId } = await requireAccess();
+  const { name, buffer } = await fileFromForm(formData);
+  const result = await applyInventarioCore(
+    supabase,
+    parseInventarioWorkbook(buffer),
+    name,
+    userId,
+  );
+  if (result.ok) revalidatePlanner();
   return result;
 }
 

@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { ImportSummary } from "@/lib/actions/planner-import";
 
 type Props = {
-  kind: "planner" | "hoteleria";
+  kind: "planner" | "hoteleria" | "inventario";
   title: string;
   description: string;
   preview: (formData: FormData) => Promise<ImportSummary>;
@@ -30,6 +30,13 @@ const STAT_LABELS: Record<string, string> = {
   ubicaciones: "Ubicaciones",
   filas_snapshot: "Filas de snapshot",
   snapshot_insertado: "Snapshot insertado",
+  filas: "Filas del archivo",
+  delivery_notes: "Delivery notes",
+  bandejas: "Bandejas",
+  plantas: "Plantas",
+  con_fecha_plantacion: "Filas con fecha de plantación",
+  detalle_insertado: "Detalle insertado",
+  ubicaciones_nuevas: "Ubicaciones nuevas",
 };
 
 export function UploadCard({ kind, title, description, preview, apply }: Props) {
