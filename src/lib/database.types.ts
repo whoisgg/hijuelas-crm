@@ -2528,6 +2528,8 @@ export type Database = {
           maturation_end_week: number | null
           maturation_start_week: number | null
           maturation_weeks: number
+          origen: string
+          parent_lot_id: number | null
           plants: number
           predispatch_area_id: number | null
           predispatch_end_week: number | null
@@ -2554,6 +2556,8 @@ export type Database = {
           maturation_end_week?: number | null
           maturation_start_week?: number | null
           maturation_weeks?: number
+          origen?: string
+          parent_lot_id?: number | null
           plants: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -2580,6 +2584,8 @@ export type Database = {
           maturation_end_week?: number | null
           maturation_start_week?: number | null
           maturation_weeks?: number
+          origen?: string
+          parent_lot_id?: number | null
           plants?: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -2604,6 +2610,13 @@ export type Database = {
             columns: ["maturation_area_id"]
             isOneToOne: false
             referencedRelation: "planner_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_lots_parent_lot_id_fkey"
+            columns: ["parent_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lots"
             referencedColumns: ["id"]
           },
           {
@@ -2877,6 +2890,7 @@ export type Database = {
           maturation_end_week: number | null
           maturation_start_week: number | null
           maturation_weeks: number
+          origen: string
           plants: number
           predispatch_area_id: number | null
           predispatch_end_week: number | null
@@ -2903,6 +2917,7 @@ export type Database = {
           maturation_end_week?: number | null
           maturation_start_week?: number | null
           maturation_weeks?: number
+          origen?: string
           plants: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -2929,6 +2944,7 @@ export type Database = {
           maturation_end_week?: number | null
           maturation_start_week?: number | null
           maturation_weeks?: number
+          origen?: string
           plants?: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -3044,6 +3060,7 @@ export type Database = {
           maturation_area_id: number | null
           maturation_weeks: number
           name: string
+          origen: string
           predispatch_area_id: number | null
           predispatch_weeks: number
           priority: number
@@ -3061,6 +3078,7 @@ export type Database = {
           maturation_area_id?: number | null
           maturation_weeks?: number
           name: string
+          origen?: string
           predispatch_area_id?: number | null
           predispatch_weeks?: number
           priority?: number
@@ -3078,6 +3096,7 @@ export type Database = {
           maturation_area_id?: number | null
           maturation_weeks?: number
           name?: string
+          origen?: string
           predispatch_area_id?: number | null
           predispatch_weeks?: number
           priority?: number
