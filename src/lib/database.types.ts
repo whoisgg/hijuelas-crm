@@ -2616,6 +2616,13 @@ export type Database = {
             foreignKeyName: "planner_lots_parent_lot_id_fkey"
             columns: ["parent_lot_id"]
             isOneToOne: false
+            referencedRelation: "planner_lot_ledger"
+            referencedColumns: ["lot_id"]
+          },
+          {
+            foreignKeyName: "planner_lots_parent_lot_id_fkey"
+            columns: ["parent_lot_id"]
+            isOneToOne: false
             referencedRelation: "planner_lots"
             referencedColumns: ["id"]
           },
@@ -2695,6 +2702,7 @@ export type Database = {
           lot_id: number | null
           notes: string | null
           plants: number
+          source_lot_id: number | null
           trays: number
           type: string
           week: number
@@ -2709,6 +2717,7 @@ export type Database = {
           lot_id?: number | null
           notes?: string | null
           plants?: number
+          source_lot_id?: number | null
           trays?: number
           type: string
           week: number
@@ -2723,6 +2732,7 @@ export type Database = {
           lot_id?: number | null
           notes?: string | null
           plants?: number
+          source_lot_id?: number | null
           trays?: number
           type?: string
           week?: number
@@ -2744,11 +2754,32 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "planner_movements_child_lot_id_fkey"
+            columns: ["source_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lot_ledger"
+            referencedColumns: ["lot_id"]
+          },
+          {
+            foreignKeyName: "planner_movements_child_lot_id_fkey"
+            columns: ["source_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lots"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "planner_movements_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "app_users"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_movements_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lot_ledger"
+            referencedColumns: ["lot_id"]
           },
           {
             foreignKeyName: "planner_movements_lot_id_fkey"
@@ -3610,6 +3641,56 @@ export type Database = {
           variety_id: string | null
           week: number | null
           year: number | null
+        }
+        Relationships: []
+      }
+      planner_lot_ledger: {
+        Row: {
+          bandejas_declaradas: number | null
+          bandejas_por_eventos: number | null
+          eventos: number | null
+          lot_code: string | null
+          lot_id: number | null
+          merma_plantas: number | null
+          multiplicado_plantas: number | null
+          origen: string | null
+          parent_lot_id: number | null
+          plantas_declaradas: number | null
+          plantas_por_eventos: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_lots_parent_lot_id_fkey"
+            columns: ["parent_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lot_ledger"
+            referencedColumns: ["lot_id"]
+          },
+          {
+            foreignKeyName: "planner_lots_parent_lot_id_fkey"
+            columns: ["parent_lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_events: {
+        Row: {
+          actor: string | null
+          anio: number | null
+          bandejas: number | null
+          cantidad: number | null
+          desde: string | null
+          entidad: string | null
+          entidad_tipo: string | null
+          evento: string | null
+          hacia: string | null
+          modulo: string | null
+          nota: string | null
+          registrado_en: string | null
+          semana: number | null
+          unidad: string | null
         }
         Relationships: []
       }
