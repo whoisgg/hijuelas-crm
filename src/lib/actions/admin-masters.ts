@@ -226,3 +226,102 @@ export async function relinkPlannerCatalogs(): Promise<{
   revalidatePath("/planner/lotes");
   return { ok: true, speciesLinked, varietiesLinked };
 }
+
+/**
+ * Vincula UNA variedad del planner a los maestros, desde donde se detecta el
+ * problema (ej. el aviso "variedad sin vínculo" en /planner/movimientos) en vez
+ * de obligar a ir a /admin/maestros y correr la re-vinculación completa.
+ *
+ * Reusa el maestro si ya existe uno con el mismo nombre normalizado dentro de la
+ * especie (no duplica); solo crea cuando no hay. Si hay más de un candidato
+ * (caso "Tonda" → Giffoni/Pacifica) no adivina y pide resolverlo a mano.
+ */
+export async function linkPlannerVarietyToMasters(plannerVarietyId: number): Promise<{
+  ok: boolean;
+  action?: "vinculada" | "creada";
+  varietyName?: string;
+  speciesName?: string;
+  error?: string;
+}> {
+  const { supabase, userId } = await requireAdmin();
+
+  const { data: pv } = await supabase
+    .from("planner_varieties")
+    .select("id, name, master_variety_id, planner_species(name, master_species_id)")
+    .eq("id", plannerVarietyId)
+    .maybeSingle();
+  if (!pv) return { ok: false, error: "No se encontró la variedad del planner." };
+  if (pv.master_variety_id) return { ok: false, error: "Ya estaba vinculada." };
+
+  const pSpecies = pv.planner_species as unknown as {
+    name: string;
+    master_species_id: string | null;
+  } | null;
+  if (!pSpecies) return { ok: false, error: "La variedad no tiene especie en el planner." };
+
+  // Especie maestra: por el vínculo si existe, si no por nombre normalizado.
+  let masterSpeciesId = pSpecies.master_species_id;
+  if (!masterSpeciesId) {
+    const { data: allSpecies } = await supabase
+      .from("species")
+      .select("id, name")
+      .is("deleted_at", null);
+    const target = normalizeVarietyName(pSpecies.name);
+    const hits = (allSpecies ?? []).filter((s) => normalizeVarietyName(s.name) === target);
+    if (hits.length !== 1) {
+      return {
+        ok: false,
+        error: `La especie "${pSpecies.name}" no está vinculada a maestros. Vincúlala primero en Administración → Datos maestros.`,
+      };
+    }
+    masterSpeciesId = hits[0].id;
+  }
+
+  // ¿Ya existe un maestro con ese nombre en esa especie? Entonces solo vincular.
+  const { data: candidates } = await supabase
+    .from("varieties")
+    .select("id, name")
+    .eq("species_id", masterSpeciesId)
+    .is("deleted_at", null)
+    .limit(2000);
+  const target = normalizeVarietyName(pv.name);
+  const matches = (candidates ?? []).filter((v) => normalizeVarietyName(v.name) === target);
+
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      error: `Hay ${matches.length} variedades maestras llamadas "${pv.name}" en ${pSpecies.name}. Resolvé el duplicado en Administración → Datos maestros.`,
+    };
+  }
+
+  let masterVarietyId: string;
+  let action: "vinculada" | "creada";
+  if (matches.length === 1) {
+    masterVarietyId = matches[0].id;
+    action = "vinculada";
+  } else {
+    const { data: created, error: insertError } = await supabase
+      .from("varieties")
+      .insert({ species_id: masterSpeciesId, name: pv.name.trim(), created_by: userId })
+      .select("id")
+      .single();
+    if (insertError || !created) {
+      return { ok: false, error: insertError?.message ?? "No se pudo crear la variedad." };
+    }
+    masterVarietyId = created.id;
+    action = "creada";
+  }
+
+  const { error: linkError } = await supabase
+    .from("planner_varieties")
+    .update({ master_variety_id: masterVarietyId })
+    .eq("id", pv.id);
+  if (linkError) return { ok: false, error: linkError.message };
+
+  revalidatePath("/admin/maestros");
+  revalidatePath("/planner/maestros");
+  revalidatePath("/planner/lotes");
+  revalidatePath("/planner/movimientos");
+  revalidatePath("/catalogo");
+  return { ok: true, action, varietyName: pv.name, speciesName: pSpecies.name };
+}

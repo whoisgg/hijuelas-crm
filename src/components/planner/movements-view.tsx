@@ -49,11 +49,14 @@ export function MovementsView({
   areas,
   defaultYear,
   defaultWeek,
+  defaultType = "traslado",
 }: {
   movements: MovementRow[];
   areas: AreaOption[];
   defaultYear: number;
   defaultWeek: number;
+  /** tipo preseleccionado al registrar — lo fija la pestaña activa */
+  defaultType?: CreateMovementInput["type"];
 }) {
   const [creating, setCreating] = React.useState(false);
   const router = useRouter();
@@ -152,6 +155,7 @@ export function MovementsView({
           areas={areas}
           defaultYear={defaultYear}
           defaultWeek={defaultWeek}
+          defaultType={defaultType}
           onClose={() => setCreating(false)}
         />
       ) : null}
@@ -163,15 +167,17 @@ function MovementDialog({
   areas,
   defaultYear,
   defaultWeek,
+  defaultType,
   onClose,
 }: {
   areas: AreaOption[];
   defaultYear: number;
   defaultWeek: number;
+  defaultType: CreateMovementInput["type"];
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [type, setType] = React.useState<CreateMovementInput["type"]>("traslado");
+  const [type, setType] = React.useState<CreateMovementInput["type"]>(defaultType);
   const [lotCode, setLotCode] = React.useState("");
   const [areaFrom, setAreaFrom] = React.useState<string>("");
   const [areaTo, setAreaTo] = React.useState<string>("");

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useDragScroll } from "@/lib/use-drag-scroll";
 import { HEAT_LEGEND, heatTone } from "@/lib/planner/heat";
 import type { TimelineData } from "@/lib/planner/occupancy-data";
 
@@ -32,6 +33,10 @@ export function OccupancyTimeline({
   simQuery?: string | null;
 }) {
   const { areas, weeks, maxUtilization } = data;
+
+  // Mismo drag-to-scroll del calendario. Acá el contenedor scrollea en los dos
+  // ejes (semanas hacia abajo, áreas hacia el lado), así que se habilitan ambos.
+  const drag = useDragScroll<HTMLDivElement>("both");
 
   // La vista operativa parte en la semana actual; el historial queda
   // disponible bajo demanda (y siempre en la exportación a Excel).
@@ -87,7 +92,11 @@ export function OccupancyTimeline({
       {/* La tabla es su propia área de scroll: el header queda fijo arriba
           mientras se recorren las semanas (sticky no funciona contra el
           scroll de la página dentro de un overflow-x-auto). */}
-      <div className="max-h-[calc(100dvh-11rem)] overflow-auto rounded-md border">
+      <div
+        ref={drag.ref}
+        {...drag.handlers}
+        className="max-h-[calc(100dvh-11rem)] overflow-auto rounded-md border"
+      >
       <table className="w-full min-w-[560px] border-separate border-spacing-0 text-xs">
         <thead>
           <tr>

@@ -3,15 +3,23 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
 /**
- * Salidas programadas del planner: por cada lote del plan vigente se derivan
- * sus eventos de salida — fin de enraizamiento → maduración y fin de
- * maduración → predespacho son CAMBIOS DE SECCIÓN (etapa de crecimiento);
- * el fin de predespacho es el DESPACHO final. Los despachos se cruzan con el
- * CRM (variedad maestra + año + semana de entrega ±2) para mostrar a qué
- * contrato/cliente corresponden; sin match quedan "sin asociación".
+ * Movimientos PLANIFICADOS del vivero: se derivan del plan vigente (no son el
+ * registro real, que vive en `planner_movements`). Por cada lote activo salen
+ * tres tipos de evento, con el mismo vocabulario que el registro real:
+ *
+ *  - `ingreso`   — el lote entra al vivero (arranca enraizamiento).
+ *  - `traslado`  — cambio de sección entre etapas de crecimiento
+ *                  (enraizamiento → maduración → predespacho).
+ *  - `despacho`  — el lote sale del vivero (fin de la última etapa).
+ *
+ * Los despachos se cruzan con el CRM (variedad maestra + año + semana de
+ * entrega ±2) para mostrar a qué contrato/cliente corresponden; sin match
+ * quedan "sin contrato asociado".
  */
 
-export type SalidaMatch = {
+export type PlannedMoveKind = "ingreso" | "traslado" | "despacho";
+
+export type PlannedMoveMatch = {
   contractNumber: string;
   contractId: string;
   clientName: string;
@@ -19,35 +27,46 @@ export type SalidaMatch = {
   qtyPlants: number;
 };
 
-export type SalidaEvent = {
+export type PlannedMove = {
   lotId: number;
   lotCode: string;
   species: string;
   variety: string | null;
+  /** id de `planner_varieties` — lo usa el botón de vincular a maestros */
+  varietyId: number | null;
   trays: number;
   plants: number;
-  /** semana campaña en que el lote sale (última semana de la etapa) */
+  /** semana campaña en que ocurre el movimiento */
   campaignWeek: number;
   weekLabel: string; // "S44 · 2026"
-  kind: "etapa" | "despacho";
-  fromArea: string;
-  /** sector destino (cambio de etapa) o null (despacho) */
+  kind: PlannedMoveKind;
+  /** sector de origen (null en ingresos: viene de afuera) */
+  fromArea: string | null;
+  /** sector destino (null en despachos: sale del vivero) */
   toArea: string | null;
   /** solo despachos: contratos CRM candidatos (variedad+año+semana ±2) */
-  matches: SalidaMatch[];
+  matches: PlannedMoveMatch[];
   /** despacho sin variedad vinculada a maestros: no se puede cruzar */
   unlinkedVariety: boolean;
 };
 
-export type SalidasData = {
+export type PlannedMovesWeek = {
+  campaignWeek: number;
+  weekLabel: string;
+  moves: PlannedMove[];
+};
+
+export type PlannedMovesData = {
   /** eventos agrupados por semana campaña, ascendente */
-  weeks: { campaignWeek: number; weekLabel: string; events: SalidaEvent[] }[];
+  weeks: PlannedMovesWeek[];
   currentCampaignWeek: number | null;
   totals: {
+    ingresos: number;
+    ingresoTrays: number;
+    traslados: number;
     despachos: number;
     despachoTrays: number;
     despachosConContrato: number;
-    cambiosEtapa: number;
   };
 };
 
@@ -57,7 +76,9 @@ type LotRow = {
   year: number;
   trays: number | null;
   plants: number;
+  start_week: number | null;
   rooting_area_id: number | null;
+  rooting_start_week: number | null;
   rooting_end_week: number | null;
   maturation_area_id: number | null;
   maturation_start_week: number | null;
@@ -72,14 +93,14 @@ type LotRow = {
 
 const WEEK_TOLERANCE = 2;
 
-export async function getSalidasData(
+export async function getPlannedMovesData(
   supabase: SupabaseClient<Database>,
-): Promise<SalidasData | null> {
+): Promise<PlannedMovesData | null> {
   const [lotsRes, areasRes, calendarRes] = await Promise.all([
     supabase
       .from("planner_lots")
       .select(
-        "id, lot_code, year, trays, plants, rooting_area_id, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, end_week, planner_species(name), planner_varieties(id, name, master_variety_id)",
+        "id, lot_code, year, trays, plants, start_week, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, end_week, planner_species(name), planner_varieties(id, name, master_variety_id)",
       )
       .eq("status", "ACTIVO")
       .limit(10000),
@@ -153,7 +174,7 @@ export async function getSalidasData(
     crmByVariety.set(it.variety_id, arr);
   }
 
-  const matchesFor = (lot: LotRow, dispatchCw: number): SalidaMatch[] => {
+  const matchesFor = (lot: LotRow, dispatchCw: number): PlannedMoveMatch[] => {
     const masterId = lot.planner_varieties?.master_variety_id;
     if (!masterId) return [];
     const real = realWeekOf(dispatchCw);
@@ -183,50 +204,65 @@ export async function getSalidasData(
   };
 
   // ── Eventos ──
-  const events: SalidaEvent[] = [];
+  const moves: PlannedMove[] = [];
   for (const lot of lots) {
     const base = {
       lotId: lot.id,
       lotCode: lot.lot_code,
       species: lot.planner_species?.name ?? "¿?",
       variety: lot.planner_varieties?.name ?? null,
+      varietyId: lot.planner_varieties?.id ?? null,
       trays: lot.trays ?? 0,
       plants: lot.plants,
+      matches: [] as PlannedMoveMatch[],
+      // Propiedad del LOTE, no del evento: si la variedad no está vinculada a
+      // los maestros no se puede cruzar con el CRM. Se marca en los tres tipos
+      // para que el aviso sirva también en Ingresos y Traslados.
+      unlinkedVariety: !lot.planner_varieties?.master_variety_id,
     };
 
-    // Cambios de sección entre etapas consecutivas presentes.
+    // Ingreso: el lote entra al vivero y arranca enraizamiento.
+    const entryWeek = lot.rooting_start_week ?? lot.start_week;
+    if (entryWeek !== null && lot.rooting_area_id !== null) {
+      moves.push({
+        ...base,
+        campaignWeek: entryWeek,
+        weekLabel: weekLabelOf(entryWeek),
+        kind: "ingreso",
+        fromArea: null,
+        toArea: areaName.get(lot.rooting_area_id) ?? "¿?",
+      });
+    }
+
+    // Traslados entre etapas consecutivas presentes.
     if (lot.rooting_end_week !== null && lot.maturation_area_id !== null) {
-      events.push({
+      moves.push({
         ...base,
         campaignWeek: lot.rooting_end_week,
         weekLabel: weekLabelOf(lot.rooting_end_week),
-        kind: "etapa",
+        kind: "traslado",
         fromArea: areaName.get(lot.rooting_area_id ?? -1) ?? "¿?",
         toArea: areaName.get(lot.maturation_area_id) ?? "¿?",
-        matches: [],
-        unlinkedVariety: false,
       });
     }
     if (lot.maturation_end_week !== null && lot.predispatch_area_id !== null) {
-      events.push({
+      moves.push({
         ...base,
         campaignWeek: lot.maturation_end_week,
         weekLabel: weekLabelOf(lot.maturation_end_week),
-        kind: "etapa",
+        kind: "traslado",
         fromArea: areaName.get(lot.maturation_area_id ?? -1) ?? "¿?",
         toArea: areaName.get(lot.predispatch_area_id) ?? "¿?",
-        matches: [],
-        unlinkedVariety: false,
       });
     }
 
-    // Despacho final: última etapa presente del lote.
+    // Despacho: última etapa presente del lote.
     const dispatchWeek =
       lot.predispatch_end_week ?? lot.end_week ?? lot.maturation_end_week ?? null;
     const lastAreaId =
       lot.predispatch_area_id ?? lot.maturation_area_id ?? lot.rooting_area_id;
     if (dispatchWeek !== null) {
-      events.push({
+      moves.push({
         ...base,
         campaignWeek: dispatchWeek,
         weekLabel: weekLabelOf(dispatchWeek),
@@ -234,40 +270,44 @@ export async function getSalidasData(
         fromArea: areaName.get(lastAreaId ?? -1) ?? "¿?",
         toArea: null,
         matches: matchesFor(lot, dispatchWeek),
-        unlinkedVariety: !lot.planner_varieties?.master_variety_id,
       });
     }
   }
 
   // ── Agrupar por semana ──
-  const byWeek = new Map<number, SalidaEvent[]>();
-  for (const e of events) {
-    const arr = byWeek.get(e.campaignWeek) ?? [];
-    arr.push(e);
-    byWeek.set(e.campaignWeek, arr);
+  const KIND_ORDER: Record<PlannedMoveKind, number> = {
+    despacho: 0,
+    traslado: 1,
+    ingreso: 2,
+  };
+  const byWeek = new Map<number, PlannedMove[]>();
+  for (const m of moves) {
+    const arr = byWeek.get(m.campaignWeek) ?? [];
+    arr.push(m);
+    byWeek.set(m.campaignWeek, arr);
   }
   const weeks = [...byWeek.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([campaignWeek, evts]) => ({
+    .map(([campaignWeek, list]) => ({
       campaignWeek,
       weekLabel: weekLabelOf(campaignWeek),
-      events: evts.sort(
-        (a, b) =>
-          // Despachos primero dentro de la semana, luego por bandejas desc.
-          Number(b.kind === "despacho") - Number(a.kind === "despacho") ||
-          b.trays - a.trays,
+      moves: list.sort(
+        (a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || b.trays - a.trays,
       ),
     }));
 
-  const despachos = events.filter((e) => e.kind === "despacho");
+  const ingresos = moves.filter((m) => m.kind === "ingreso");
+  const despachos = moves.filter((m) => m.kind === "despacho");
   return {
     weeks,
     currentCampaignWeek,
     totals: {
+      ingresos: ingresos.length,
+      ingresoTrays: ingresos.reduce((s, m) => s + m.trays, 0),
+      traslados: moves.filter((m) => m.kind === "traslado").length,
       despachos: despachos.length,
-      despachoTrays: despachos.reduce((s, e) => s + e.trays, 0),
-      despachosConContrato: despachos.filter((e) => e.matches.length > 0).length,
-      cambiosEtapa: events.length - despachos.length,
+      despachoTrays: despachos.reduce((s, m) => s + m.trays, 0),
+      despachosConContrato: despachos.filter((m) => m.matches.length > 0).length,
     },
   };
 }

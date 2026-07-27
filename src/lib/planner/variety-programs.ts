@@ -15,11 +15,20 @@ const ACCENTS: Record<string, string> = {
 };
 
 export function normalizeVarietyName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[áéíóúñü]/g, (c) => ACCENTS[c] ?? c)
-    .replace(/^cutting /, "");
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[áéíóúñü]/g, (c) => ACCENTS[c] ?? c)
+      .replace(/^cutting /, "")
+      // Los espacios son ruido en los códigos de variedad y estaban generando
+      // duplicados: el planner escribe "OBG 16252", "FL09-279" y "MCDonald"
+      // mientras los maestros tienen "OBG16252", "FL 09-279" y "Mc Donald".
+      // Sin esto, el botón "vincular variedad" creaba un maestro nuevo en vez
+      // de reconocer el existente. Es seguro volver el match más permisivo
+      // porque, si quedan dos candidatos, la acción se niega a adivinar.
+      .replace(/\s+/g, "")
+  );
 }
 
 /** id de planner_varieties → nombre del programa genético (FK primero, luego nombre) */

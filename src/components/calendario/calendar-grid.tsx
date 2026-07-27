@@ -28,6 +28,7 @@ import {
 } from "@/lib/kam-status";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useDragScroll } from "@/lib/use-drag-scroll";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -780,58 +781,11 @@ export function CalendarGrid({
     };
   }, [toolbarH]);
 
-  // Drag-to-scroll horizontal con mouse: con muchos países la única forma
-  // de moverse era la scrollbar del fondo. Arrastrar sobre celdas vacías
-  // desplaza el grid (touch ya lo hace nativo). Un umbral de 5px distingue
-  // drag de click, y el click posterior a un drag se suprime en captura
-  // para no abrir el detalle de un evento sin querer.
-  const dragState = React.useRef({ down: false, dragged: false, startX: 0, startLeft: 0 });
-  const onGridPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType !== "mouse" || e.button !== 0) return;
-    const el = gridContainerRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth) return;
-    // No iniciar drag sobre controles (links de eventos, botones, inputs).
-    if ((e.target as HTMLElement).closest("a, button, input, select, textarea")) return;
-    dragState.current = {
-      down: true,
-      dragged: false,
-      startX: e.clientX,
-      startLeft: el.scrollLeft,
-    };
-  };
-  const onGridPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = dragState.current;
-    const el = gridContainerRef.current;
-    if (!s.down || !el) return;
-    const dx = e.clientX - s.startX;
-    if (!s.dragged && Math.abs(dx) < 5) return;
-    if (!s.dragged) {
-      s.dragged = true;
-      el.setPointerCapture(e.pointerId);
-      el.style.cursor = "grabbing";
-      el.style.userSelect = "none";
-    }
-    el.scrollLeft = s.startLeft - dx;
-  };
-  const onGridPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-    const s = dragState.current;
-    const el = gridContainerRef.current;
-    s.down = false;
-    if (el) {
-      if (s.dragged && el.hasPointerCapture(e.pointerId)) {
-        el.releasePointerCapture(e.pointerId);
-      }
-      el.style.cursor = "";
-      el.style.userSelect = "";
-    }
-  };
-  const onGridClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (dragState.current.dragged) {
-      e.preventDefault();
-      e.stopPropagation();
-      dragState.current.dragged = false;
-    }
-  };
+  // Drag-to-scroll horizontal con mouse: con muchos países la única forma de
+  // moverse era la scrollbar del fondo. La lógica vive en `useDragScroll`
+  // (compartida con la ocupación del planner) y recibe el ref existente porque
+  // este contenedor ya lo usa para el sticky del header.
+  const drag = useDragScroll<HTMLDivElement>("x", gridContainerRef);
 
   React.useEffect(() => {
     const node = sentinelRef.current;
@@ -1378,11 +1332,7 @@ export function CalendarGrid({
       <div
         ref={gridContainerRef}
         className="overflow-x-hidden rounded-lg border bg-card md:overflow-x-auto"
-        onPointerDown={onGridPointerDown}
-        onPointerMove={onGridPointerMove}
-        onPointerUp={onGridPointerUp}
-        onPointerCancel={onGridPointerUp}
-        onClickCapture={onGridClickCapture}
+        {...drag.handlers}
       >
         <div
           className="grid"
