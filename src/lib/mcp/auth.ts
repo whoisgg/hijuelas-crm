@@ -8,13 +8,23 @@ export type McpAuthExtra = {
   role: string;
 };
 
-export function supabaseAnonClient() {
+/**
+ * Cliente service-role para las RPC `mcp_*`: corre solo en el servidor (esta
+ * ruta nunca se ejecuta en el browser) y evita depender de que `anon`/
+ * `authenticated` tengan EXECUTE sobre esas funciones. Con `p_user_id` como
+ * argumento normal, dejar esas funciones ejecutables por cualquier rol de
+ * Postgres permite suplantar a otro usuario con la anon key pública —
+ * el service role las deja server-only.
+ */
+export function supabaseServiceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !anonKey) {
-    throw new Error("Faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    throw new Error(
+      "Falta SUPABASE_SERVICE_ROLE_KEY (o NEXT_PUBLIC_SUPABASE_URL) para las herramientas MCP.",
+    );
   }
-  return createSupabaseClient<Database>(url, anonKey, {
+  return createSupabaseClient<Database>(url, serviceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -44,7 +54,7 @@ export async function verifyMcpBearerToken(
     scopes: string[] | null;
   };
 
-  const supabase = supabaseAnonClient();
+  const supabase = supabaseServiceClient();
   const result = await (supabase.rpc as unknown as (
     name: string,
     args: Record<string, unknown>,

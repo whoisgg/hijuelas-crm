@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { z } from "zod";
 
-import { getAuthExtra, supabaseAnonClient } from "./auth";
+import { getAuthExtra, supabaseServiceClient } from "./auth";
 
 /**
  * Herramientas MCP del Planner (producción). Solo lectura; requieren rol
@@ -36,7 +36,7 @@ async function rpc<T = unknown>(
   fnName: string,
   args: Record<string, unknown>,
 ): Promise<{ data: T | null; error: { message: string } | null }> {
-  const supabase = supabaseAnonClient();
+  const supabase = supabaseServiceClient();
   return await (supabase.rpc as unknown as (
     name: string,
     args: Record<string, unknown>,
