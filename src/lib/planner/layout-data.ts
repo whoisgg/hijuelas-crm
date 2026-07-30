@@ -20,7 +20,9 @@ export type LayoutLocation = {
   planCapacityTrays: number | null;
   trays: number;
   plants: number;
-  species: { name: string; trays: number }[];
+  /** desglose real del mesón; variety=null cuando el detalle no trae
+   *  variedad vinculada (fallback al agregado por especie del snapshot) */
+  species: { name: string; variety: string | null; trays: number }[];
   /** antigüedad promedio del material del mesón, ponderada por bandejas */
   ageMonthsAvg: number | null;
   /** distribución de bandejas por tramo de meses dentro del mesón */
@@ -52,14 +54,6 @@ export type SectorLayoutData = {
   snapshotDate: string | null;
   snapshotFile: string | null;
   totals: { trays: number; physicalCapacity: number; planCapacity: number };
-  /**
-   * Distribución de antigüedad de todo el sector — es la "estadística global"
-   * que la leyenda muestra por tramo. Vacía si el snapshot activo no trae fechas
-   * de plantación (el archivo viejo de hotelería no las tenía).
-   */
-  ageDistribution: AgeBucket[];
-  /** bandejas del sector sin fecha de plantación conocida */
-  ageUnknownTrays: number;
 };
 
 export type SectorPlanFill = {
@@ -201,37 +195,52 @@ export async function getSectorLayout(
   // es lo que trae la fecha de plantación. El snapshot agregado no la tiene, y el
   // archivo viejo de hotelería tampoco — con esa fuente la distribución queda
   // vacía y la UI lo dice en vez de inventar una edad.
+  //
+  // El mismo detalle trae species_name/variety_name por bandeja — más preciso
+  // que el agregado del snapshot (solo especie). Se usa para identificar qué
+  // lote del plan corresponde a bandejas reales sin lote asignado ("sale esta
+  // semana"): variety=null cuando esa fila no tiene variedad vinculada.
   const ageByLocation = new Map<number, Map<number, { trays: number; plants: number }>>();
-  const ageTotals = new Map<number, { trays: number; plants: number }>();
-  let ageUnknownTrays = 0;
+  const varietyByLocation = new Map<
+    number,
+    Map<string, { name: string; variety: string | null; trays: number }>
+  >();
   if (lastUpload && locationIds.length) {
     const { data: items } = await supabase
       .from("planner_inventory_items")
-      .select("location_id, trays, plants, planted_at")
+      .select("location_id, trays, plants, planted_at, species_name, variety_name")
       .eq("upload_id", lastUpload.id)
       .in("location_id", locationIds)
       .limit(5000);
     for (const it of items ?? []) {
       if (it.location_id === null) continue;
-      if (!it.planted_at) {
-        ageUnknownTrays += it.trays;
-        continue;
+      if (it.planted_at) {
+        const months = ageMonthsFrom(it.planted_at);
+        let byLoc = ageByLocation.get(it.location_id);
+        if (!byLoc) {
+          byLoc = new Map();
+          ageByLocation.set(it.location_id, byLoc);
+        }
+        const cell = byLoc.get(months) ?? { trays: 0, plants: 0 };
+        cell.trays += it.trays;
+        cell.plants += it.plants;
+        byLoc.set(months, cell);
       }
-      const months = ageMonthsFrom(it.planted_at);
-      let byLoc = ageByLocation.get(it.location_id);
-      if (!byLoc) {
-        byLoc = new Map();
-        ageByLocation.set(it.location_id, byLoc);
+      if (it.species_name) {
+        let byLoc = varietyByLocation.get(it.location_id);
+        if (!byLoc) {
+          byLoc = new Map();
+          varietyByLocation.set(it.location_id, byLoc);
+        }
+        const key = `${it.species_name}::${it.variety_name ?? ""}`;
+        const cell = byLoc.get(key) ?? {
+          name: it.species_name,
+          variety: it.variety_name,
+          trays: 0,
+        };
+        cell.trays += it.trays;
+        byLoc.set(key, cell);
       }
-      const cell = byLoc.get(months) ?? { trays: 0, plants: 0 };
-      cell.trays += it.trays;
-      cell.plants += it.plants;
-      byLoc.set(months, cell);
-
-      const tot = ageTotals.get(months) ?? { trays: 0, plants: 0 };
-      tot.trays += it.trays;
-      tot.plants += it.plants;
-      ageTotals.set(months, tot);
     }
   }
 
@@ -293,9 +302,13 @@ export async function getSectorLayout(
           planCapacityTrays: planCapacity,
           trays: occ?.trays ?? 0,
           plants: occ?.plants ?? 0,
-          species: [...(occ?.species ?? new Map())]
-            .map(([name, trays]) => ({ name, trays }))
-            .sort((a, b) => b.trays - a.trays),
+          // Variedad cuando el detalle la trae (más preciso); si no, cae al
+          // agregado por especie del snapshot (variety=null).
+          species: varietyByLocation.has(l.id)
+            ? [...varietyByLocation.get(l.id)!.values()].sort((a, b) => b.trays - a.trays)
+            : [...(occ?.species ?? new Map())]
+                .map(([name, trays]) => ({ name, variety: null as string | null, trays }))
+                .sort((a, b) => b.trays - a.trays),
           ageBuckets,
           ageMonthsAvg: avgOf(ageBuckets),
         };
@@ -317,9 +330,5 @@ export async function getSectorLayout(
       physicalCapacity: totalPhysical,
       planCapacity: totalPlanCapacity,
     },
-    ageDistribution: [...ageTotals.entries()]
-      .map(([months, v]) => ({ months, trays: v.trays, plants: v.plants }))
-      .sort((a, b) => a.months - b.months),
-    ageUnknownTrays,
   };
 }

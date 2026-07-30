@@ -32,6 +32,7 @@ import {
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { AGE_COLORS, ageColor, ageLabel } from "@/components/planner/age-distribution";
 import {
   mermarScenarioLotPortion,
   moveScenarioLotPortion,
@@ -67,6 +68,15 @@ const SEAT_LEAVE = "#8b5cf6";
 
 const lotKey = (lotId: number | null, stage: string | null) =>
   lotId !== null && stage ? `${lotId}:${stage}` : null;
+
+/** minúsculas + sin tildes + sin espacios extra — para matchear especie/
+ *  variedad entre fuentes con normalización distinta (inventario vs maestro). */
+const normName = (s: string) =>
+  s
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 
 export type WorkspaceBar = {
   weekLabel: string;
@@ -129,16 +139,54 @@ export function SectorWorkspace({
     : null;
   const allLocIds = React.useMemo(() => allLocs.map((l) => l.id), [allLocs]);
 
+  // Salidas totales del sector esta semana — solo para el mensaje ("No hay
+  // salidas esta semana."), no para pintar (eso queda en cada mesón).
+  const leaveTotal = React.useMemo(
+    () =>
+      allLocs.reduce(
+        (s, l) => s + Math.max(0, l.trays - (data.fill[l.id]?.trays ?? 0)),
+        0,
+      ),
+    [allLocs, data.fill],
+  );
+
+  // Antigüedad del sector completo — alimenta el mensaje cuando el toggle
+  // está activo, en vez de la tarjeta de estadística que había antes.
+  const ageSummary = React.useMemo(() => {
+    let trays = 0;
+    let weighted = 0;
+    for (const l of allLocs) {
+      for (const b of l.ageBuckets) {
+        trays += b.trays;
+        weighted += b.trays * b.months;
+      }
+    }
+    return { trays, avg: trays ? weighted / trays : null };
+  }, [allLocs]);
+
   const [busy, setBusy] = React.useState(false);
   // Capa: false = realidad + plan de la semana; true = sólo la foto real.
   const [soloHoy, setSoloHoy] = React.useState(false);
   // Filtro: pinta de azul las bandejas ocupadas hoy que el plan libera.
   const [marcarSalen, setMarcarSalen] = React.useState(false);
+  // Overlay: escribe los meses de antigüedad sobre cada silla ocupada hoy.
+  const [mostrarEdad, setMostrarEdad] = React.useState(false);
+  // Antigüedad de la última silla tocada (hover en desktop, tap en mobile) —
+  // el title nativo no se ve en touch y es poco legible en desktop.
+  const [ageHover, setAgeHover] = React.useState<number | null | undefined>(undefined);
   const [dragging, setDragging] = React.useState<SectorLotChip | null>(null);
   const [expanded, setExpanded] = React.useState<Set<number>>(() => new Set(allLocIds));
   const [hoveredKey, setHoveredKey] = React.useState<string | null>(null);
   const [selectedKey, setSelectedKey] = React.useState<string | null>(initial.key);
   const [moveQty, setMoveQty] = React.useState<number>(initial.qty);
+  // Silla real "sale esta semana" que se está tratando de identificar —
+  // trae la especie/variedad real de ESA silla puntual (no todo el mesón
+  // mezclado), para acotar candidatos a lo que realmente hay ahí.
+  const [reconcileTarget, setReconcileTarget] = React.useState<{
+    locationId: number;
+    name: string;
+    variety: string | null;
+  } | null>(null);
   // Movimiento por drag pendiente de confirmación (lote → mesón).
   const [pendingPin, setPendingPin] = React.useState<{
     chip: SectorLotChip;
@@ -194,6 +242,7 @@ export function SectorWorkspace({
       setSelectedKey(null);
       return;
     }
+    setReconcileTarget(null);
     setSelectedKey(key);
     const chip = chipByKey.get(key);
     setMoveQty(chip?.trays ?? 0);
@@ -202,6 +251,83 @@ export function SectorWorkspace({
       for (const id of locsWithKey(key)) next.add(id);
       return next;
     });
+  };
+
+  // target = la variedad real de la silla puntual que se clickeó (no todo
+  // el mesón mezclado) — cada silla "sale esta semana" ya sabe de qué
+  // variedad real es, vía el mismo reparto que usa Antigüedad.
+  const openReconcile = (
+    locationId: number,
+    target: { name: string; variety: string | null } | null,
+  ) => {
+    setSelectedKey(null);
+    setReconcileTarget((prev) =>
+      prev?.locationId === locationId &&
+      prev.name === target?.name &&
+      prev.variety === target?.variety
+        ? null
+        : target
+          ? { locationId, name: target.name, variety: target.variety }
+          : null,
+    );
+  };
+
+  const reconcileLoc = reconcileTarget
+    ? (allLocs.find((l) => l.id === reconcileTarget.locationId) ?? null)
+    : null;
+  // Candidatos: lotes activos del sector que coinciden con la especie+
+  // variedad real de ESA silla puntual. Prioridad: coincidencia exacta
+  // (mucho más preciso cuando hay varias variedades de la misma especie en
+  // juego, ej. 42 lotes de Arándano Mágica). Normalizado sin tildes: el
+  // inventario real trae "Magica" y el maestro del plan "Mágica". Si no hay
+  // ningún match exacto (variedad sin vínculo, texto crudo con sufijos como
+  // "York 6624"), cae a especie sola como respaldo — más amplio, marcado
+  // como menos preciso en vez de fallar en silencio o inventar una
+  // normalización que podría equivocarse con variedades que sí terminan en
+  // números (ej. "OB18064").
+  const sortCandidates = (a: SectorLotChip, b: SectorLotChip) =>
+    Number(b.overflowTrays > 0) - Number(a.overflowTrays > 0) ||
+    Number(!b.pinnedLocationId) - Number(!a.pinnedLocationId);
+  const { exact: reconcileExact, loose: reconcileLoose } = reconcileTarget
+    ? (() => {
+        const exactList: SectorLotChip[] = [];
+        const looseList: SectorLotChip[] = [];
+        for (const c of data.contents) {
+          if (normName(c.species) !== normName(reconcileTarget.name)) continue;
+          const isExact =
+            reconcileTarget.variety !== null &&
+            normName(c.variety ?? "") === normName(reconcileTarget.variety);
+          (isExact ? exactList : looseList).push(c);
+        }
+        return {
+          exact: exactList.sort(sortCandidates),
+          loose: looseList.sort(sortCandidates),
+        };
+      })()
+    : { exact: [], loose: [] };
+  const reconcileCandidates = reconcileExact.length ? reconcileExact : reconcileLoose;
+  const reconcileIsLoose = reconcileExact.length === 0 && reconcileLoose.length > 0;
+
+  const reconcilePin = async (chip: SectorLotChip) => {
+    if (!reconcileTarget) return;
+    setBusy(true);
+    try {
+      const res = await pinLotToLocation({
+        scenarioId,
+        lotId: chip.lotId,
+        stage: chip.stage,
+        locationId: reconcileTarget.locationId,
+      });
+      if (res.ok) {
+        toast.success(`${chip.species} vinculado a ${reconcileLoc?.code ?? ""}.`);
+        setReconcileTarget(null);
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "No se pudo vincular.");
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const toggleExpand = (id: number) =>
@@ -349,6 +475,18 @@ export function SectorWorkspace({
   // Inbox = sólo lo que el FIFO no logró ubicar (por asignar).
   const porAsignar = data.contents.filter((c) => c.overflowTrays > 0);
 
+  // Mensaje del toggle activo — reemplaza la instrucción por defecto mientras
+  // Salidas o Antigüedad estén prendidos; ese espacio es solo para texto.
+  const statusMessage = mostrarEdad
+    ? ageSummary.trays > 0
+      ? `${ageSummary.trays.toLocaleString("es-CL")} bandejas con fecha · antigüedad promedio ${ageSummary.avg!.toFixed(1)} meses.`
+      : "La foto activa no trae fechas de plantación."
+    : marcarSalen && !soloHoy
+      ? leaveTotal > 0
+        ? `${leaveTotal.toLocaleString("es-CL")} bandejas salen esta semana.`
+        : "No hay salidas esta semana."
+      : null;
+
   return (
     <DndContext
       id="sector-workspace"
@@ -403,7 +541,7 @@ export function SectorWorkspace({
               {bar.planCapacity.toLocaleString("es-CL")} bandejas
             </span>
           </div>
-          {!soloHoy ? (
+          {!soloHoy && !mostrarEdad ? (
             <label
               className="flex cursor-pointer select-none items-center gap-1.5"
               title="Pinta de violeta las bandejas ocupadas hoy que el plan libera esta semana."
@@ -421,78 +559,125 @@ export function SectorWorkspace({
               />
             </label>
           ) : null}
+          <label
+            className="flex cursor-pointer select-none items-center gap-1.5"
+            title="Colorea cada silla ocupada hoy según su antigüedad (0 a 6+ meses)."
+          >
+            <input
+              type="checkbox"
+              checked={mostrarEdad}
+              onChange={(e) => setMostrarEdad(e.target.checked)}
+              className="h-4 w-4 accent-foreground"
+            />
+            Antigüedad
+          </label>
+          <button
+            type="button"
+            onClick={() => setSoloHoy((v) => !v)}
+            className={cn(
+              "ml-auto rounded-full border px-2.5 py-1 transition-colors",
+              soloHoy
+                ? "border-foreground bg-foreground font-medium text-background"
+                : "hover:border-foreground/40 hover:text-foreground",
+            )}
+          >
+            {soloHoy
+              ? "Volver al plan de la semana"
+              : `Solo hoy${snapshotDate ? ` (${snapshotDate})` : ""}`}
+          </button>
+          {anyExpanded ? (
+            <button
+              type="button"
+              onClick={() => setExpanded(new Set())}
+              className="rounded-full border px-2.5 py-1 transition-colors hover:border-foreground/40 hover:text-foreground"
+            >
+              Colapsar todo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                setExpanded(
+                  new Set(data.layout.modules.flatMap((m) => m.locations.map((l) => l.id))),
+                )
+              }
+              className="rounded-full border px-2.5 py-1 transition-colors hover:border-foreground/40 hover:text-foreground"
+            >
+              Expandir todo
+            </button>
+          )}
         </div>
       ) : null}
 
+      {/* Swatches del plano: ocupación/plan por defecto, o la escala de
+          antigüedad cuando ese toggle reemplaza la paleta. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_FULL }} />
-          ocupado hoy
-        </span>
-        {!soloHoy ? (
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_ENTER }} />
-            entra según plan
+        {mostrarEdad ? (
+          <span className="flex items-center gap-2">
+            {AGE_COLORS.map((c, i) => (
+              <span key={c} className="flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: c }} />
+                {i === AGE_COLORS.length - 1 ? "6+ m" : `${i} m`}
+              </span>
+            ))}
           </span>
-        ) : null}
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_EMPTY }} />
-          vacío
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_HOVER }} />
-          hover
-        </span>
-        {marcarSalen && !soloHoy ? (
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_LEAVE }} />
-            sale esta semana
-          </span>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => setSoloHoy((v) => !v)}
-          className={cn(
-            "ml-auto rounded-full border px-2.5 py-1 transition-colors",
-            soloHoy
-              ? "border-foreground bg-foreground font-medium text-background"
-              : "hover:border-foreground/40 hover:text-foreground",
-          )}
-        >
-          {soloHoy
-            ? "Volver al plan de la semana"
-            : `Solo hoy${snapshotDate ? ` (${snapshotDate})` : ""}`}
-        </button>
+        ) : (
+          <>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_FULL }} />
+              ocupado hoy
+            </span>
+            {!soloHoy ? (
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_ENTER }} />
+                entra según plan
+              </span>
+            ) : null}
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_EMPTY }} />
+              vacío
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_HOVER }} />
+              hover
+            </span>
+          </>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Plano estadio */}
         <div className="space-y-5">
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>Clic en un mesón para expandirlo; clic en una silla selecciona su lote.</span>
-            {anyExpanded ? (
-              <button
-                type="button"
-                onClick={() => setExpanded(new Set())}
-                className="underline-offset-2 hover:underline"
-              >
-                Colapsar todo
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() =>
-                  setExpanded(
-                    new Set(
-                      data.layout.modules.flatMap((m) => m.locations.map((l) => l.id)),
-                    ),
-                  )
-                }
-                className="underline-offset-2 hover:underline"
-              >
-                Expandir todo
-              </button>
-            )}
+            <span>
+              {statusMessage ??
+                "Clic en un mesón para expandirlo; clic en una silla selecciona su lote."}
+            </span>
+            {/* Sin barra de KPIs (modo simulador) no hay dónde más ponerlo — con
+                barra, el botón vive junto a "Solo hoy". */}
+            {!bar ? (
+              anyExpanded ? (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(new Set())}
+                  className="underline-offset-2 hover:underline"
+                >
+                  Colapsar todo
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpanded(
+                      new Set(data.layout.modules.flatMap((m) => m.locations.map((l) => l.id))),
+                    )
+                  }
+                  className="underline-offset-2 hover:underline"
+                >
+                  Expandir todo
+                </button>
+              )
+            ) : null}
           </div>
 
           {data.layout.modules.map((m) => {
@@ -514,14 +699,19 @@ export function SectorWorkspace({
                           key={loc.id}
                           loc={loc}
                           fill={data.fill[loc.id]}
+                          week={data.week}
                           soloHoy={soloHoy}
                           marcarSalen={marcarSalen}
+                          mostrarEdad={mostrarEdad}
+                          onAgeHover={setAgeHover}
                           expanded={expanded.has(loc.id)}
                           hoveredKey={hoveredKey}
                           selectedKey={selectedKey}
                           onToggle={() => toggleExpand(loc.id)}
                           onHover={setHoveredKey}
                           onSelect={selectLot}
+                          onReconcile={(entry) => openReconcile(loc.id, entry)}
+                          reconcileActive={reconcileTarget?.locationId === loc.id}
                         />
                       ) : (
                         <div key={`${side}${row}`} className="h-12" />
@@ -533,14 +723,19 @@ export function SectorWorkspace({
                     key={loc.id}
                     loc={loc}
                     fill={data.fill[loc.id]}
+                    week={data.week}
                     soloHoy={soloHoy}
                     marcarSalen={marcarSalen}
+                    mostrarEdad={mostrarEdad}
+                    onAgeHover={setAgeHover}
                     expanded={expanded.has(loc.id)}
                     hoveredKey={hoveredKey}
                     selectedKey={selectedKey}
                     onToggle={() => toggleExpand(loc.id)}
                     onHover={setHoveredKey}
                     onSelect={selectLot}
+                    onReconcile={(entry) => openReconcile(loc.id, entry)}
+                    reconcileActive={reconcileTarget?.locationId === loc.id}
                   />
                 ));
             return (
@@ -770,6 +965,73 @@ export function SectorWorkspace({
                   band.
                 </button>
               </div>
+            ) : reconcileLoc && reconcileTarget ? (
+              <div className="border-t-4 border-t-muted/60 px-4 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {reconcileTarget.name}
+                      {reconcileTarget.variety ? ` ${reconcileTarget.variety}` : " (sin variedad)"}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      Real en {reconcileLoc.code} · sin lote del plan esta semana
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReconcileTarget(null)}
+                    aria-label="Cerrar"
+                    className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <p className="mb-1.5 mt-3 text-[11px] font-medium text-muted-foreground">
+                  {reconcileIsLoose
+                    ? "Sin coincidencia exacta de variedad — candidatos por especie"
+                    : "Vincular a un lote activo de la misma especie y variedad"}
+                </p>
+                {reconcileIsLoose ? (
+                  <p className="mb-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                    Revisa antes de vincular: el inventario no trae variedad vinculada
+                    para esta fila, así que no hay forma de acotar más que por especie.
+                  </p>
+                ) : null}
+                <div className="max-h-[42vh] space-y-1.5 overflow-y-auto">
+                  {reconcileCandidates.length ? (
+                    reconcileCandidates.map((c) => (
+                      <button
+                        key={`${c.lotId}:${c.stage}`}
+                        type="button"
+                        disabled={busy}
+                        onClick={() => reconcilePin(c)}
+                        className="flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-[#185FA5]/50 hover:bg-[#185FA5]/[0.04] disabled:opacity-50"
+                      >
+                        <div className="min-w-0">
+                          <span className="block truncate text-sm font-medium">
+                            {c.label}
+                          </span>
+                          <span className="block text-[11px] text-muted-foreground">
+                            {c.trays.toLocaleString("es-CL")} band.
+                            {c.overflowTrays > 0
+                              ? " · sin ubicar"
+                              : c.pinnedCode
+                                ? ` · hoy en ${c.pinnedCode}`
+                                : ""}
+                          </span>
+                        </div>
+                        <Pin className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-1 py-2 text-[11px] text-muted-foreground">
+                      No hay lotes activos de esta especie en el sector esta semana —
+                      no se puede identificar con certeza.
+                    </p>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className="border-t-4 border-t-muted/60 px-4 py-8 text-center text-[11px] text-muted-foreground">
                 <Layers className="mx-auto mb-1 h-4 w-4 opacity-50" />
@@ -777,6 +1039,15 @@ export function SectorWorkspace({
               </div>
             )}
           </div>
+
+          {mostrarEdad && ageHover !== undefined ? (
+            <div className="mb-3 rounded-xl border bg-card px-4 py-3 shadow-sm">
+              <p className="text-[11px] text-muted-foreground">Antigüedad</p>
+              <p className="text-sm font-semibold">
+                {ageHover !== null ? ageLabel(ageHover) : "sin fecha"}
+              </p>
+            </div>
+          ) : null}
 
           <p className="px-1 text-[11px] text-muted-foreground">
             {workingMode ? (
@@ -813,27 +1084,45 @@ export function SectorWorkspace({
 function MesonCell({
   loc,
   fill,
+  week,
   soloHoy,
   marcarSalen,
+  mostrarEdad,
+  onAgeHover,
   expanded,
   hoveredKey,
   selectedKey,
   onToggle,
   onHover,
   onSelect,
+  onReconcile,
+  reconcileActive,
 }: {
   loc: SectorWorkspaceData["layout"]["modules"][number]["locations"][number];
   fill?: { trays: number; parts: FillPart[] };
+  /** semana-campaña que se está mirando: decide qué lotes ya "llegaron" */
+  week: number;
   /** capa: true = sólo la foto real del snapshot, sin plan */
   soloHoy: boolean;
   /** filtro: pinta de azul lo ocupado hoy que el plan libera esta semana */
   marcarSalen: boolean;
+  /** overlay: escribe los meses de antigüedad sobre cada silla ocupada hoy */
+  mostrarEdad: boolean;
+  /** hover/tap de una silla en modo antigüedad — alimenta la tarjeta del panel */
+  onAgeHover: (months: number | null) => void;
   expanded: boolean;
   hoveredKey: string | null;
   selectedKey: string | null;
   onToggle: () => void;
   onHover: (key: string | null) => void;
   onSelect: (key: string | null) => void;
+  /** clic en una silla "sale esta semana" (real, sin lote) — abre el panel
+   *  para vincularla a un lote activo por especie. */
+  onReconcile: (entry: { name: string; variety: string | null } | null) => void;
+  /** este mesón es el que tiene abierto el panel "Identificar" — mismo
+   *  resaltado azul que un lote seleccionado, para que se sienta la misma
+   *  interacción en vez de un flujo aparte. */
+  reconcileActive: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `loc:${loc.id}` });
   const planCap = loc.planCapacityTrays ?? 0;
@@ -847,7 +1136,8 @@ function MesonCell({
   const leave = Math.max(0, realTrays - planTrays);
   const free = Math.max(0, planCap - planTrays);
   const parts = fill?.parts ?? [];
-  const hasSelected = parts.some((p) => lotKey(p.lotId, p.stage) === selectedKey);
+  const hasSelected =
+    parts.some((p) => lotKey(p.lotId, p.stage) === selectedKey) || reconcileActive;
   const pctOf = (n: number) => (gridCap ? Math.round((n / gridCap) * 100) : 0);
   const quotaFull = planCap > 0 && planTrays >= planCap;
 
@@ -859,50 +1149,110 @@ function MesonCell({
 
   type Seat = { part: FillPart | null; kind: "stay" | "enter" | "leave" | "empty" };
   let seats: Seat[] = [];
-  const staySeats = Math.round(stay / perCell);
   if (soloHoy) {
     for (const s of loc.species) {
       const n = Math.round(s.trays / perCell);
+      const label = s.variety ? `${s.name} ${s.variety}` : s.name;
       for (let i = 0; i < n; i++)
         seats.push({
-          part: { label: s.name, trays: s.trays, lotId: null, stage: null },
+          part: { label, trays: s.trays, lotId: null, stage: null, arrivalWeek: week },
           kind: "stay",
         });
     }
   } else {
-    const partSeats: Seat[] = [];
+    // Kind por lote completo, no por conteo agregado del mesón: un lote ya
+    // "llegó" (stay) si su semana de inicio de etapa es anterior a la que se
+    // está mirando; si es la actual o futura, "entra" (enter) — el plan lo
+    // trae esta semana o después. Nunca se parte un mismo lote entre los dos.
+    const stayPartSeats: Seat[] = [];
+    const enterPartSeats: Seat[] = [];
     for (const p of parts) {
       const n = Math.round(p.trays / perCell);
-      for (let i = 0; i < n; i++)
-        partSeats.push({ part: p, kind: partSeats.length < staySeats ? "stay" : "enter" });
+      const kind: "stay" | "enter" = p.arrivalWeek < week ? "stay" : "enter";
+      const bucket = kind === "stay" ? stayPartSeats : enterPartSeats;
+      for (let i = 0; i < n; i++) bucket.push({ part: p, kind });
     }
     // Verde contiguo = ocupación de hoy: primero lo que permanece, luego lo
-    // que sale (verde/azul), y al final lo que el plan agrega (ámbar).
+    // que sale (violeta), y al final lo que el plan agrega (ámbar).
     const leaveSeats: Seat[] = [];
     for (let i = 0; i < Math.round(leave / perCell); i++)
       leaveSeats.push({ part: null, kind: "leave" });
-    seats = [
-      ...partSeats.slice(0, staySeats),
-      ...leaveSeats,
-      ...partSeats.slice(staySeats),
-    ];
+    seats = [...stayPartSeats, ...leaveSeats, ...enterPartSeats];
   }
   seats = seats.slice(0, totalSeats);
   while (seats.length < totalSeats) seats.push({ part: null, kind: "empty" });
 
-  const seatStyle = (s: Seat): React.CSSProperties => {
-    if (s.kind === "leave")
-      return { backgroundColor: marcarSalen ? SEAT_LEAVE : SEAT_FULL };
-    if (!s.part) return { backgroundColor: SEAT_EMPTY };
-    const key = lotKey(s.part.lotId, s.part.stage);
+  // Antigüedad por silla: expande los tramos agregados del mesón (meses →
+  // bandejas) en una secuencia y la reparte sobre las sillas "ocupado hoy"
+  // (quedan/salen), en el mismo orden en que aparecen. Es tan aproximado como
+  // el resto del plano — no hay identidad real de bandeja, solo el total por
+  // tramo — pero alcanza para ver el patrón sobre el mesón.
+  const ageSeq: number[] = [];
+  for (const b of [...loc.ageBuckets].sort((a, b) => a.months - b.months)) {
+    const n = Math.round(b.trays / perCell);
+    for (let i = 0; i < n; i++) ageSeq.push(b.months);
+  }
+  let ageIdx = 0;
+  const seatAges: (number | null)[] = seats.map((s) =>
+    s.kind === "stay" || s.kind === "leave"
+      ? ageIdx < ageSeq.length
+        ? ageSeq[ageIdx++]
+        : null
+      : null,
+  );
+
+  // Variedad real por silla "sale esta semana": mismo reparto que la
+  // antigüedad, expandiendo el desglose real del mesón (loc.species, ya
+  // por especie+variedad) sobre las sillas sin lote — así el hover muestra
+  // qué hay ahí en vez de un texto genérico, y "Identificar" arranca
+  // acotado a esa variedad puntual, no a todo el mesón mezclado.
+  const leaveEntrySeq: { name: string; variety: string | null }[] = [];
+  for (const s of loc.species) {
+    const n = Math.round(s.trays / perCell);
+    for (let i = 0; i < n; i++) leaveEntrySeq.push({ name: s.name, variety: s.variety });
+  }
+  let leaveIdx = 0;
+  const seatLeaveEntry: ({ name: string; variety: string | null } | null)[] = seats.map((s) =>
+    s.kind === "leave"
+      ? (leaveEntrySeq[leaveIdx++] ?? null)
+      : null,
+  );
+
+  // Antigüedad activa: toma la paleta entera del mesón (0-6+ meses); sin ella,
+  // vuelve a la paleta normal de ocupación/plan/salidas.
+  const seatStyle = (s: Seat, i: number): React.CSSProperties => {
+    // La selección/hover del lote de plan sigue funcionando en modo
+    // antigüedad (mover/mermar no puede depender de apagar el toggle) — se
+    // pinta encima de la paleta de edad para esas sillas puntuales.
+    const key = s.part ? lotKey(s.part.lotId, s.part.stage) : null;
     if (key && key === selectedKey) return { backgroundColor: SEAT_SELECTED };
     if (key && key === hoveredKey) return { backgroundColor: SEAT_HOVER };
+    // Sin lote pero con el panel "Identificar" abierto para este mesón: mismo
+    // azul que un lote seleccionado — la interacción se siente igual aunque
+    // todavía no haya un lotId detrás.
+    if (s.kind === "leave" && reconcileActive && !mostrarEdad) {
+      return { backgroundColor: SEAT_SELECTED };
+    }
+    if (s.kind === "leave" && hoveredKey === `loc:${loc.id}` && !mostrarEdad) {
+      return { backgroundColor: SEAT_HOVER };
+    }
+    if (mostrarEdad) {
+      if (s.kind === "stay" || s.kind === "leave")
+        return { backgroundColor: ageColor(seatAges[i]) };
+      // Lo que entra según la proyección de la semana llega recién: 0 meses.
+      if (s.kind === "enter") return { backgroundColor: ageColor(0) };
+      return { backgroundColor: SEAT_EMPTY };
+    }
+    if (s.kind === "leave") return { backgroundColor: marcarSalen ? SEAT_LEAVE : SEAT_FULL };
+    if (!s.part) return { backgroundColor: SEAT_EMPTY };
     if (s.kind === "enter") return { backgroundColor: SEAT_ENTER };
     return { backgroundColor: SEAT_FULL };
   };
 
   const enter = Math.max(0, planTrays - stay);
   const barFree = Math.max(0, gridCap - (soloHoy ? realTrays : planTrays + leave));
+  const ageOccupied = loc.ageBuckets.reduce((s, b) => s + b.trays, 0);
+  const ageFree = Math.max(0, gridCap - ageOccupied - (soloHoy ? 0 : enter));
 
   return (
     <div
@@ -974,21 +1324,36 @@ function MesonCell({
                   />
                 ) : null}
                 <span
-                  onMouseEnter={() => onHover(key)}
+                  onMouseEnter={() => {
+                    onHover(s.kind === "leave" ? `loc:${loc.id}` : key);
+                    if (mostrarEdad) onAgeHover(s.kind === "enter" ? 0 : seatAges[i]);
+                  }}
                   onMouseLeave={() => onHover(null)}
-                  onClick={() => key && !s.part?.sim && onSelect(key)}
+                  onClick={() => {
+                    if (key && !s.part?.sim) onSelect(key);
+                    else if (s.kind === "leave" && !mostrarEdad) onReconcile(seatLeaveEntry[i]);
+                    if (mostrarEdad) onAgeHover(s.kind === "enter" ? 0 : seatAges[i]);
+                  }}
                   title={
-                    s.kind === "leave"
-                      ? "ocupado hoy · sale esta semana según el plan"
-                      : s.part?.sim
-                        ? `${s.part.label} · simulación`
-                        : (s.part?.label ?? "vacío")
+                    mostrarEdad
+                      ? undefined
+                      : s.kind === "leave"
+                        ? (() => {
+                            const e = seatLeaveEntry[i];
+                            const label = e
+                              ? `${e.name}${e.variety ? ` ${e.variety}` : " (sin variedad)"}`
+                              : "ocupado hoy";
+                            return `${label} · sale esta semana según el plan · clic para identificar el lote`;
+                          })()
+                        : s.part?.sim
+                          ? `${s.part.label} · simulación`
+                          : (s.part?.label ?? "vacío")
                   }
                   className={cn(
                     "h-3 w-3 rounded-[2px] transition-colors",
-                    key && "cursor-pointer",
+                    (mostrarEdad || key || s.kind === "leave") && "cursor-pointer",
                   )}
-                  style={seatStyle(s)}
+                  style={seatStyle(s, i)}
                 />
               </React.Fragment>
             );
@@ -996,12 +1361,34 @@ function MesonCell({
         </div>
       ) : (
         <div className="flex h-3.5 overflow-hidden rounded-sm">
-          {soloHoy ? (
-            realTrays > 0 ? (
-              <div
-                style={{ flexGrow: realTrays, flexBasis: 0, backgroundColor: SEAT_FULL }}
-              />
-            ) : null
+          {mostrarEdad ? (
+            <>
+              {[...loc.ageBuckets]
+                .sort((a, b) => a.months - b.months)
+                .map((b) => (
+                  <div
+                    key={b.months}
+                    style={{ flexGrow: b.trays, flexBasis: 0, backgroundColor: ageColor(b.months) }}
+                  />
+                ))}
+              {!soloHoy && enter > 0 ? (
+                <div style={{ flexGrow: enter, flexBasis: 0, backgroundColor: ageColor(0) }} />
+              ) : null}
+              {ageFree > 0 ? (
+                <div style={{ flexGrow: ageFree, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
+              ) : null}
+            </>
+          ) : soloHoy ? (
+            <>
+              {realTrays > 0 ? (
+                <div
+                  style={{ flexGrow: realTrays, flexBasis: 0, backgroundColor: SEAT_FULL }}
+                />
+              ) : null}
+              {barFree > 0 ? (
+                <div style={{ flexGrow: barFree, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
+              ) : null}
+            </>
           ) : (
             <>
               {stay > 0 ? (
@@ -1031,11 +1418,11 @@ function MesonCell({
                   }}
                 />
               ) : null}
+              {barFree > 0 ? (
+                <div style={{ flexGrow: barFree, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
+              ) : null}
             </>
           )}
-          {barFree > 0 ? (
-            <div style={{ flexGrow: barFree, flexBasis: 0, backgroundColor: SEAT_EMPTY }} />
-          ) : null}
         </div>
       )}
     </div>

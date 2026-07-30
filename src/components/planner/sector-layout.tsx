@@ -225,7 +225,10 @@ export function SectorLayout({
     }
     return {
       trays: loc.trays,
-      parts: loc.species.map((s) => ({ label: s.name, trays: s.trays })),
+      parts: loc.species.map((s) => ({
+        label: s.variety ? `${s.name} ${s.variety}` : s.name,
+        trays: s.trays,
+      })),
       capacity: loc.capacityTrays,
     };
   };

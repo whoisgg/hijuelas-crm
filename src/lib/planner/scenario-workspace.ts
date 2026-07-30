@@ -43,6 +43,10 @@ export type FillPart = {
   trays: number;
   lotId: number | null;
   stage: Stage | null;
+  /** semana de inicio de esta etapa para el lote — decide si ya "llegó"
+   *  (ocupado hoy) o si el plan lo trae a futuro, lote completo, sin
+   *  partir una misma fila entre las dos categorías. */
+  arrivalWeek: number;
   /** parte de una orden simulada */
   sim?: boolean;
 };
@@ -56,6 +60,8 @@ export type SectorWorkspaceData = {
   overflowCount: number;
   targets: TargetSector[];
   stage: Stage | null;
+  /** semana-campaña que se está mirando (para decidir llegó/entra por lote) */
+  week: number;
 };
 
 type ScenarioLotRow = {
@@ -175,12 +181,15 @@ export async function getScenarioWorkspace(
   // Colocación pin-aware: primero los lotes fijados en su mesón, luego el
   // FIFO rellena la capacidad restante en orden físico.
   const usedByLoc = new Map<number, number>();
-  const partsByLoc = new Map<number, { label: string; trays: number; ref: AllocLot["ref"] }[]>();
+  const partsByLoc = new Map<
+    number,
+    { label: string; trays: number; ref: AllocLot["ref"]; arrivalWeek: number }[]
+  >();
   const overflowByLot = new Map<number, number>();
   const place = (locId: number, it: AllocLot, take: number) => {
     usedByLoc.set(locId, (usedByLoc.get(locId) ?? 0) + take);
     const arr = partsByLoc.get(locId) ?? [];
-    arr.push({ label: it.label, trays: take, ref: it.ref });
+    arr.push({ label: it.label, trays: take, ref: it.ref, arrivalWeek: it.arrivalWeek });
     partsByLoc.set(locId, arr);
   };
   const capOf = (locId: number) =>
@@ -234,6 +243,7 @@ export async function getScenarioWorkspace(
         trays: p.trays,
         lotId: p.ref?.lotId ?? null,
         stage: (p.ref?.stage as Stage | undefined) ?? null,
+        arrivalWeek: p.arrivalWeek,
         sim: p.ref ? simLotIds.has(p.ref.lotId) : false,
       })),
     };
@@ -297,5 +307,6 @@ export async function getScenarioWorkspace(
     overflowCount,
     targets,
     stage: here[0]?.stage ?? null,
+    week,
   };
 }
