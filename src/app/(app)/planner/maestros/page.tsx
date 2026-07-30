@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { CalendarRange, SlidersHorizontal, Sprout, Warehouse } from "lucide-react";
+import { CalendarRange, Leaf, SlidersHorizontal, Sprout, Warehouse } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getAccessProfile, hasModuleAccess } from "@/lib/access";
@@ -23,11 +23,15 @@ import {
   AjustesParametros,
   type AjustesParametroRow,
 } from "@/components/planner/ajustes-parametros";
+import {
+  AjustesVariedades,
+  type AjustesVariedadRow,
+} from "@/components/planner/ajustes-variedades";
 
 export const metadata = { title: "Datos maestros del Planner" };
 export const dynamic = "force-dynamic";
 
-const SECTIONS = ["sectores", "especies", "calendario", "parametros"] as const;
+const SECTIONS = ["sectores", "especies", "variedades", "calendario", "parametros"] as const;
 type SectionKey = (typeof SECTIONS)[number];
 
 const SECTION_META: Record<SectionKey, { title: string; description: string }> = {
@@ -40,6 +44,11 @@ const SECTION_META: Record<SectionKey, { title: string; description: string }> =
     title: "Especies",
     description:
       "Ficha operacional por etapa: formato de bandeja, semanas y sector. Define cómo el importador y el simulador derivan etapas.",
+  },
+  variedades: {
+    title: "Variedades",
+    description:
+      "Variedades del Planner por especie y su vínculo al maestro compartido del CRM. Vincular acá resuelve el aviso que aparece en Movimientos.",
   },
   calendario: {
     title: "Calendario",
@@ -72,12 +81,17 @@ export default async function PlannerMaestrosPage({
   const section: SectionKey | null =
     (SECTIONS.find((s) => s === sp.tab) as SectionKey | undefined) ?? null;
 
-  const [areasRes, modulesRes, locationsRes, speciesRes, calendarRes, paramsRes] =
+  const [areasRes, modulesRes, locationsRes, speciesRes, varietiesRes, calendarRes, paramsRes] =
     await Promise.all([
       supabase.from("planner_areas").select("*").order("priority"),
       supabase.from("planner_modules").select("id, area_id"),
       supabase.from("planner_locations").select("id, module_id, capacity_trays"),
       supabase.from("planner_species").select("*").order("priority"),
+      supabase
+        .from("planner_varieties")
+        .select("id, name, species_id, master_variety_id, planner_species(name)")
+        .order("name")
+        .limit(2000),
       supabase
         .from("planner_calendar_weeks")
         .select("year, week, campaign_week, start_date, end_date")
@@ -131,8 +145,17 @@ export default async function PlannerMaestrosPage({
     masterLinked: s.master_species_id !== null,
   }));
 
+  const varieties: AjustesVariedadRow[] = (varietiesRes.data ?? []).map((v) => ({
+    id: v.id,
+    name: v.name,
+    speciesId: v.species_id,
+    speciesName: (v.planner_species as unknown as { name: string } | null)?.name ?? "¿?",
+    masterLinked: v.master_variety_id !== null,
+  }));
+
   const parameters: AjustesParametroRow[] = paramsRes.data ?? [];
   const linkedSpecies = species.filter((s) => s.masterLinked).length;
+  const linkedVarieties = varieties.filter((v) => v.masterLinked).length;
 
   const calendarByYear = new Map<
     number,
@@ -191,6 +214,18 @@ export default async function PlannerMaestrosPage({
                 </span>
               }
             />
+            <SettingsRow
+              href="/planner/maestros?tab=variedades"
+              icon={Leaf}
+              iconClass="bg-lime-500/10 text-lime-600 dark:text-lime-400"
+              label="Variedades"
+              sub={`${linkedVarieties}/${varieties.length} vinculadas al maestro`}
+              right={
+                <span className="text-xs tabular-nums text-muted-foreground">
+                  {varieties.length}
+                </span>
+              }
+            />
           </SettingsSection>
 
           <SettingsSection title="Modelo">
@@ -238,6 +273,8 @@ export default async function PlannerMaestrosPage({
         {section === "especies" ? (
           <AjustesEspecies species={species} areas={areas} />
         ) : null}
+
+        {section === "variedades" ? <AjustesVariedades varieties={varieties} /> : null}
 
         {section === "calendario" ? (
           <div className="space-y-3">

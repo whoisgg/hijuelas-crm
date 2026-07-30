@@ -181,6 +181,7 @@ export default async function SectorPage({
     <AppShell>
       <PageHeader
         title={layout.area.name}
+        description={`Capacidad de planificación: ${layout.area.capacityTrays.toLocaleString("es-CL")} bandejas`}
         badge={simScenarios.length ? "Simulación" : undefined}
         actions={
           <Link

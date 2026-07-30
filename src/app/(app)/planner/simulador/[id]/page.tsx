@@ -82,6 +82,9 @@ export default async function SimulacionPage({
       trays: l.trays,
       rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
       status: l.status,
+      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columna
+      // plant_code — es solo referencia de laboratorio sobre el plan real.
+      plantCode: null,
     };
   });
 

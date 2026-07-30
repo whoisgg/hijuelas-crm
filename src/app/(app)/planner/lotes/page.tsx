@@ -26,7 +26,7 @@ export default async function LotesPage() {
     supabase
       .from("planner_lots")
       .select(
-        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
+        "id, lot_code, year, start_week, end_week, plants, trays, status, plant_code, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
       )
       .order("start_week")
       .order("lot_code")
@@ -50,6 +50,7 @@ export default async function LotesPage() {
       trays: l.trays,
       rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
       status: l.status,
+      plantCode: l.plant_code,
     };
   });
 

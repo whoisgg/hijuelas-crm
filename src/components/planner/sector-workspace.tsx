@@ -170,12 +170,20 @@ export function SectorWorkspace({
     : null;
   const allLocIds = React.useMemo(() => allLocs.map((l) => l.id), [allLocs]);
 
-  // Salidas totales del sector esta semana — solo para el mensaje ("No hay
-  // salidas esta semana."), no para pintar (eso queda en cada mesón).
+  // Salidas/Ingresos totales del sector esta semana — alimentan el KPI del
+  // header (el detalle por mesón sigue viviendo en cada MesonCell).
   const leaveTotal = React.useMemo(
     () =>
       allLocs.reduce(
         (s, l) => s + Math.max(0, l.trays - (data.fill[l.id]?.trays ?? 0)),
+        0,
+      ),
+    [allLocs, data.fill],
+  );
+  const enterTotal = React.useMemo(
+    () =>
+      allLocs.reduce(
+        (s, l) => s + Math.max(0, (data.fill[l.id]?.trays ?? 0) - l.trays),
         0,
       ),
     [allLocs, data.fill],
@@ -198,8 +206,9 @@ export function SectorWorkspace({
   const [busy, setBusy] = React.useState(false);
   // Capa: false = realidad + plan de la semana; true = sólo la foto real.
   const [soloHoy, setSoloHoy] = React.useState(false);
-  // Filtro: pinta de azul las bandejas ocupadas hoy que el plan libera.
-  const [marcarSalen, setMarcarSalen] = React.useState(false);
+  // Filtro: pinta de violeta las bandejas ocupadas hoy que el plan libera.
+  // Activo por defecto — es la lectura más común del plano ("¿qué sale?").
+  const [marcarSalen, setMarcarSalen] = React.useState(true);
   // Overlay: escribe los meses de antigüedad sobre cada silla ocupada hoy.
   const [mostrarEdad, setMostrarEdad] = React.useState(false);
   // Antigüedad de la última silla tocada (hover en desktop, tap en mobile) —
@@ -583,17 +592,13 @@ export function SectorWorkspace({
   // Inbox = sólo lo que el FIFO no logró ubicar (por asignar).
   const porAsignar = data.contents.filter((c) => c.overflowTrays > 0);
 
-  // Mensaje del toggle activo — reemplaza la instrucción por defecto mientras
-  // Salidas o Antigüedad estén prendidos; ese espacio es solo para texto.
+  // Mensaje del toggle activo — hoy solo Antigüedad lo necesita (Salidas ya
+  // muestra su número directo en el KPI, no hace falta repetirlo en texto).
   const statusMessage = mostrarEdad
     ? ageSummary.trays > 0
       ? `${ageSummary.trays.toLocaleString("es-CL")} bandejas con fecha · antigüedad promedio ${ageSummary.avg!.toFixed(1)} meses.`
       : "La foto activa no trae fechas de plantación."
-    : marcarSalen && !soloHoy
-      ? leaveTotal > 0
-        ? `${leaveTotal.toLocaleString("es-CL")} bandejas salen esta semana.`
-        : "No hay salidas esta semana."
-      : null;
+    : null;
 
   return (
     <DndContext
@@ -629,30 +634,38 @@ export function SectorWorkspace({
               <span className="w-6" />
             )}
           </div>
-          <div title="Lotes planificados de la semana vs capacidad de planificación.">
-            <span className="text-muted-foreground">Plan semana: </span>
-            <span className="font-medium tabular-nums">
-              {bar.planTrays.toLocaleString("es-CL")} bandejas ({Math.round(bar.planPct)}%)
-            </span>
-          </div>
-          <div title="Foto del último snapshot, medida contra la capacidad física de los mesones.">
+          <div
+            className="flex items-center gap-1.5"
+            title="Foto del último snapshot, medida contra la capacidad física de los mesones."
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: SEAT_FULL }} />
             <span className="text-muted-foreground">
-              Hoy real{snapshotDate ? ` (${snapshotDate})` : ""}:{" "}
+              Hoy{snapshotDate ? ` (${snapshotDate})` : ""}
             </span>
-            <span className="font-medium tabular-nums">
-              {bar.realTrays.toLocaleString("es-CL")} bandejas ({Math.round(bar.realPct)}% del físico)
+            <span className="font-semibold tabular-nums">
+              {bar.realTrays.toLocaleString("es-CL")}
             </span>
+            <span className="text-muted-foreground">({Math.round(bar.realPct)}%)</span>
           </div>
-          <div title="Capacidad de planificación del área (Vivero Planner) — la base del plan, las alertas y la proyección.">
-            <span className="text-muted-foreground">Capacidad plan: </span>
-            <span className="font-medium tabular-nums">
-              {bar.planCapacity.toLocaleString("es-CL")} bandejas
-            </span>
-          </div>
+          {!soloHoy && !mostrarEdad ? (
+            <div
+              className="flex items-center gap-1.5"
+              title="Bandejas que el plan trae esta semana en mesones que hoy no las tienen."
+            >
+              <span
+                className="h-2 w-2 shrink-0 rounded-full"
+                style={{ backgroundColor: SEAT_ENTER }}
+              />
+              <span className="text-muted-foreground">Ingresos</span>
+              <span className="font-semibold tabular-nums">
+                {enterTotal.toLocaleString("es-CL")}
+              </span>
+            </div>
+          ) : null}
           {!soloHoy && !mostrarEdad ? (
             <label
               className="flex cursor-pointer select-none items-center gap-1.5"
-              title="Pinta de violeta las bandejas ocupadas hoy que el plan libera esta semana."
+              title="Bandejas ocupadas hoy que el plan libera esta semana. Pinta el plano de violeta."
             >
               <input
                 type="checkbox"
@@ -660,13 +673,27 @@ export function SectorWorkspace({
                 onChange={(e) => setMarcarSalen(e.target.checked)}
                 className="h-4 w-4 accent-[#8b5cf6]"
               />
-              Salidas
               <span
-                className="h-2.5 w-2.5 rounded-sm"
+                className="h-2 w-2 shrink-0 rounded-full"
                 style={{ backgroundColor: SEAT_LEAVE }}
               />
+              <span className="text-muted-foreground">Salidas</span>
+              <span className="font-semibold tabular-nums">
+                {leaveTotal.toLocaleString("es-CL")}
+              </span>
             </label>
           ) : null}
+          <div
+            className="flex items-center gap-1.5"
+            title="Lotes planificados de la semana vs capacidad de planificación."
+          >
+            <span className="h-2 w-2 shrink-0 rounded-full border border-muted-foreground/50" />
+            <span className="text-muted-foreground">Plan</span>
+            <span className="font-semibold tabular-nums">
+              {bar.planTrays.toLocaleString("es-CL")}
+            </span>
+            <span className="text-muted-foreground">({Math.round(bar.planPct)}%)</span>
+          </div>
           <label
             className="flex cursor-pointer select-none items-center gap-1.5"
             title="Colorea cada silla ocupada hoy según su antigüedad (0 a 6+ meses)."
@@ -756,37 +783,36 @@ export function SectorWorkspace({
       <div className="grid gap-4 lg:grid-cols-[1fr_300px]">
         {/* Plano estadio */}
         <div className="space-y-5">
-          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span>
-              {statusMessage ??
-                "Clic en un mesón para expandirlo; clic en una silla selecciona su lote."}
-            </span>
-            {/* Sin barra de KPIs (modo simulador) no hay dónde más ponerlo — con
-                barra, el botón vive junto a "Solo hoy". */}
-            {!bar ? (
-              anyExpanded ? (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(new Set())}
-                  className="underline-offset-2 hover:underline"
-                >
-                  Colapsar todo
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpanded(
-                      new Set(data.layout.modules.flatMap((m) => m.locations.map((l) => l.id))),
-                    )
-                  }
-                  className="underline-offset-2 hover:underline"
-                >
-                  Expandir todo
-                </button>
-              )
-            ) : null}
-          </div>
+          {statusMessage || !bar ? (
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              {statusMessage ? <span>{statusMessage}</span> : null}
+              {/* Sin barra de KPIs (modo simulador) no hay dónde más ponerlo — con
+                  barra, el botón vive junto a "Solo hoy". */}
+              {!bar ? (
+                anyExpanded ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(new Set())}
+                    className="underline-offset-2 hover:underline"
+                  >
+                    Colapsar todo
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpanded(
+                        new Set(data.layout.modules.flatMap((m) => m.locations.map((l) => l.id))),
+                      )
+                    }
+                    className="underline-offset-2 hover:underline"
+                  >
+                    Expandir todo
+                  </button>
+                )
+              ) : null}
+            </div>
+          ) : null}
 
           {data.layout.modules.map((m) => {
             const sides = [
@@ -1309,15 +1335,20 @@ function MesonCell({
       : null,
   );
 
-  // Edades por VARIEDAD, alineadas con la identidad de cada silla: cada
-  // grupo real del mesón trae su propia distribución de edad (ageBuckets
-  // por variedad, del inventario) y una silla toma la siguiente edad de la
-  // cola de SU variedad — nunca hereda edades de material ajeno. (Antes el
-  // reparto era posicional sobre el agregado del mesón, y los cortes de
-  // edad no calzaban con los cortes de lote: un mismo lote mostraba edades
-  // que no eran suyas.)
+  // Edades por VARIEDAD, tomadas directo del desglose REAL del mesón
+  // (loc.species, mismo orden que la leyenda) — nunca de la identidad del
+  // lote del plan. El lote que el FIFO de capacidad asigna a una silla
+  // "ocupado hoy" (s.part) es una asignación de PLANIFICACIÓN (ver
+  // getSectorPlanFill / diagrama "Flujo Decision Plano Sector"), no un match
+  // de bandeja real — su variedad maestro puede no calzar textualmente con
+  // la variedad cruda del inventario en ESE mesón (códigos de cruce sin
+  // vincular, alias no registrados). Matchear por ahí dejaba sillas grises
+  // "sin fecha" aunque el inventario sí tuviera fecha para esa variedad real.
+  // Cada grupo real llena sus propias posiciones consecutivas; lo que sobra
+  // sin fecha queda gris ahí mismo, nunca se mezcla entre grupos.
   const realSeats = Math.round(realTrays / perCell);
-  const ageQueues = loc.species.map((sp) => {
+  const realAgeSeq: (number | null)[] = [];
+  for (const sp of loc.species) {
     const q: (number | null)[] = [];
     for (const b of sp.ageBuckets) {
       const n = Math.round(b.trays / perCell);
@@ -1325,26 +1356,11 @@ function MesonCell({
     }
     const total = Math.round(sp.trays / perCell);
     while (q.length < total) q.push(null); // sin fecha
-    return { name: sp.name, variety: sp.variety, q, idx: 0 };
-  });
-  const queueFor = (species: string, variety: string | null, master: boolean) =>
-    ageQueues.find((g) => {
-      if (normName(g.name) !== normName(species)) return false;
-      if (variety === null || g.variety === null) return true;
-      return master
-        ? varietyNameMatch(variety, g.variety) !== null
-        : normName(g.variety) === normName(variety);
-    });
-  const seatAges: (number | null)[] = seats.map((s, i) => {
-    if (i >= realSeats) return null;
-    const g = s.part
-      ? queueFor(s.part.species, s.part.variety, true)
-      : seatLeaveEntry[i]
-        ? queueFor(seatLeaveEntry[i]!.name, seatLeaveEntry[i]!.variety, false)
-        : null;
-    if (g && g.idx < g.q.length) return g.q[g.idx++];
-    return null;
-  });
+    realAgeSeq.push(...q.slice(0, total));
+  }
+  const seatAges: (number | null)[] = seats.map((_s, i) =>
+    i < realSeats ? (realAgeSeq[i] ?? null) : null,
+  );
   /** Edad de una silla en modo Antigüedad: real (foto, por variedad) para lo
    *  presente; PROYECTADA para lo que el plan trae después de la foto — así
    *  la vista de edad ocupa lo mismo que la de ocupación aunque se mire una

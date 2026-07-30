@@ -27,6 +27,8 @@ export type UpdateLotInput = {
   plants: number;
   startWeek: number;
   status: string;
+  /** texto referencial del laboratorio (ej. código de lote de Alstro); opcional */
+  plantCode?: string | null;
 };
 
 export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; error?: string }> {
@@ -64,6 +66,7 @@ export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; e
     plants: Math.trunc(input.plants),
     trays,
     status: input.status,
+    plant_code: input.plantCode === undefined ? lot.plant_code : input.plantCode,
     start_week: input.startWeek,
     end_week: shift(lot.end_week),
     rooting_start_week: shift(lot.rooting_start_week),

@@ -236,12 +236,17 @@ export async function relinkPlannerCatalogs(): Promise<{
  * especie (no duplica); solo crea cuando no hay. Si hay más de un candidato
  * (caso "Tonda" → Giffoni/Pacifica) no adivina y pide resolverlo a mano.
  */
+export type VarietyMergeCandidate = { id: string; name: string; contractItems: number };
+
 export async function linkPlannerVarietyToMasters(plannerVarietyId: number): Promise<{
   ok: boolean;
   action?: "vinculada" | "creada";
   varietyName?: string;
   speciesName?: string;
   error?: string;
+  /** presente solo cuando hay >1 maestro con ese nombre — elegir cuál mantener
+   *  (contractItems ayuda a decidir) y llamar mergeMasterVarieties antes de reintentar. */
+  candidates?: VarietyMergeCandidate[];
 }> {
   const { supabase, userId } = await requireAdmin();
 
@@ -288,9 +293,19 @@ export async function linkPlannerVarietyToMasters(plannerVarietyId: number): Pro
   const matches = (candidates ?? []).filter((v) => normalizeVarietyName(v.name) === target);
 
   if (matches.length > 1) {
+    const candidates: VarietyMergeCandidate[] = await Promise.all(
+      matches.map(async (m) => {
+        const { count } = await supabase
+          .from("contract_items")
+          .select("id", { count: "exact", head: true })
+          .eq("variety_id", m.id);
+        return { id: m.id, name: m.name, contractItems: count ?? 0 };
+      }),
+    );
     return {
       ok: false,
-      error: `Hay ${matches.length} variedades maestras llamadas "${pv.name}" en ${pSpecies.name}. Resolvé el duplicado en Administración → Datos maestros.`,
+      error: `Hay ${matches.length} variedades maestras llamadas "${pv.name}" en ${pSpecies.name}. Elegí cuál mantener.`,
+      candidates,
     };
   }
 
@@ -324,4 +339,46 @@ export async function linkPlannerVarietyToMasters(plannerVarietyId: number): Pro
   revalidatePath("/planner/movimientos");
   revalidatePath("/catalogo");
   return { ok: true, action, varietyName: pv.name, speciesName: pSpecies.name };
+}
+
+/**
+ * Fusiona variedades maestras duplicadas (mismo nombre normalizado, ej.
+ * "Eureka Sunrise" vs "Eureka sunrise"): reasigna toda referencia real
+ * (contratos, oportunidades, calendario, vínculos del planner) a `keepId` y
+ * da de baja las demás (deleted_at, no hard delete — puede haber historial).
+ * Llamar antes de reintentar linkPlannerVarietyToMasters cuando esa acción
+ * devuelve `candidates` (>1 maestro con el mismo nombre).
+ */
+export async function mergeMasterVarieties(input: {
+  keepId: string;
+  mergeIds: string[];
+}): Promise<{ ok: boolean; error?: string }> {
+  const { supabase } = await requireAdmin();
+  const mergeIds = input.mergeIds.filter((id) => id !== input.keepId);
+  if (!mergeIds.length) return { ok: false, error: "Nada que fusionar." };
+
+  for (const table of ["contract_items", "opportunity_items", "calendar_events"] as const) {
+    const { error } = await supabase
+      .from(table)
+      .update({ variety_id: input.keepId })
+      .in("variety_id", mergeIds);
+    if (error) return { ok: false, error: error.message };
+  }
+  const { error: plannerError } = await supabase
+    .from("planner_varieties")
+    .update({ master_variety_id: input.keepId })
+    .in("master_variety_id", mergeIds);
+  if (plannerError) return { ok: false, error: plannerError.message };
+
+  const { error: deleteError } = await supabase
+    .from("varieties")
+    .update({ deleted_at: new Date().toISOString() })
+    .in("id", mergeIds);
+  if (deleteError) return { ok: false, error: deleteError.message };
+
+  revalidatePath("/admin/maestros");
+  revalidatePath("/planner/maestros");
+  revalidatePath("/planner/lotes");
+  revalidatePath("/catalogo");
+  return { ok: true };
 }

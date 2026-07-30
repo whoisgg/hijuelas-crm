@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Dna, Pencil, Search, Sprout } from "lucide-react";
+import { ChevronRight, Dna, Leaf, Pencil, Search, Sprout } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -32,9 +32,38 @@ export type LotRow = {
   trays: number | null;
   rooting_area: string | null;
   status: string;
+  /** texto referencial del laboratorio (ej. código de lote de Alstro); no es un vínculo real */
+  plantCode: string | null;
 };
 
 const SIN_PROGRAMA = "Sin programa";
+const SIN_VARIEDAD = "Sin variedad";
+
+/** Plantas/Bandejas en dos columnas de ancho fijo con su etiqueta — el
+ *  string corrido "X pl · Y band." se leía como un solo número; separadas
+ *  y alineadas a la derecha, cada columna es reconocible sin leer el texto. */
+function Totals({ plants, trays }: { plants: number; trays: number }) {
+  return (
+    <div className="flex shrink-0 items-baseline gap-3 text-right">
+      <div className="w-[4.5rem]">
+        <div className="font-mono text-xs font-semibold tabular-nums">
+          {plants.toLocaleString("es-CL")}
+        </div>
+        <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
+          plantas
+        </div>
+      </div>
+      <div className="w-14">
+        <div className="font-mono text-xs font-semibold tabular-nums">
+          {trays.toLocaleString("es-CL")}
+        </div>
+        <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
+          bandejas
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function LotsTable({
   lots,
@@ -56,7 +85,8 @@ export function LotsTable({
           l.lot_code.toLowerCase().includes(q) ||
           l.species.toLowerCase().includes(q) ||
           (l.variety ?? "").toLowerCase().includes(q) ||
-          (l.program ?? "").toLowerCase().includes(q),
+          (l.program ?? "").toLowerCase().includes(q) ||
+          (l.plantCode ?? "").toLowerCase().includes(q),
       )
     : lots;
 
@@ -113,7 +143,7 @@ export function LotsTable({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por código, especie o variedad"
+          placeholder="Buscar por código, especie, variedad o plantcode"
           className="pl-8"
         />
       </div>
@@ -187,20 +217,23 @@ export function LotsTable({
                             {pg.rows.length} {pg.rows.length === 1 ? "lote" : "lotes"}
                           </span>
                         </span>
-                        <span className="shrink-0 font-mono text-xs font-semibold tabular-nums">
-                          {pg.plants.toLocaleString("es-CL")}{" "}
-                          <span className="font-normal text-muted-foreground">pl ·</span>{" "}
-                          {pg.trays.toLocaleString("es-CL")}{" "}
-                          <span className="font-normal text-muted-foreground">band.</span>
-                        </span>
+                        <Totals plants={pg.plants} trays={pg.trays} />
                       </summary>
-                      <RowsTable rows={pg.rows} onEdit={canEdit ? setEditing : null} />
+                      <VarietyGroups
+                        rows={pg.rows}
+                        query={q}
+                        onEdit={canEdit ? setEditing : null}
+                      />
                     </details>
                   ))}
                 </div>
               ) : (
                 <div className="border-t">
-                  <RowsTable rows={g.rows} onEdit={canEdit ? setEditing : null} />
+                  <VarietyGroups
+                    rows={g.rows}
+                    query={q}
+                    onEdit={canEdit ? setEditing : null}
+                  />
                 </div>
               )}
             </details>
@@ -219,6 +252,78 @@ export function LotsTable({
   );
 }
 
+/** Subnivel variedad dentro de especie/programa (ej. agrupar los 71 lotes de
+ *  OZ y ver los de "Mágica" juntos). Con una sola variedad en el grupo, el
+ *  subnivel no aporta — tabla plana directa, mismo criterio que programa. */
+function VarietyGroups({
+  rows,
+  query,
+  onEdit,
+}: {
+  rows: LotRow[];
+  query: string;
+  onEdit: ((l: LotRow) => void) | null;
+}) {
+  const byVariety = React.useMemo(() => {
+    const map = new Map<string, LotRow[]>();
+    for (const r of rows) {
+      const key = r.variety ?? SIN_VARIEDAD;
+      const arr = map.get(key) ?? [];
+      arr.push(r);
+      map.set(key, arr);
+    }
+    return [...map.entries()]
+      .map(([variety, vrows]) => ({
+        variety,
+        rows: vrows,
+        plants: vrows.reduce((s, r) => s + r.plants, 0),
+        trays: vrows.reduce((s, r) => s + (r.trays ?? 0), 0),
+      }))
+      .sort((a, b) =>
+        a.variety === SIN_VARIEDAD
+          ? 1
+          : b.variety === SIN_VARIEDAD
+            ? -1
+            : b.plants - a.plants,
+      );
+  }, [rows]);
+
+  if (byVariety.length <= 1) {
+    return <RowsTable rows={rows} onEdit={onEdit} />;
+  }
+
+  return (
+    <div className="px-2 py-2">
+      {byVariety.map((vg) => (
+        <details
+          key={vg.variety}
+          open={!!query}
+          className="group/variedad mb-1 overflow-hidden rounded-md border last:mb-0"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/40">
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform group-open/variedad:rotate-90" />
+            <Leaf className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span
+              className={
+                vg.variety === SIN_VARIEDAD
+                  ? "min-w-0 flex-1 truncate text-sm text-muted-foreground"
+                  : "min-w-0 flex-1 truncate text-sm font-medium"
+              }
+            >
+              {vg.variety}
+              <span className="ml-2 text-[11px] font-normal text-muted-foreground">
+                {vg.rows.length} {vg.rows.length === 1 ? "lote" : "lotes"}
+              </span>
+            </span>
+            <Totals plants={vg.plants} trays={vg.trays} />
+          </summary>
+          <RowsTable rows={vg.rows} onEdit={onEdit} />
+        </details>
+      ))}
+    </div>
+  );
+}
+
 function RowsTable({
   rows,
   onEdit,
@@ -233,6 +338,12 @@ function RowsTable({
         <thead className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
           <tr>
             <th className="px-3 py-2 text-left font-medium">Lote</th>
+            <th
+              className="px-3 py-2 text-left font-medium"
+              title="Texto referencial del laboratorio (ej. código de lote de Alstro) — no es un vínculo real"
+            >
+              Plantcode
+            </th>
             <th className="px-3 py-2 text-left font-medium">Variedad</th>
             <th className="px-3 py-2 text-right font-medium">Semanas</th>
             <th className="px-3 py-2 text-right font-medium">Plantas</th>
@@ -247,6 +358,9 @@ function RowsTable({
             <tr key={l.id} className="hover:bg-muted/30">
               <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                 {l.lot_code}
+              </td>
+              <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+                {l.plantCode ?? "—"}
               </td>
               <td className="px-3 py-2 text-muted-foreground">{l.variety ?? "—"}</td>
               <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
@@ -298,6 +412,7 @@ function LotEditDialog({
   const [plants, setPlants] = React.useState(String(lot.plants));
   const [startWeek, setStartWeek] = React.useState(String(lot.start_week));
   const [status, setStatus] = React.useState(lot.status);
+  const [plantCode, setPlantCode] = React.useState(lot.plantCode ?? "");
   const [saving, setSaving] = React.useState(false);
 
   const submit = async () => {
@@ -309,7 +424,11 @@ function LotEditDialog({
         startWeek: Number(startWeek),
         status,
       };
-      const res = scenario ? await updateScenarioLot(payload) : await updateLot(payload);
+      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columna
+      // plant_code — es solo referencia del laboratorio sobre el plan real.
+      const res = scenario
+        ? await updateScenarioLot(payload)
+        : await updateLot({ ...payload, plantCode: plantCode.trim() || null });
       if (res.ok) {
         toast.success(`Lote ${lot.lot_code} actualizado.`);
         onClose();
@@ -363,6 +482,20 @@ function LotEditDialog({
               Mover la semana desplaza todas las etapas por el mismo delta.
             </p>
           </div>
+          {!scenario ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="lot-plantcode">Plantcode</Label>
+              <Input
+                id="lot-plantcode"
+                value={plantCode}
+                onChange={(e) => setPlantCode(e.target.value)}
+                placeholder="Código de lote del laboratorio (opcional)"
+              />
+              <p className="text-xs text-muted-foreground">
+                Solo texto referencial (ej. Alstro) — no vincula datos entre sistemas.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-1.5">
             <Label htmlFor="lot-status">Estado</Label>
             <select
