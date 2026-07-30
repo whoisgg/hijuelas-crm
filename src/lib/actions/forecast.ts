@@ -63,7 +63,12 @@ export type ForecastResult = {
 
 type RpcResult<T> = { data: T | null; error: { message: string } | null };
 
-/** Llama al RPC mcp_forecast_by_month resolviendo el caller via auth cookies. */
+/**
+ * Llama al RPC app_forecast_by_month (variante de mcp_forecast_by_month sin
+ * el chequeo de sesión MCP fresca — resuelve auth.uid() adentro, no acepta
+ * p_user_id del cliente). mcp_forecast_by_month sigue existiendo tal cual
+ * para el conector MCP real.
+ */
 export async function getForecastByMonth(params: {
   year: number;
   country_id?: string | null;
@@ -78,7 +83,6 @@ export async function getForecastByMonth(params: {
   if (!user) return null;
 
   const args: Record<string, unknown> = {
-    p_user_id: user.id,
     p_year: params.year,
     p_country_id: params.country_id ?? null,
     p_kam_id: params.kam_id ?? null,
@@ -93,7 +97,7 @@ export async function getForecastByMonth(params: {
   const res = await (supabase.rpc as unknown as (
     name: string,
     args: Record<string, unknown>,
-  ) => Promise<RpcResult<ForecastResult>>)("mcp_forecast_by_month", args);
+  ) => Promise<RpcResult<ForecastResult>>)("app_forecast_by_month", args);
 
   if (res.error) throw new Error(res.error.message);
   return res.data;
@@ -133,7 +137,7 @@ export type ForecastContractsAnticiposResult = {
   contracts: ForecastContractAnticipoRow[];
 };
 
-/** Llama al RPC mcp_forecast_contracts_anticipos con los mismos filtros
+/** Llama al RPC app_forecast_contracts_anticipos con los mismos filtros
  *  del Forecast — devuelve la tabla del drilldown del KPI Anticipos. */
 export async function getForecastContractsAnticipos(params: {
   year: number;
@@ -148,7 +152,6 @@ export async function getForecastContractsAnticipos(params: {
   if (!user) return null;
 
   const args: Record<string, unknown> = {
-    p_user_id: user.id,
     p_year: params.year,
     p_country_id: params.country_id ?? null,
     p_kam_id: params.kam_id ?? null,
@@ -163,7 +166,7 @@ export async function getForecastContractsAnticipos(params: {
     name: string,
     args: Record<string, unknown>,
   ) => Promise<RpcResult<ForecastContractsAnticiposResult>>)(
-    "mcp_forecast_contracts_anticipos",
+    "app_forecast_contracts_anticipos",
     args,
   );
 
