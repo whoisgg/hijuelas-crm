@@ -78,6 +78,37 @@ const normName = (s: string) =>
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "");
 
+/** exact = mismo nombre; prefix = el maestro es prefijo del texto crudo del
+ *  inventario con límite de palabra ("York" ⊂ "York 6624" — el sufijo es del
+ *  delivery note, no otra variedad). No se recorta nada del maestro, así que
+ *  variedades que legítimamente terminan en números ("OB18064") no se ven
+ *  afectadas. */
+const varietyNameMatch = (
+  master: string | null | undefined,
+  raw: string,
+): "exact" | "prefix" | null => {
+  const cv = normName(master ?? "");
+  const tv = normName(raw);
+  if (!cv) return null;
+  if (cv === tv) return "exact";
+  if (tv.startsWith(cv) && /[\s-]/.test(tv[cv.length] ?? "")) return "prefix";
+  return null;
+};
+
+/** Bandeja real de un mesón que ningún lote llegado del plan cubre, con el
+ *  lote al que el sistema la atribuye automáticamente (null = sin candidato). */
+type LeaveSlot = {
+  name: string;
+  variety: string | null;
+  trays: number;
+  chip: SectorLotChip | null;
+};
+
+/** Clave de selección para material real sin lote llegado — le da identidad
+ *  propia (hover/clic como un lote) sin fusionarlo con un lote del plan. */
+const matKey = (name: string, variety: string | null) =>
+  `mat:${normName(name)}::${normName(variety ?? "")}`;
+
 export type WorkspaceBar = {
   weekLabel: string;
   prevHref: string | null;
@@ -179,14 +210,6 @@ export function SectorWorkspace({
   const [hoveredKey, setHoveredKey] = React.useState<string | null>(null);
   const [selectedKey, setSelectedKey] = React.useState<string | null>(initial.key);
   const [moveQty, setMoveQty] = React.useState<number>(initial.qty);
-  // Silla real "sale esta semana" que se está tratando de identificar —
-  // trae la especie/variedad real de ESA silla puntual (no todo el mesón
-  // mezclado), para acotar candidatos a lo que realmente hay ahí.
-  const [reconcileTarget, setReconcileTarget] = React.useState<{
-    locationId: number;
-    name: string;
-    variety: string | null;
-  } | null>(null);
   // Movimiento por drag pendiente de confirmación (lote → mesón).
   const [pendingPin, setPendingPin] = React.useState<{
     chip: SectorLotChip;
@@ -198,11 +221,15 @@ export function SectorWorkspace({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   );
 
+  // Incluye los lotes fuera de la semana vigente (areaLots): una silla real
+  // atribuida a una remesa atrasada también debe poder seleccionarse para
+  // mover/mermar. contents pisa (trae el overflow real de la semana).
   const chipByKey = React.useMemo(() => {
     const m = new Map<string, SectorLotChip>();
+    for (const c of data.areaLots) m.set(`${c.lotId}:${c.stage}`, c);
     for (const c of data.contents) m.set(`${c.lotId}:${c.stage}`, c);
     return m;
-  }, [data.contents]);
+  }, [data.areaLots, data.contents]);
   const chipByLot = new Map(data.contents.map((c) => [c.lotId, c]));
 
   const selectedChip = selectedKey ? chipByKey.get(selectedKey) ?? null : null;
@@ -225,7 +252,7 @@ export function SectorWorkspace({
   // Clic fuera del plano y del panel → deseleccionar. Vale también en touch:
   // un tap en el fondo limpia la selección y el scroll no dispara click.
   // Las zonas "seguras" (mesones, panel lateral, overlay de drag) llevan
-  // data-keep-selection.
+  // data-keep-selection. Escape deselecciona desde cualquier lado.
   React.useEffect(() => {
     if (!selectedKey) return;
     const onDocClick = (e: MouseEvent) => {
@@ -233,101 +260,182 @@ export function SectorWorkspace({
       if (target?.closest("[data-keep-selection]")) return;
       setSelectedKey(null);
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedKey(null);
+    };
     document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("click", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [selectedKey]);
+
+  // Atribución de material real a lotes del plan. Supuestos (definidos con
+  // el usuario, 2026-07-30) — el sistema asigna solo, sin intervención:
+  //
+  // a. Variedad exacta manda (normalizado sin tildes: "Magica" ↔ "Mágica").
+  // b. Si el maestro es PREFIJO del texto crudo del inventario con límite de
+  //    palabra ("York" ⊂ "York 6624"), se asume esa variedad — el sufijo es
+  //    del delivery note, no otra variedad. No se recorta nada del maestro,
+  //    así que variedades que legítimamente terminan en números ("OB18064")
+  //    no se ven afectadas.
+  // c. Primero lotes activos ESTA semana; si no hay, lotes del sector en
+  //    CUALQUIER semana (remesa atrasada cuya ventana de plan ya cerró —
+  //    ej. "Dina" cerrada en semana 28/29, real todavía ahí en la 30).
+  // d. Si aun así hay varios candidatos (o solo coincide la especie), gana
+  //    el de cantidad más parecida a las bandejas reales.
+  // e. Sin candidato llegado → la silla queda como material real informativo
+  //    (el tooltip explica), sin panel ni acción — no hay nada que el
+  //    usuario pueda decidir ahí.
+  const sortCandidates = (a: SectorLotChip, b: SectorLotChip) =>
+    Number(b.overflowTrays > 0) - Number(a.overflowTrays > 0) ||
+    Number(!b.pinnedLocationId) - Number(!a.pinnedLocationId);
+  const dedupeChips = (list: SectorLotChip[]) => {
+    const byKey = new Map<string, SectorLotChip>();
+    for (const c of list) byKey.set(`${c.lotId}:${c.stage}`, c);
+    return [...byKey.values()];
+  };
+  const bySpecies = (list: SectorLotChip[], name: string) =>
+    list.filter((c) => normName(c.species) === normName(name));
+
+  /** Resuelve una entrada real (especie+variedad+bandejas) al mejor lote
+   *  candidato aplicando los supuestos de arriba.
+   *
+   *  Invariante duro (regla del usuario): verde = presente al inicio de la
+   *  semana; amarillo = lo que el plan trae durante la semana. Un mismo lote
+   *  JAMÁS puede ser verde y amarillo a la vez, así que material real solo
+   *  se atribuye a lotes que llegaron en semanas ANTERIORES (arrivalWeek <
+   *  vigente). El material cuyo único lote entra esta semana o después queda
+   *  como "material real" con identidad propia — seleccionable, pero nunca
+   *  fusionado con el lote amarillo. */
+  const resolveEntry = React.useCallback(
+    (name: string, variety: string | null, trays: number): SectorLotChip | null => {
+      const arrived = (list: SectorLotChip[]) =>
+        list.filter((c) => c.arrivalWeek < data.week);
+      const byCloseness = (a: SectorLotChip, b: SectorLotChip) =>
+        Math.abs(a.trays - trays) - Math.abs(b.trays - trays) || sortCandidates(a, b);
+      const tier = (list: SectorLotChip[], kind: "exact" | "prefix") =>
+        variety
+          ? bySpecies(list, name)
+              .filter((c) => varietyNameMatch(c.variety, variety) === kind)
+              .sort(byCloseness)
+          : [];
+      for (const list of [arrived(data.contents), arrived(data.areaLots)]) {
+        const exact = tier(list, "exact");
+        if (exact.length) return exact[0];
+        const prefix = tier(list, "prefix");
+        if (prefix.length) return prefix[0];
+      }
+      const loose = dedupeChips([
+        ...bySpecies(arrived(data.contents), name),
+        ...bySpecies(arrived(data.areaLots), name),
+      ]).sort(byCloseness);
+      return loose[0] ?? null;
+    },
+    [data.contents, data.areaLots, data.week],
+  );
+
+  // Asignación automática por mesón: al material real se le descuenta lo que
+  // los lotes del plan YA llegados cubren (por especie+variedad, mismos
+  // supuestos de match) y el sobrante se atribuye solo al mejor candidato.
+  // El usuario no vincula nada a mano — la silla queda hovereable y
+  // seleccionable como cualquier lote.
+  const leaveSlotsByLoc = React.useMemo(() => {
+    const map = new Map<number, LeaveSlot[]>();
+    for (const m of data.layout.modules) {
+      for (const loc of m.locations) {
+        const parts = data.fill[loc.id]?.parts ?? [];
+        const remaining = loc.species.map((s) => ({ ...s }));
+        for (const p of parts) {
+          if (p.arrivalWeek >= data.week) continue; // aún no llega: no cubre real
+          let left = p.trays;
+          for (const r of remaining) {
+            if (left <= 0) break;
+            if (normName(r.name) !== normName(p.species)) continue;
+            if (p.variety && r.variety && !varietyNameMatch(p.variety, r.variety)) continue;
+            const take = Math.min(left, r.trays);
+            r.trays -= take;
+            left -= take;
+          }
+        }
+        map.set(
+          loc.id,
+          remaining
+            .filter((r) => r.trays > 0)
+            .map((r) => ({
+              name: r.name,
+              variety: r.variety,
+              trays: r.trays,
+              chip: resolveEntry(r.name, r.variety, r.trays),
+            })),
+        );
+      }
+    }
+    return map;
+  }, [data.layout.modules, data.fill, data.week, resolveEntry]);
+
+  // Material real sin lote llegado, agrupado por especie+variedad — la
+  // entidad seleccionable cuando ninguna atribución aplica. Da paridad de
+  // interacción (hover/clic como cualquier lote) sin fusionar el material
+  // con un lote amarillo.
+  const selectedMaterial = React.useMemo(() => {
+    if (!selectedKey?.startsWith("mat:")) return null;
+    let name = "";
+    let variety: string | null = null;
+    let trays = 0;
+    const locs: string[] = [];
+    for (const m of data.layout.modules) {
+      for (const loc of m.locations) {
+        for (const sl of leaveSlotsByLoc.get(loc.id) ?? []) {
+          if (sl.chip || matKey(sl.name, sl.variety) !== selectedKey) continue;
+          name = sl.name;
+          variety = sl.variety;
+          trays += sl.trays;
+          locs.push(`${loc.code} (${sl.trays.toLocaleString("es-CL")})`);
+        }
+      }
+    }
+    if (!name) return null;
+    // El lote pendiente más probable (misma variedad, entra esta semana o
+    // después) — para explicar el desfase con nombre y semana concretos.
+    const pending =
+      data.areaLots
+        .filter(
+          (c) =>
+            normName(c.species) === normName(name) &&
+            c.arrivalWeek >= data.week &&
+            (!variety || varietyNameMatch(c.variety, variety) !== null),
+        )
+        .sort(
+          (a, b) =>
+            a.arrivalWeek - b.arrivalWeek ||
+            Math.abs(a.trays - trays) - Math.abs(b.trays - trays),
+        )[0] ?? null;
+    return { name, variety, trays, locs, pending };
+  }, [selectedKey, leaveSlotsByLoc, data.layout.modules, data.areaLots, data.week]);
 
   const selectLot = (key: string | null) => {
     if (!key || key === selectedKey) {
       setSelectedKey(null);
       return;
     }
-    setReconcileTarget(null);
     setSelectedKey(key);
     const chip = chipByKey.get(key);
     setMoveQty(chip?.trays ?? 0);
     setExpanded((prev) => {
       const next = new Set(prev);
       for (const id of locsWithKey(key)) next.add(id);
+      // Material real: expandir también los mesones donde está físicamente.
+      if (key.startsWith("mat:")) {
+        for (const [locId, slots] of leaveSlotsByLoc) {
+          if (slots.some((sl) => !sl.chip && matKey(sl.name, sl.variety) === key)) {
+            next.add(locId);
+          }
+        }
+      }
       return next;
     });
-  };
-
-  // target = la variedad real de la silla puntual que se clickeó (no todo
-  // el mesón mezclado) — cada silla "sale esta semana" ya sabe de qué
-  // variedad real es, vía el mismo reparto que usa Antigüedad.
-  const openReconcile = (
-    locationId: number,
-    target: { name: string; variety: string | null } | null,
-  ) => {
-    setSelectedKey(null);
-    setReconcileTarget((prev) =>
-      prev?.locationId === locationId &&
-      prev.name === target?.name &&
-      prev.variety === target?.variety
-        ? null
-        : target
-          ? { locationId, name: target.name, variety: target.variety }
-          : null,
-    );
-  };
-
-  const reconcileLoc = reconcileTarget
-    ? (allLocs.find((l) => l.id === reconcileTarget.locationId) ?? null)
-    : null;
-  // Candidatos: lotes activos del sector que coinciden con la especie+
-  // variedad real de ESA silla puntual. Prioridad: coincidencia exacta
-  // (mucho más preciso cuando hay varias variedades de la misma especie en
-  // juego, ej. 42 lotes de Arándano Mágica). Normalizado sin tildes: el
-  // inventario real trae "Magica" y el maestro del plan "Mágica". Si no hay
-  // ningún match exacto (variedad sin vínculo, texto crudo con sufijos como
-  // "York 6624"), cae a especie sola como respaldo — más amplio, marcado
-  // como menos preciso en vez de fallar en silencio o inventar una
-  // normalización que podría equivocarse con variedades que sí terminan en
-  // números (ej. "OB18064").
-  const sortCandidates = (a: SectorLotChip, b: SectorLotChip) =>
-    Number(b.overflowTrays > 0) - Number(a.overflowTrays > 0) ||
-    Number(!b.pinnedLocationId) - Number(!a.pinnedLocationId);
-  const { exact: reconcileExact, loose: reconcileLoose } = reconcileTarget
-    ? (() => {
-        const exactList: SectorLotChip[] = [];
-        const looseList: SectorLotChip[] = [];
-        for (const c of data.contents) {
-          if (normName(c.species) !== normName(reconcileTarget.name)) continue;
-          const isExact =
-            reconcileTarget.variety !== null &&
-            normName(c.variety ?? "") === normName(reconcileTarget.variety);
-          (isExact ? exactList : looseList).push(c);
-        }
-        return {
-          exact: exactList.sort(sortCandidates),
-          loose: looseList.sort(sortCandidates),
-        };
-      })()
-    : { exact: [], loose: [] };
-  const reconcileCandidates = reconcileExact.length ? reconcileExact : reconcileLoose;
-  const reconcileIsLoose = reconcileExact.length === 0 && reconcileLoose.length > 0;
-
-  const reconcilePin = async (chip: SectorLotChip) => {
-    if (!reconcileTarget) return;
-    setBusy(true);
-    try {
-      const res = await pinLotToLocation({
-        scenarioId,
-        lotId: chip.lotId,
-        stage: chip.stage,
-        locationId: reconcileTarget.locationId,
-      });
-      if (res.ok) {
-        toast.success(`${chip.species} vinculado a ${reconcileLoc?.code ?? ""}.`);
-        setReconcileTarget(null);
-        router.refresh();
-      } else {
-        toast.error(res.error ?? "No se pudo vincular.");
-      }
-    } finally {
-      setBusy(false);
-    }
   };
 
   const toggleExpand = (id: number) =>
@@ -710,8 +818,7 @@ export function SectorWorkspace({
                           onToggle={() => toggleExpand(loc.id)}
                           onHover={setHoveredKey}
                           onSelect={selectLot}
-                          onReconcile={(entry) => openReconcile(loc.id, entry)}
-                          reconcileActive={reconcileTarget?.locationId === loc.id}
+                          leaveSlots={leaveSlotsByLoc.get(loc.id) ?? []}
                         />
                       ) : (
                         <div key={`${side}${row}`} className="h-12" />
@@ -734,8 +841,7 @@ export function SectorWorkspace({
                     onToggle={() => toggleExpand(loc.id)}
                     onHover={setHoveredKey}
                     onSelect={selectLot}
-                    onReconcile={(entry) => openReconcile(loc.id, entry)}
-                    reconcileActive={reconcileTarget?.locationId === loc.id}
+                    leaveSlots={leaveSlotsByLoc.get(loc.id) ?? []}
                   />
                 ));
             return (
@@ -965,69 +1071,62 @@ export function SectorWorkspace({
                   band.
                 </button>
               </div>
-            ) : reconcileLoc && reconcileTarget ? (
+            ) : selectedMaterial ? (
               <div className="border-t-4 border-t-muted/60 px-4 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">
-                      {reconcileTarget.name}
-                      {reconcileTarget.variety ? ` ${reconcileTarget.variety}` : " (sin variedad)"}
+                      {selectedMaterial.name}
+                      {selectedMaterial.variety ? ` ${selectedMaterial.variety}` : ""}
                     </p>
                     <p className="truncate text-[11px] text-muted-foreground">
-                      Real en {reconcileLoc.code} · sin lote del plan esta semana
+                      Material real · sin lote llegado en el plan
                     </p>
                   </div>
                   <button
                     type="button"
-                    onClick={() => setReconcileTarget(null)}
-                    aria-label="Cerrar"
+                    onClick={() => setSelectedKey(null)}
+                    aria-label="Quitar selección"
                     className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
-
-                <p className="mb-1.5 mt-3 text-[11px] font-medium text-muted-foreground">
-                  {reconcileIsLoose
-                    ? "Sin coincidencia exacta de variedad — candidatos por especie"
-                    : "Vincular a un lote activo de la misma especie y variedad"}
-                </p>
-                {reconcileIsLoose ? (
-                  <p className="mb-1.5 text-[11px] text-amber-600 dark:text-amber-400">
-                    Revisa antes de vincular: el inventario no trae variedad vinculada
-                    para esta fila, así que no hay forma de acotar más que por especie.
+                <div className="mt-2.5 space-y-1.5 text-[11px] text-muted-foreground">
+                  <p>
+                    <span className="font-medium text-foreground">
+                      {selectedMaterial.trays.toLocaleString("es-CL")} band.
+                    </span>{" "}
+                    en {selectedMaterial.locs.join(", ")}
                   </p>
-                ) : null}
-                <div className="max-h-[42vh] space-y-1.5 overflow-y-auto">
-                  {reconcileCandidates.length ? (
-                    reconcileCandidates.map((c) => (
-                      <button
-                        key={`${c.lotId}:${c.stage}`}
-                        type="button"
-                        disabled={busy}
-                        onClick={() => reconcilePin(c)}
-                        className="flex w-full items-center justify-between rounded-lg border bg-background px-3 py-2 text-left transition-colors hover:border-[#185FA5]/50 hover:bg-[#185FA5]/[0.04] disabled:opacity-50"
+                  {selectedMaterial.pending ? (
+                    <p>
+                      Según el plan, el lote{" "}
+                      <span className="font-medium text-foreground">
+                        {selectedMaterial.pending.label}
+                      </span>{" "}
+                      recién entra en la S{selectedMaterial.pending.arrivalWeek} —
+                      pero estas bandejas ya están acá. Si son de ese lote (llegó
+                      adelantado), corrige su semana de inicio en{" "}
+                      <Link
+                        href="/planner/lotes"
+                        className="font-medium text-[#185FA5] underline-offset-2 hover:underline"
                       >
-                        <div className="min-w-0">
-                          <span className="block truncate text-sm font-medium">
-                            {c.label}
-                          </span>
-                          <span className="block text-[11px] text-muted-foreground">
-                            {c.trays.toLocaleString("es-CL")} band.
-                            {c.overflowTrays > 0
-                              ? " · sin ubicar"
-                              : c.pinnedCode
-                                ? ` · hoy en ${c.pinnedCode}`
-                                : ""}
-                          </span>
-                        </div>
-                        <Pin className="h-4 w-4 shrink-0 text-muted-foreground" />
-                      </button>
-                    ))
+                        Lotes
+                      </Link>{" "}
+                      y el plano las reconocerá solo.
+                    </p>
                   ) : (
-                    <p className="px-1 py-2 text-[11px] text-muted-foreground">
-                      No hay lotes activos de esta especie en el sector esta semana —
-                      no se puede identificar con certeza.
+                    <p>
+                      El plan no tiene ningún lote de esta variedad en el sector —
+                      falta crearlo en{" "}
+                      <Link
+                        href="/planner/lotes"
+                        className="font-medium text-[#185FA5] underline-offset-2 hover:underline"
+                      >
+                        Lotes
+                      </Link>
+                      .
                     </p>
                   )}
                 </div>
@@ -1095,8 +1194,7 @@ function MesonCell({
   onToggle,
   onHover,
   onSelect,
-  onReconcile,
-  reconcileActive,
+  leaveSlots,
 }: {
   loc: SectorWorkspaceData["layout"]["modules"][number]["locations"][number];
   fill?: { trays: number; parts: FillPart[] };
@@ -1116,13 +1214,10 @@ function MesonCell({
   onToggle: () => void;
   onHover: (key: string | null) => void;
   onSelect: (key: string | null) => void;
-  /** clic en una silla "sale esta semana" (real, sin lote) — abre el panel
-   *  para vincularla a un lote activo por especie. */
-  onReconcile: (entry: { name: string; variety: string | null } | null) => void;
-  /** este mesón es el que tiene abierto el panel "Identificar" — mismo
-   *  resaltado azul que un lote seleccionado, para que se sienta la misma
-   *  interacción en vez de un flujo aparte. */
-  reconcileActive: boolean;
+  /** material real sin cubrir por el plan, ya atribuido automáticamente a su
+   *  mejor lote candidato (chip null = material con identidad propia, se
+   *  selecciona vía matKey) */
+  leaveSlots: LeaveSlot[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `loc:${loc.id}` });
   const planCap = loc.planCapacityTrays ?? 0;
@@ -1137,7 +1232,13 @@ function MesonCell({
   const free = Math.max(0, planCap - planTrays);
   const parts = fill?.parts ?? [];
   const hasSelected =
-    parts.some((p) => lotKey(p.lotId, p.stage) === selectedKey) || reconcileActive;
+    parts.some((p) => lotKey(p.lotId, p.stage) === selectedKey) ||
+    leaveSlots.some(
+      (sl) =>
+        (sl.chip
+          ? lotKey(sl.chip.lotId, sl.chip.stage)
+          : matKey(sl.name, sl.variety)) === selectedKey,
+    );
   const pctOf = (n: number) => (gridCap ? Math.round((n / gridCap) * 100) : 0);
   const quotaFull = planCap > 0 && planTrays >= planCap;
 
@@ -1155,7 +1256,16 @@ function MesonCell({
       const label = s.variety ? `${s.name} ${s.variety}` : s.name;
       for (let i = 0; i < n; i++)
         seats.push({
-          part: { label, trays: s.trays, lotId: null, stage: null, arrivalWeek: week },
+          part: {
+            label,
+            trays: s.trays,
+            lotId: null,
+            stage: null,
+            arrivalWeek: week,
+            startWeek: week,
+            species: s.name,
+            variety: s.variety,
+          },
           kind: "stay",
         });
     }
@@ -1192,31 +1302,59 @@ function MesonCell({
     const n = Math.round(b.trays / perCell);
     for (let i = 0; i < n; i++) ageSeq.push(b.months);
   }
-  let ageIdx = 0;
-  const seatAges: (number | null)[] = seats.map((s) =>
-    s.kind === "stay" || s.kind === "leave"
-      ? ageIdx < ageSeq.length
-        ? ageSeq[ageIdx++]
-        : null
-      : null,
+  // Edades ancladas a la FOTO REAL: las primeras `realSeats` sillas del mesón
+  // son el material físicamente presente (la grilla es capacidad física),
+  // sin importar el kind que el plan les asigne. Antes se asignaban solo a
+  // sillas stay/leave y en mesones cubiertos únicamente por lotes entrantes
+  // (stay=0) las edades reales desaparecían de la vista Antigüedad.
+  const realSeats = Math.round(realTrays / perCell);
+  const seatAges: (number | null)[] = seats.map((_s, i) =>
+    i < realSeats ? (ageSeq[i] ?? null) : null,
   );
+  /** Edad de una silla en modo Antigüedad: real (foto) para lo presente;
+   *  PROYECTADA para lo que el plan trae después de la foto — así la vista
+   *  de edad ocupa lo mismo que la de ocupación aunque se mire una semana
+   *  posterior al snapshot.
+   *
+   *  La proyección cuenta desde el INICIO DEL LOTE (su primera plantación),
+   *  no desde la llegada a esta etapa: un traslado (maduración/predespacho)
+   *  trae material con la edad acumulada desde el enraizamiento; solo un
+   *  ingreso a su primera etapa parte en 0 m. */
+  const seatAge = (s: Seat, i: number): number | null => {
+    if (i < realSeats) return seatAges[i];
+    if (s.part) {
+      return Math.max(0, Math.floor(((week - s.part.startWeek) * 7) / 30.44));
+    }
+    return null;
+  };
 
-  // Variedad real por silla "sale esta semana": mismo reparto que la
-  // antigüedad, expandiendo el desglose real del mesón (loc.species, ya
-  // por especie+variedad) sobre las sillas sin lote — así el hover muestra
-  // qué hay ahí en vez de un texto genérico, y "Identificar" arranca
-  // acotado a esa variedad puntual, no a todo el mesón mezclado.
-  const leaveEntrySeq: { name: string; variety: string | null }[] = [];
-  for (const s of loc.species) {
-    const n = Math.round(s.trays / perCell);
-    for (let i = 0; i < n; i++) leaveEntrySeq.push({ name: s.name, variety: s.variety });
+  // Material real por silla "sale esta semana": expande los slots ya
+  // resueltos por el padre (sobrante real tras descontar lo que el plan
+  // llegado cubre, cada uno atribuido automáticamente a su mejor lote) —
+  // así una silla real se hoverea/selecciona como cualquier lote y solo cae
+  // al panel "¿Qué lote es?" cuando no hay candidato alguno.
+  const leaveEntrySeq: LeaveSlot[] = [];
+  for (const sl of leaveSlots) {
+    const n = Math.round(sl.trays / perCell);
+    for (let i = 0; i < n; i++) leaveEntrySeq.push(sl);
   }
   let leaveIdx = 0;
-  const seatLeaveEntry: ({ name: string; variety: string | null } | null)[] = seats.map((s) =>
+  const seatLeaveEntry: (LeaveSlot | null)[] = seats.map((s) =>
     s.kind === "leave"
       ? (leaveEntrySeq[leaveIdx++] ?? null)
       : null,
   );
+  /** clave de una silla — lote del plan (part), lote atribuido (slot.chip)
+   *  o material real con identidad propia (matKey, cuando no hay lote
+   *  llegado); null = silla vacía */
+  const seatKey = (s: Seat, i: number): string | null => {
+    if (s.part) return lotKey(s.part.lotId, s.part.stage);
+    const slot = seatLeaveEntry[i];
+    if (!slot) return null;
+    return slot.chip
+      ? lotKey(slot.chip.lotId, slot.chip.stage)
+      : matKey(slot.name, slot.variety);
+  };
 
   // Antigüedad activa: toma la paleta entera del mesón (0-6+ meses); sin ella,
   // vuelve a la paleta normal de ocupación/plan/salidas.
@@ -1224,23 +1362,15 @@ function MesonCell({
     // La selección/hover del lote de plan sigue funcionando en modo
     // antigüedad (mover/mermar no puede depender de apagar el toggle) — se
     // pinta encima de la paleta de edad para esas sillas puntuales.
-    const key = s.part ? lotKey(s.part.lotId, s.part.stage) : null;
+    const key = seatKey(s, i);
     if (key && key === selectedKey) return { backgroundColor: SEAT_SELECTED };
     if (key && key === hoveredKey) return { backgroundColor: SEAT_HOVER };
-    // Sin lote pero con el panel "Identificar" abierto para este mesón: mismo
-    // azul que un lote seleccionado — la interacción se siente igual aunque
-    // todavía no haya un lotId detrás.
-    if (s.kind === "leave" && reconcileActive && !mostrarEdad) {
-      return { backgroundColor: SEAT_SELECTED };
-    }
-    if (s.kind === "leave" && hoveredKey === `loc:${loc.id}` && !mostrarEdad) {
-      return { backgroundColor: SEAT_HOVER };
-    }
     if (mostrarEdad) {
-      if (s.kind === "stay" || s.kind === "leave")
-        return { backgroundColor: ageColor(seatAges[i]) };
-      // Lo que entra según la proyección de la semana llega recién: 0 meses.
-      if (s.kind === "enter") return { backgroundColor: ageColor(0) };
+      // Silla ocupada hoy → edad real (gris = sin fecha). Llegado tras la
+      // foto → edad proyectada desde su semana de llegada. Entrante → 0 m.
+      if (i < realSeats) return { backgroundColor: ageColor(seatAges[i]) };
+      const a = seatAge(s, i);
+      if (a !== null) return { backgroundColor: ageColor(a) };
       return { backgroundColor: SEAT_EMPTY };
     }
     if (s.kind === "leave") return { backgroundColor: marcarSalen ? SEAT_LEAVE : SEAT_FULL };
@@ -1314,7 +1444,7 @@ function MesonCell({
       {expanded ? (
         <div className="flex flex-wrap items-center gap-[2px]">
           {seats.map((s, i) => {
-            const key = s.part ? lotKey(s.part.lotId, s.part.stage) : null;
+            const key = seatKey(s, i);
             return (
               <React.Fragment key={i}>
                 {i === quotaSeat ? (
@@ -1325,14 +1455,13 @@ function MesonCell({
                 ) : null}
                 <span
                   onMouseEnter={() => {
-                    onHover(s.kind === "leave" ? `loc:${loc.id}` : key);
-                    if (mostrarEdad) onAgeHover(s.kind === "enter" ? 0 : seatAges[i]);
+                    onHover(key);
+                    if (mostrarEdad) onAgeHover(seatAge(s, i));
                   }}
                   onMouseLeave={() => onHover(null)}
                   onClick={() => {
                     if (key && !s.part?.sim) onSelect(key);
-                    else if (s.kind === "leave" && !mostrarEdad) onReconcile(seatLeaveEntry[i]);
-                    if (mostrarEdad) onAgeHover(s.kind === "enter" ? 0 : seatAges[i]);
+                    if (mostrarEdad) onAgeHover(seatAge(s, i));
                   }}
                   title={
                     mostrarEdad
@@ -1340,10 +1469,12 @@ function MesonCell({
                       : s.kind === "leave"
                         ? (() => {
                             const e = seatLeaveEntry[i];
-                            const label = e
+                            const real = e
                               ? `${e.name}${e.variety ? ` ${e.variety}` : " (sin variedad)"}`
                               : "ocupado hoy";
-                            return `${label} · sale esta semana según el plan · clic para identificar el lote`;
+                            return e?.chip
+                              ? `${e.chip.label} · asignación automática (real: ${real})`
+                              : `${real} · material real sin lote llegado en el plan`;
                           })()
                         : s.part?.sim
                           ? `${s.part.label} · simulación`
@@ -1351,7 +1482,7 @@ function MesonCell({
                   }
                   className={cn(
                     "h-3 w-3 rounded-[2px] transition-colors",
-                    (mostrarEdad || key || s.kind === "leave") && "cursor-pointer",
+                    (mostrarEdad || key) && "cursor-pointer",
                   )}
                   style={seatStyle(s, i)}
                 />

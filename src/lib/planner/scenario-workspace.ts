@@ -20,6 +20,10 @@ export type SectorLotChip = {
   species: string;
   variety: string | null;
   trays: number;
+  /** semana en que el lote inicia esta etapa según el plan — material real
+   *  nunca se atribuye a un lote que aún no llega (sería mezclar lo
+   *  planificado con lo existente) */
+  arrivalWeek: number;
   /** bandejas que no caben este semana (0 si el lote entra completo) */
   overflowTrays: number;
   /** mesón donde el usuario fijó el lote (null = automático FIFO) */
@@ -47,6 +51,14 @@ export type FillPart = {
    *  (ocupado hoy) o si el plan lo trae a futuro, lote completo, sin
    *  partir una misma fila entre las dos categorías. */
   arrivalWeek: number;
+  /** semana de inicio del LOTE completo (primera plantación) — distingue
+   *  ingreso (etapa inicial: material nuevo, 0 m) de traslado (etapa
+   *  posterior: el material trae su edad acumulada desde esta semana) */
+  startWeek: number;
+  /** especie/variedad del lote — cruza el plan con el material real del
+   *  mesón para descontar lo ya cubierto al etiquetar sobrantes */
+  species: string;
+  variety: string | null;
   /** parte de una orden simulada */
   sim?: boolean;
 };
@@ -56,6 +68,9 @@ export type SectorWorkspaceData = {
   fill: Record<number, { trays: number; parts: FillPart[] }>;
   /** todos los lotes del sector esa semana, agrupados, para mover */
   contents: SectorLotChip[];
+  /** todos los lotes activos con etapa en este sector, cualquier semana —
+   *  candidatos para "Identificar" cuando la ventana de plan ya cerró */
+  areaLots: SectorLotChip[];
   overflowTrays: number;
   overflowCount: number;
   targets: TargetSector[];
@@ -69,6 +84,7 @@ type ScenarioLotRow = {
   scenario_id: number;
   lot_code: string;
   trays: number | null;
+  start_week: number | null;
   rooting_area_id: number | null;
   rooting_start_week: number | null;
   rooting_end_week: number | null;
@@ -109,7 +125,7 @@ export async function getScenarioWorkspace(
   const thisStage = areaById.get(areaId)?.stage as string | undefined;
 
   const lotSelect =
-    "id, scenario_id, lot_code, trays, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, planner_species(name), planner_varieties(name)";
+    "id, scenario_id, lot_code, trays, start_week, rooting_area_id, rooting_start_week, rooting_end_week, maturation_area_id, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_start_week, predispatch_end_week, planner_species(name), planner_varieties(name)";
   const simIds = (opts.simScenarios ?? []).map((s) => s.id);
   const [{ data: lots }, simRes] = await Promise.all([
     supabase
@@ -148,6 +164,22 @@ export async function getScenarioWorkspace(
     }
   }
 
+  // TODOS los lotes activos con alguna etapa en este sector, sin filtrar por
+  // semana vigente — a diferencia de `here` (arriba). Sirve solo para
+  // "Identificar": una remesa real puede seguir físicamente en el sector
+  // aunque su ventana de plan ya haya terminado (atrasada) — sigue siendo
+  // el mejor candidato exacto por especie+variedad, mejor que caer a
+  // especie sola solo porque esta semana puntual no coincide.
+  const areaAny: { row: ScenarioLotRow; stage: Stage }[] = [];
+  for (const row of rows) {
+    for (const stage of STAGES) {
+      if (stageAreaId(row, stage) === areaId) {
+        areaAny.push({ row, stage });
+        break;
+      }
+    }
+  }
+
   // Pins manuales: lote (por etapa) → mesón fijado por el usuario.
   const { data: pinRows } = await supabase
     .from("planner_scenario_lot_pins")
@@ -167,15 +199,23 @@ export async function getScenarioWorkspace(
     m.locations.map((l) => ({ id: l.id, capacityTrays: l.planCapacityTrays ?? 0 })),
   );
 
-  type WorkItem = AllocLot & { sim: boolean };
+  type WorkItem = AllocLot & {
+    sim: boolean;
+    species: string;
+    variety: string | null;
+    startWeek: number;
+  };
   const items: WorkItem[] = here
     .filter(({ row }) => (row.trays ?? 0) > 0)
     .map(({ row, stage }) => ({
       label: `${row.planner_species?.name ?? "¿?"}${row.planner_varieties?.name ? ` ${row.planner_varieties.name}` : ""} · ${row.lot_code}`,
       trays: row.trays ?? 0,
       arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
+      startWeek: row.start_week ?? (row.rooting_start_week ?? week),
       ref: { lotId: row.id, stage },
       sim: simLotIds.has(row.id),
+      species: row.planner_species?.name ?? "",
+      variety: row.planner_varieties?.name ?? null,
     }));
 
   // Colocación pin-aware: primero los lotes fijados en su mesón, luego el
@@ -183,13 +223,29 @@ export async function getScenarioWorkspace(
   const usedByLoc = new Map<number, number>();
   const partsByLoc = new Map<
     number,
-    { label: string; trays: number; ref: AllocLot["ref"]; arrivalWeek: number }[]
+    {
+      label: string;
+      trays: number;
+      ref: AllocLot["ref"];
+      arrivalWeek: number;
+      startWeek: number;
+      species: string;
+      variety: string | null;
+    }[]
   >();
   const overflowByLot = new Map<number, number>();
-  const place = (locId: number, it: AllocLot, take: number) => {
+  const place = (locId: number, it: WorkItem, take: number) => {
     usedByLoc.set(locId, (usedByLoc.get(locId) ?? 0) + take);
     const arr = partsByLoc.get(locId) ?? [];
-    arr.push({ label: it.label, trays: take, ref: it.ref, arrivalWeek: it.arrivalWeek });
+    arr.push({
+      label: it.label,
+      trays: take,
+      ref: it.ref,
+      arrivalWeek: it.arrivalWeek,
+      startWeek: it.startWeek,
+      species: it.species,
+      variety: it.variety,
+    });
     partsByLoc.set(locId, arr);
   };
   const capOf = (locId: number) =>
@@ -244,6 +300,9 @@ export async function getScenarioWorkspace(
         lotId: p.ref?.lotId ?? null,
         stage: (p.ref?.stage as Stage | undefined) ?? null,
         arrivalWeek: p.arrivalWeek,
+        startWeek: p.startWeek,
+        species: p.species,
+        variety: p.variety,
         sim: p.ref ? simLotIds.has(p.ref.lotId) : false,
       })),
     };
@@ -264,6 +323,7 @@ export async function getScenarioWorkspace(
       species: row.planner_species?.name ?? "",
       variety: row.planner_varieties?.name ?? null,
       trays: row.trays ?? 0,
+      arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
       overflowTrays: overflowByLot.get(row.id) ?? 0,
       pinnedLocationId: pinByLot.get(`${row.id}:${stage}`) ?? null,
       pinnedCode: (() => {
@@ -279,6 +339,31 @@ export async function getScenarioWorkspace(
         a.label.localeCompare(b.label),
     );
   const overflowCount = contents.filter((c) => c.overflowTrays > 0).length;
+
+  // Mismo shape que `contents` pero sin filtrar por semana vigente — solo
+  // para que "Identificar" pueda ofrecer un lote cuya ventana de plan ya
+  // cerró como candidato exacto (remesa real atrasada), en vez de caer
+  // directo a especie sola. No incluye órdenes de simulación (no son
+  // compromiso real, no tiene sentido sugerirlas para material físico).
+  const areaLots: SectorLotChip[] = areaAny
+    .filter(({ row }) => (row.trays ?? 0) > 0 && !simLotIds.has(row.id))
+    .map(({ row, stage }) => ({
+      lotId: row.id,
+      stage,
+      label: `${row.planner_species?.name ?? "¿?"}${row.planner_varieties?.name ? ` ${row.planner_varieties.name}` : ""} · ${row.lot_code}`,
+      species: row.planner_species?.name ?? "",
+      variety: row.planner_varieties?.name ?? null,
+      trays: row.trays ?? 0,
+      arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
+      overflowTrays: 0,
+      pinnedLocationId: pinByLot.get(`${row.id}:${stage}`) ?? null,
+      pinnedCode: (() => {
+        const pid = pinByLot.get(`${row.id}:${stage}`);
+        return pid ? (codeByLocId.get(pid) ?? null) : null;
+      })(),
+      sim: false,
+      simName: null,
+    }));
 
   // Sectores de la misma etapa con espacio libre esta semana (ocupación
   // planificada del escenario vs capacidad de planificación).
@@ -303,6 +388,7 @@ export async function getScenarioWorkspace(
     layout,
     fill,
     contents,
+    areaLots,
     overflowTrays: overflowTraysTotal,
     overflowCount,
     targets,

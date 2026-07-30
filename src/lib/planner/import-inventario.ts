@@ -8,6 +8,7 @@ import {
   type PlannerClient,
 } from "@/lib/planner/import-core";
 import type { ParsedInventarioFile } from "@/lib/planner/parse-inventario";
+import { reconcileLotsWithInventory } from "@/lib/planner/reconcile-lots";
 
 /**
  * Importador del inventario real de hardening ("Inventario Hrd 2026").
@@ -379,6 +380,28 @@ export async function applyInventarioCore(
     if (error) throw new Error(`Snapshot: ${error.message}`);
   }
 
+  // ── 7. Reconciliación plan ↔ realidad ("la realidad manda") ─────────────
+  // Material presente cuyo lote figura entrando a futuro → se adelanta la
+  // semana del lote automáticamente (≤4 sem de horizonte), con registro en
+  // el historial. Un fallo acá no invalida la carga: se reporta y sigue.
+  let lotesReconciliados = 0;
+  try {
+    const rec = await reconcileLotsWithInventory(supabase, upload.id, userId);
+    lotesReconciliados = rec.adjusted.length;
+    warnings.push(...rec.warnings);
+    if (rec.adjusted.length) {
+      warnings.push(
+        `Reconciliación automática: ${rec.adjusted
+          .map((a) => `${a.lotCode} (${a.area}, S${a.fromWeek}→S${a.toWeek})`)
+          .join(", ")} — material ya presente, el plan se ajustó a la realidad.`,
+      );
+    }
+  } catch (e) {
+    warnings.push(
+      `Reconciliación automática falló (la carga quedó bien): ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+
   if (sinArea.size) {
     warnings.push(
       `Módulos sin área equivalente (se omitieron): ${[...sinArea.entries()]
@@ -410,6 +433,7 @@ export async function applyInventarioCore(
       detalle_insertado: items.length,
       snapshot_insertado: snapshotRows.length,
       ubicaciones_nuevas: nuevas.length,
+      lotes_reconciliados: lotesReconciliados,
     },
     newMasters: {},
     warnings,
