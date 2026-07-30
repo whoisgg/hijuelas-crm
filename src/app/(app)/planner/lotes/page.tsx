@@ -6,6 +6,7 @@ import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
 import { getProgramByPlannerVarietyId } from "@/lib/planner/variety-programs";
+import { currentLotLocation } from "@/lib/planner/lot-location";
 
 export const metadata = { title: "Lotes" };
 export const dynamic = "force-dynamic";
@@ -22,21 +23,32 @@ export default async function LotesPage() {
     redirect("/apps");
   }
 
-  const [{ data: lots }, programByVarietyId] = await Promise.all([
+  const today = new Date().toISOString().slice(0, 10);
+  const [{ data: lots }, programByVarietyId, { data: currentWeekRow }] = await Promise.all([
     supabase
       .from("planner_lots")
       .select(
-        "id, lot_code, year, start_week, end_week, plants, trays, status, plant_code, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_lots_rooting_area_id_fkey(name)",
+        `id, lot_code, year, start_week, end_week, plants, trays, status, plant_code, plant_index, planner_species(name), planner_varieties(id, name),
+        rooting_start_week, rooting_end_week, maturation_start_week, maturation_end_week, predispatch_start_week, predispatch_end_week,
+        rooting:planner_areas!planner_lots_rooting_area_id_fkey(name), maturation:planner_areas!planner_lots_maturation_area_id_fkey(name), predispatch:planner_areas!planner_lots_predispatch_area_id_fkey(name)`,
       )
       .order("start_week")
       .order("lot_code")
       .limit(2000),
     getProgramByPlannerVarietyId(supabase),
+    supabase
+      .from("planner_calendar_weeks")
+      .select("campaign_week")
+      .lte("start_date", today)
+      .gte("end_date", today)
+      .maybeSingle(),
   ]);
+  const currentWeek = currentWeekRow?.campaign_week ?? null;
 
   const rows: LotRow[] = (lots ?? []).map((l) => {
     const variety =
       (l.planner_varieties as unknown as { id: number; name: string } | null) ?? null;
+    const areaName = (rel: unknown) => (rel as { name: string } | null)?.name ?? null;
     return {
       id: l.id,
       lot_code: l.lot_code,
@@ -48,9 +60,29 @@ export default async function LotesPage() {
       end_week: l.end_week,
       plants: l.plants,
       trays: l.trays,
-      rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
+      location: currentLotLocation(
+        {
+          rooting: {
+            name: areaName(l.rooting),
+            startWeek: l.rooting_start_week,
+            endWeek: l.rooting_end_week,
+          },
+          maturation: {
+            name: areaName(l.maturation),
+            startWeek: l.maturation_start_week,
+            endWeek: l.maturation_end_week,
+          },
+          predispatch: {
+            name: areaName(l.predispatch),
+            startWeek: l.predispatch_start_week,
+            endWeek: l.predispatch_end_week,
+          },
+        },
+        currentWeek,
+      ),
       status: l.status,
       plantCode: l.plant_code,
+      plantIndex: l.plant_index,
     };
   });
 

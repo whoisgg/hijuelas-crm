@@ -1,5 +1,12 @@
 import { redirect } from "next/navigation";
-import { CalendarRange, Leaf, SlidersHorizontal, Sprout, Warehouse } from "lucide-react";
+import {
+  CalendarRange,
+  ClipboardList,
+  Leaf,
+  SlidersHorizontal,
+  Sprout,
+  Warehouse,
+} from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getAccessProfile, hasModuleAccess } from "@/lib/access";
@@ -31,7 +38,14 @@ import {
 export const metadata = { title: "Datos maestros del Planner" };
 export const dynamic = "force-dynamic";
 
-const SECTIONS = ["sectores", "especies", "variedades", "calendario", "parametros"] as const;
+const SECTIONS = [
+  "sectores",
+  "especies",
+  "variedades",
+  "calendario",
+  "parametros",
+  "protocolos",
+] as const;
 type SectionKey = (typeof SECTIONS)[number];
 
 const SECTION_META: Record<SectionKey, { title: string; description: string }> = {
@@ -58,6 +72,11 @@ const SECTION_META: Record<SectionKey, { title: string; description: string }> =
   parametros: {
     title: "Parámetros",
     description: "Parámetros globales del modelo de ocupación.",
+  },
+  protocolos: {
+    title: "Protocolos",
+    description:
+      "Protocolos productivos por variedad, derivados de la ubicación semana a semana real de los lotes (promedio de semanas por etapa).",
   },
 };
 
@@ -254,6 +273,16 @@ export default async function PlannerMaestrosPage({
               }
             />
           </SettingsSection>
+
+          <SettingsSection title="Análisis">
+            <SettingsRow
+              href="/planner/maestros?tab=protocolos"
+              icon={ClipboardList}
+              iconClass="bg-rose-500/10 text-rose-600 dark:text-rose-400"
+              label="Protocolos"
+              sub="Protocolo productivo real por variedad — próximamente"
+            />
+          </SettingsSection>
         </div>
       </AppShell>
     );
@@ -324,6 +353,14 @@ export default async function PlannerMaestrosPage({
         ) : null}
 
         {section === "parametros" ? <AjustesParametros parameters={parameters} /> : null}
+
+        {section === "protocolos" ? (
+          <p className="rounded-lg border bg-card px-3 py-10 text-center text-sm text-muted-foreground">
+            Próximamente: protocolo productivo por variedad (promedio real de semanas por
+            etapa), derivado de la ubicación semana a semana registrada en{" "}
+            <span className="font-medium text-foreground">Lotes</span>.
+          </p>
+        ) : null}
       </div>
     </AppShell>
   );

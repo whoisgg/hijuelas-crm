@@ -29,6 +29,8 @@ export type UpdateLotInput = {
   status: string;
   /** texto referencial del laboratorio (ej. código de lote de Alstro); opcional */
   plantCode?: string | null;
+  /** índice del laboratorio, separado del plantcode; opcional */
+  plantIndex?: string | null;
 };
 
 export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; error?: string }> {
@@ -67,6 +69,7 @@ export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; e
     trays,
     status: input.status,
     plant_code: input.plantCode === undefined ? lot.plant_code : input.plantCode,
+    plant_index: input.plantIndex === undefined ? lot.plant_index : input.plantIndex,
     start_week: input.startWeek,
     end_week: shift(lot.end_week),
     rooting_start_week: shift(lot.rooting_start_week),
@@ -79,6 +82,29 @@ export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; e
 
   const { error } = await supabase.from("planner_lots").update(next).eq("id", input.id);
   if (error) return { ok: false, error: error.message };
+
+  // Ubicación semana a semana (planner_lot_weeks): se desplaza por el mismo
+  // delta, plan y manual por igual — mismo criterio que ya aplica esta
+  // función a las 3 etapas. Delete+insert (no update in-place) para no
+  // pisar el unique(lot_id, campaign_week) a mitad de camino.
+  if (delta !== 0) {
+    const { data: weeks } = await supabase
+      .from("planner_lot_weeks")
+      .select("campaign_week, area_id, stage, source")
+      .eq("lot_id", input.id);
+    if (weeks?.length) {
+      await supabase.from("planner_lot_weeks").delete().eq("lot_id", input.id);
+      await supabase.from("planner_lot_weeks").insert(
+        weeks.map((w) => ({
+          lot_id: input.id,
+          campaign_week: w.campaign_week + delta,
+          area_id: w.area_id,
+          stage: w.stage,
+          source: w.source,
+        })),
+      );
+    }
+  }
 
   // Áreas no cambian en esta edición (solo semanas/plantas/estado): se pasan
   // igual en el antes y el después, así que el diff naturalmente no las marca.

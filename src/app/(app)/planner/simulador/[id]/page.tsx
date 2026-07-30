@@ -10,6 +10,7 @@ import { AddScenarioLot } from "@/components/planner/add-scenario-lot";
 import { LotsTable, type LotRow } from "@/components/planner/lots-table";
 import { getTimelineData } from "@/lib/planner/occupancy-data";
 import { getProgramByPlannerVarietyId } from "@/lib/planner/variety-programs";
+import { currentLotLocation } from "@/lib/planner/lot-location";
 
 export const metadata = { title: "Simulación" };
 export const dynamic = "force-dynamic";
@@ -56,7 +57,9 @@ export default async function SimulacionPage({
     supabase
       .from("planner_scenario_lots")
       .select(
-        "id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(id, name), rooting:planner_areas!planner_scenario_lots_rooting_area_id_fkey(name)",
+        `id, lot_code, year, start_week, end_week, plants, trays, status, planner_species(name), planner_varieties(id, name),
+        rooting_start_week, rooting_end_week, maturation_start_week, maturation_end_week, predispatch_start_week, predispatch_end_week,
+        rooting:planner_areas!planner_scenario_lots_rooting_area_id_fkey(name), maturation:planner_areas!planner_scenario_lots_maturation_area_id_fkey(name), predispatch:planner_areas!planner_scenario_lots_predispatch_area_id_fkey(name)`,
       )
       .eq("scenario_id", scenarioId)
       .order("start_week")
@@ -65,10 +68,13 @@ export default async function SimulacionPage({
     getTimelineData(supabase),
   ]);
   const programByVarietyId = await getProgramByPlannerVarietyId(supabase);
+  const currentWeek = timeline?.weeks.find((w) => w.isCurrent);
+  const currentCampaignWeek = currentWeek?.campaignWeek ?? null;
 
   const lotRows: LotRow[] = (lots ?? []).map((l) => {
     const variety =
       (l.planner_varieties as unknown as { id: number; name: string } | null) ?? null;
+    const areaName = (rel: unknown) => (rel as { name: string } | null)?.name ?? null;
     return {
       id: l.id,
       lot_code: l.lot_code,
@@ -80,15 +86,34 @@ export default async function SimulacionPage({
       end_week: l.end_week,
       plants: l.plants,
       trays: l.trays,
-      rooting_area: (l.rooting as unknown as { name: string } | null)?.name ?? null,
+      location: currentLotLocation(
+        {
+          rooting: {
+            name: areaName(l.rooting),
+            startWeek: l.rooting_start_week,
+            endWeek: l.rooting_end_week,
+          },
+          maturation: {
+            name: areaName(l.maturation),
+            startWeek: l.maturation_start_week,
+            endWeek: l.maturation_end_week,
+          },
+          predispatch: {
+            name: areaName(l.predispatch),
+            startWeek: l.predispatch_start_week,
+            endWeek: l.predispatch_end_week,
+          },
+        },
+        currentCampaignWeek,
+      ),
       status: l.status,
-      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columna
-      // plant_code — es solo referencia de laboratorio sobre el plan real.
+      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columnas
+      // plant_code/plant_index — son solo referencia de laboratorio sobre el
+      // plan real.
       plantCode: null,
+      plantIndex: null,
     };
   });
-
-  const currentWeek = timeline?.weeks.find((w) => w.isCurrent);
   const loads = LOADS.has(scenario.status);
 
   return (

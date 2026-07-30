@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Dna, Leaf, Pencil, Search, Sprout } from "lucide-react";
 import { toast } from "sonner";
@@ -30,10 +31,13 @@ export type LotRow = {
   end_week: number | null;
   plants: number;
   trays: number | null;
-  rooting_area: string | null;
+  /** etapa activa en la semana de campaña vigente (enraizamiento/maduración/predespacho); ver lot-location.ts */
+  location: string | null;
   status: string;
   /** texto referencial del laboratorio (ej. código de lote de Alstro); no es un vínculo real */
   plantCode: string | null;
+  /** índice del laboratorio, separado del plantcode para poder filtrar aparte */
+  plantIndex: string | null;
 };
 
 const SIN_PROGRAMA = "Sin programa";
@@ -86,7 +90,8 @@ export function LotsTable({
           l.species.toLowerCase().includes(q) ||
           (l.variety ?? "").toLowerCase().includes(q) ||
           (l.program ?? "").toLowerCase().includes(q) ||
-          (l.plantCode ?? "").toLowerCase().includes(q),
+          (l.plantCode ?? "").toLowerCase().includes(q) ||
+          (l.plantIndex ?? "").toLowerCase().includes(q),
       )
     : lots;
 
@@ -143,7 +148,7 @@ export function LotsTable({
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Buscar por código, especie, variedad o plantcode"
+          placeholder="Buscar por código, especie, variedad, plantcode o index"
           className="pl-8"
         />
       </div>
@@ -223,6 +228,7 @@ export function LotsTable({
                         rows={pg.rows}
                         query={q}
                         onEdit={canEdit ? setEditing : null}
+                        scenario={scenario}
                       />
                     </details>
                   ))}
@@ -233,6 +239,7 @@ export function LotsTable({
                     rows={g.rows}
                     query={q}
                     onEdit={canEdit ? setEditing : null}
+                    scenario={scenario}
                   />
                 </div>
               )}
@@ -259,10 +266,13 @@ function VarietyGroups({
   rows,
   query,
   onEdit,
+  scenario,
 }: {
   rows: LotRow[];
   query: string;
   onEdit: ((l: LotRow) => void) | null;
+  /** los lotes de escenario/simulador no tienen ruta de semanas (planner_lot_weeks referencia planner_lots) */
+  scenario: boolean;
 }) {
   const byVariety = React.useMemo(() => {
     const map = new Map<string, LotRow[]>();
@@ -289,7 +299,7 @@ function VarietyGroups({
   }, [rows]);
 
   if (byVariety.length <= 1) {
-    return <RowsTable rows={rows} onEdit={onEdit} />;
+    return <RowsTable rows={rows} onEdit={onEdit} scenario={scenario} />;
   }
 
   return (
@@ -317,7 +327,7 @@ function VarietyGroups({
             </span>
             <Totals plants={vg.plants} trays={vg.trays} />
           </summary>
-          <RowsTable rows={vg.rows} onEdit={onEdit} />
+          <RowsTable rows={vg.rows} onEdit={onEdit} scenario={scenario} />
         </details>
       ))}
     </div>
@@ -327,10 +337,13 @@ function VarietyGroups({
 function RowsTable({
   rows,
   onEdit,
+  scenario,
 }: {
   rows: LotRow[];
   /** null: sin permiso para editar — no se muestra el lápiz. */
   onEdit: ((l: LotRow) => void) | null;
+  /** los lotes de escenario/simulador no tienen ruta de semanas (planner_lot_weeks referencia planner_lots) */
+  scenario: boolean;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -344,11 +357,17 @@ function RowsTable({
             >
               Plantcode
             </th>
+            <th
+              className="px-3 py-2 text-left font-medium"
+              title="Índice del laboratorio, separado del plantcode"
+            >
+              Index
+            </th>
             <th className="px-3 py-2 text-left font-medium">Variedad</th>
             <th className="px-3 py-2 text-right font-medium">Semanas</th>
             <th className="px-3 py-2 text-right font-medium">Plantas</th>
             <th className="px-3 py-2 text-right font-medium">Bandejas</th>
-            <th className="px-3 py-2 text-left font-medium">Enraiza en</th>
+            <th className="px-3 py-2 text-left font-medium">Ubicación</th>
             <th className="px-3 py-2 text-left font-medium">Estado</th>
             <th className="px-3 py-2 text-right font-medium" />
           </tr>
@@ -362,10 +381,26 @@ function RowsTable({
               <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
                 {l.plantCode ?? "—"}
               </td>
+              <td className="whitespace-nowrap px-3 py-2 font-mono text-xs text-muted-foreground">
+                {l.plantIndex ?? "—"}
+              </td>
               <td className="px-3 py-2 text-muted-foreground">{l.variety ?? "—"}</td>
               <td className="whitespace-nowrap px-3 py-2 text-right tabular-nums">
-                S{l.start_week}
-                {l.end_week !== null ? ` → S${l.end_week}` : ""}
+                {!scenario ? (
+                  <Link
+                    href={`/planner/lotes/${l.id}`}
+                    className="underline-offset-2 hover:text-foreground hover:underline"
+                    title="Ver/editar ubicación semana a semana"
+                  >
+                    S{l.start_week}
+                    {l.end_week !== null ? ` → S${l.end_week}` : ""}
+                  </Link>
+                ) : (
+                  <>
+                    S{l.start_week}
+                    {l.end_week !== null ? ` → S${l.end_week}` : ""}
+                  </>
+                )}
               </td>
               <td className="px-3 py-2 text-right tabular-nums">
                 {l.plants.toLocaleString("es-CL")}
@@ -373,7 +408,7 @@ function RowsTable({
               <td className="px-3 py-2 text-right tabular-nums">
                 {l.trays?.toLocaleString("es-CL") ?? "—"}
               </td>
-              <td className="px-3 py-2 text-muted-foreground">{l.rooting_area ?? "—"}</td>
+              <td className="px-3 py-2 text-muted-foreground">{l.location ?? "—"}</td>
               <td className="px-3 py-2">
                 <Badge variant="outline" className="text-[10px]">
                   {l.status}
@@ -413,6 +448,7 @@ function LotEditDialog({
   const [startWeek, setStartWeek] = React.useState(String(lot.start_week));
   const [status, setStatus] = React.useState(lot.status);
   const [plantCode, setPlantCode] = React.useState(lot.plantCode ?? "");
+  const [plantIndex, setPlantIndex] = React.useState(lot.plantIndex ?? "");
   const [saving, setSaving] = React.useState(false);
 
   const submit = async () => {
@@ -424,11 +460,16 @@ function LotEditDialog({
         startWeek: Number(startWeek),
         status,
       };
-      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columna
-      // plant_code — es solo referencia del laboratorio sobre el plan real.
+      // planner_scenario_lots (mesa de trabajo/simulador) no tiene columnas
+      // plant_code/plant_index — son solo referencia del laboratorio sobre
+      // el plan real.
       const res = scenario
         ? await updateScenarioLot(payload)
-        : await updateLot({ ...payload, plantCode: plantCode.trim() || null });
+        : await updateLot({
+            ...payload,
+            plantCode: plantCode.trim() || null,
+            plantIndex: plantIndex.trim() || null,
+          });
       if (res.ok) {
         toast.success(`Lote ${lot.lot_code} actualizado.`);
         onClose();
@@ -483,15 +524,26 @@ function LotEditDialog({
             </p>
           </div>
           {!scenario ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="lot-plantcode">Plantcode</Label>
-              <Input
-                id="lot-plantcode"
-                value={plantCode}
-                onChange={(e) => setPlantCode(e.target.value)}
-                placeholder="Código de lote del laboratorio (opcional)"
-              />
-              <p className="text-xs text-muted-foreground">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="lot-plantcode">Plantcode</Label>
+                <Input
+                  id="lot-plantcode"
+                  value={plantCode}
+                  onChange={(e) => setPlantCode(e.target.value)}
+                  placeholder="Código de lote (opcional)"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="lot-plantindex">Index</Label>
+                <Input
+                  id="lot-plantindex"
+                  value={plantIndex}
+                  onChange={(e) => setPlantIndex(e.target.value)}
+                  placeholder="Índice (opcional)"
+                />
+              </div>
+              <p className="col-span-2 text-xs text-muted-foreground">
                 Solo texto referencial (ej. Alstro) — no vincula datos entre sistemas.
               </p>
             </div>
