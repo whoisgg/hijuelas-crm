@@ -1292,29 +1292,63 @@ function MesonCell({
   seats = seats.slice(0, totalSeats);
   while (seats.length < totalSeats) seats.push({ part: null, kind: "empty" });
 
-  // Antigüedad por silla: expande los tramos agregados del mesón (meses →
-  // bandejas) en una secuencia y la reparte sobre las sillas "ocupado hoy"
-  // (quedan/salen), en el mismo orden en que aparecen. Es tan aproximado como
-  // el resto del plano — no hay identidad real de bandeja, solo el total por
-  // tramo — pero alcanza para ver el patrón sobre el mesón.
-  const ageSeq: number[] = [];
-  for (const b of [...loc.ageBuckets].sort((a, b) => a.months - b.months)) {
-    const n = Math.round(b.trays / perCell);
-    for (let i = 0; i < n; i++) ageSeq.push(b.months);
+  // Material real por silla "sale esta semana": expande los slots ya
+  // resueltos por el padre (sobrante real tras descontar lo que el plan
+  // llegado cubre, cada uno atribuido automáticamente a su mejor lote) —
+  // así una silla real se hoverea/selecciona como cualquier lote y solo cae
+  // a "material con identidad propia" cuando no hay candidato alguno.
+  const leaveEntrySeq: LeaveSlot[] = [];
+  for (const sl of leaveSlots) {
+    const n = Math.round(sl.trays / perCell);
+    for (let i = 0; i < n; i++) leaveEntrySeq.push(sl);
   }
-  // Edades ancladas a la FOTO REAL: las primeras `realSeats` sillas del mesón
-  // son el material físicamente presente (la grilla es capacidad física),
-  // sin importar el kind que el plan les asigne. Antes se asignaban solo a
-  // sillas stay/leave y en mesones cubiertos únicamente por lotes entrantes
-  // (stay=0) las edades reales desaparecían de la vista Antigüedad.
-  const realSeats = Math.round(realTrays / perCell);
-  const seatAges: (number | null)[] = seats.map((_s, i) =>
-    i < realSeats ? (ageSeq[i] ?? null) : null,
+  let leaveIdx = 0;
+  const seatLeaveEntry: (LeaveSlot | null)[] = seats.map((s) =>
+    s.kind === "leave"
+      ? (leaveEntrySeq[leaveIdx++] ?? null)
+      : null,
   );
-  /** Edad de una silla en modo Antigüedad: real (foto) para lo presente;
-   *  PROYECTADA para lo que el plan trae después de la foto — así la vista
-   *  de edad ocupa lo mismo que la de ocupación aunque se mire una semana
-   *  posterior al snapshot.
+
+  // Edades por VARIEDAD, alineadas con la identidad de cada silla: cada
+  // grupo real del mesón trae su propia distribución de edad (ageBuckets
+  // por variedad, del inventario) y una silla toma la siguiente edad de la
+  // cola de SU variedad — nunca hereda edades de material ajeno. (Antes el
+  // reparto era posicional sobre el agregado del mesón, y los cortes de
+  // edad no calzaban con los cortes de lote: un mismo lote mostraba edades
+  // que no eran suyas.)
+  const realSeats = Math.round(realTrays / perCell);
+  const ageQueues = loc.species.map((sp) => {
+    const q: (number | null)[] = [];
+    for (const b of sp.ageBuckets) {
+      const n = Math.round(b.trays / perCell);
+      for (let i = 0; i < n; i++) q.push(b.months);
+    }
+    const total = Math.round(sp.trays / perCell);
+    while (q.length < total) q.push(null); // sin fecha
+    return { name: sp.name, variety: sp.variety, q, idx: 0 };
+  });
+  const queueFor = (species: string, variety: string | null, master: boolean) =>
+    ageQueues.find((g) => {
+      if (normName(g.name) !== normName(species)) return false;
+      if (variety === null || g.variety === null) return true;
+      return master
+        ? varietyNameMatch(variety, g.variety) !== null
+        : normName(g.variety) === normName(variety);
+    });
+  const seatAges: (number | null)[] = seats.map((s, i) => {
+    if (i >= realSeats) return null;
+    const g = s.part
+      ? queueFor(s.part.species, s.part.variety, true)
+      : seatLeaveEntry[i]
+        ? queueFor(seatLeaveEntry[i]!.name, seatLeaveEntry[i]!.variety, false)
+        : null;
+    if (g && g.idx < g.q.length) return g.q[g.idx++];
+    return null;
+  });
+  /** Edad de una silla en modo Antigüedad: real (foto, por variedad) para lo
+   *  presente; PROYECTADA para lo que el plan trae después de la foto — así
+   *  la vista de edad ocupa lo mismo que la de ocupación aunque se mire una
+   *  semana posterior al snapshot.
    *
    *  La proyección cuenta desde el INICIO DEL LOTE (su primera plantación),
    *  no desde la llegada a esta etapa: un traslado (maduración/predespacho)
@@ -1327,23 +1361,6 @@ function MesonCell({
     }
     return null;
   };
-
-  // Material real por silla "sale esta semana": expande los slots ya
-  // resueltos por el padre (sobrante real tras descontar lo que el plan
-  // llegado cubre, cada uno atribuido automáticamente a su mejor lote) —
-  // así una silla real se hoverea/selecciona como cualquier lote y solo cae
-  // al panel "¿Qué lote es?" cuando no hay candidato alguno.
-  const leaveEntrySeq: LeaveSlot[] = [];
-  for (const sl of leaveSlots) {
-    const n = Math.round(sl.trays / perCell);
-    for (let i = 0; i < n; i++) leaveEntrySeq.push(sl);
-  }
-  let leaveIdx = 0;
-  const seatLeaveEntry: (LeaveSlot | null)[] = seats.map((s) =>
-    s.kind === "leave"
-      ? (leaveEntrySeq[leaveIdx++] ?? null)
-      : null,
-  );
   /** clave de una silla — lote del plan (part), lote atribuido (slot.chip)
    *  o material real con identidad propia (matKey, cuando no hay lote
    *  llegado); null = silla vacía */

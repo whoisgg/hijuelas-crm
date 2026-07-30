@@ -21,8 +21,16 @@ export type LayoutLocation = {
   trays: number;
   plants: number;
   /** desglose real del mesón; variety=null cuando el detalle no trae
-   *  variedad vinculada (fallback al agregado por especie del snapshot) */
-  species: { name: string; variety: string | null; trays: number }[];
+   *  variedad vinculada (fallback al agregado por especie del snapshot).
+   *  ageBuckets = distribución de edad DE ESA variedad en este mesón —
+   *  permite pintar edades alineadas con la identidad de cada lote en vez
+   *  del reparto posicional del agregado del mesón. */
+  species: {
+    name: string;
+    variety: string | null;
+    trays: number;
+    ageBuckets: AgeBucket[];
+  }[];
   /** antigüedad promedio del material del mesón, ponderada por bandejas */
   ageMonthsAvg: number | null;
   /** distribución de bandejas por tramo de meses dentro del mesón */
@@ -203,7 +211,15 @@ export async function getSectorLayout(
   const ageByLocation = new Map<number, Map<number, { trays: number; plants: number }>>();
   const varietyByLocation = new Map<
     number,
-    Map<string, { name: string; variety: string | null; trays: number }>
+    Map<
+      string,
+      {
+        name: string;
+        variety: string | null;
+        trays: number;
+        ages: Map<number, { trays: number; plants: number }>;
+      }
+    >
   >();
   if (lastUpload && locationIds.length) {
     const { data: items } = await supabase
@@ -214,8 +230,8 @@ export async function getSectorLayout(
       .limit(5000);
     for (const it of items ?? []) {
       if (it.location_id === null) continue;
-      if (it.planted_at) {
-        const months = ageMonthsFrom(it.planted_at);
+      const months = it.planted_at ? ageMonthsFrom(it.planted_at) : null;
+      if (months !== null) {
         let byLoc = ageByLocation.get(it.location_id);
         if (!byLoc) {
           byLoc = new Map();
@@ -237,8 +253,15 @@ export async function getSectorLayout(
           name: it.species_name,
           variety: it.variety_name,
           trays: 0,
+          ages: new Map<number, { trays: number; plants: number }>(),
         };
         cell.trays += it.trays;
+        if (months !== null) {
+          const a = cell.ages.get(months) ?? { trays: 0, plants: 0 };
+          a.trays += it.trays;
+          a.plants += it.plants;
+          cell.ages.set(months, a);
+        }
         byLoc.set(key, cell);
       }
     }
@@ -305,9 +328,23 @@ export async function getSectorLayout(
           // Variedad cuando el detalle la trae (más preciso); si no, cae al
           // agregado por especie del snapshot (variety=null).
           species: varietyByLocation.has(l.id)
-            ? [...varietyByLocation.get(l.id)!.values()].sort((a, b) => b.trays - a.trays)
+            ? [...varietyByLocation.get(l.id)!.values()]
+                .map((c) => ({
+                  name: c.name,
+                  variety: c.variety,
+                  trays: c.trays,
+                  ageBuckets: [...c.ages.entries()]
+                    .map(([months, v]) => ({ months, trays: v.trays, plants: v.plants }))
+                    .sort((a, b) => a.months - b.months),
+                }))
+                .sort((a, b) => b.trays - a.trays)
             : [...(occ?.species ?? new Map())]
-                .map(([name, trays]) => ({ name, variety: null as string | null, trays }))
+                .map(([name, trays]) => ({
+                  name,
+                  variety: null as string | null,
+                  trays,
+                  ageBuckets: [] as AgeBucket[],
+                }))
                 .sort((a, b) => b.trays - a.trays),
           ageBuckets,
           ageMonthsAvg: avgOf(ageBuckets),
