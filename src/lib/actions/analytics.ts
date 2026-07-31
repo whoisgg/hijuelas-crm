@@ -19,6 +19,7 @@ import {
 import { es } from "date-fns/locale";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 import type { Database } from "@/lib/database.types";
 
 type CalendarEventRow = Database["public"]["Views"]["calendar_events"]["Row"];
@@ -252,19 +253,29 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const supabase = await createClient();
   const year = currentYear();
   const prevYear = year - 1;
+  // Alcance por país: null = consolidado (ver lib/scope). `contract_items` no
+  // tiene organization_id, así que el filtro viaja por el contrato con un
+  // join !inner.
+  const orgIds = await scopeOrgIds();
 
-  // Plantas comprometidas (year & prevYear) + entregadas + pendientes
+  // El select debe ser un literal: con un template string el parser de tipos
+  // de Supabase no puede inferir las columnas.
+  const currQ = supabase
+    .from("contract_items")
+    .select(
+      "qty_plants, qty_delivered, status, contracts!contract_items_contract_id_fkey!inner(organization_id)",
+    )
+    .eq("delivery_year", year)
+    .is("deleted_at", null);
+  const prevQ = supabase
+    .from("contract_items")
+    .select("qty_plants, contracts!contract_items_contract_id_fkey!inner(organization_id)")
+    .eq("delivery_year", prevYear)
+    .is("deleted_at", null);
+
   const [itemsCurr, itemsPrev] = await Promise.all([
-    supabase
-      .from("contract_items")
-      .select("qty_plants, qty_delivered, status")
-      .eq("delivery_year", year)
-      .is("deleted_at", null),
-    supabase
-      .from("contract_items")
-      .select("qty_plants")
-      .eq("delivery_year", prevYear)
-      .is("deleted_at", null),
+    orgIds ? currQ.in("contracts.organization_id", orgIds) : currQ,
+    orgIds ? prevQ.in("contracts.organization_id", orgIds) : prevQ,
   ]);
 
   const currItems = itemsCurr.data ?? [];
@@ -279,22 +290,26 @@ export async function getDashboardKPIs(): Promise<DashboardKPIs> {
   const yearStart = `${year}-01-01`;
   const nextYearStart = `${year + 1}-01-01`;
 
-  const contractsRes = await supabase
+  let contractsQ = supabase
     .from("contracts")
     .select("total_neto_usd")
     .gte("signed_at", yearStart)
     .lt("signed_at", nextYearStart)
     .is("deleted_at", null);
+  if (orgIds) contractsQ = contractsQ.in("organization_id", orgIds);
+  const contractsRes = await contractsQ;
 
   const revenueUsdYtd = sum(contractsRes.data ?? [], (c) => Number(c.total_neto_usd));
 
   // Pipeline value USD ponderado
-  const oppsRes = await supabase
+  let oppsQ = supabase
     .from("opportunities")
     .select(
       "estimated_value_usd, probability_pct, stage_id, opportunity_stages!opportunities_stage_id_fkey(is_won, is_lost)",
     )
     .is("deleted_at", null);
+  if (orgIds) oppsQ = oppsQ.in("organization_id", orgIds);
+  const oppsRes = await oppsQ;
 
   const pipelineValueUsd = sum(oppsRes.data ?? [], (o) => {
     type StageRel = { is_won: boolean; is_lost: boolean };
@@ -555,7 +570,8 @@ export async function getTopClients(limit = 5): Promise<TopClient[]> {
   const yearStart = `${year}-01-01`;
   const nextYearStart = `${year + 1}-01-01`;
 
-  const res = await supabase
+  const orgIds = await scopeOrgIds();
+  let q = supabase
     .from("contracts")
     .select(
       "client_id, total_neto_usd, clients!contracts_client_id_fkey(id, name, countries(name_es))",
@@ -563,6 +579,8 @@ export async function getTopClients(limit = 5): Promise<TopClient[]> {
     .gte("signed_at", yearStart)
     .lt("signed_at", nextYearStart)
     .is("deleted_at", null);
+  if (orgIds) q = q.in("organization_id", orgIds);
+  const res = await q;
 
   type ClientRel = { id: string; name: string; countries: { name_es: string } | null };
   const acc = new Map<string, TopClient>();
@@ -740,6 +758,7 @@ export async function getMapData(
   filters: MapFilters = {},
 ): Promise<MapCountryDatum[]> {
   const supabase = await createClient();
+  const mapOrgIds = await scopeOrgIds();
   const year = filters.year ?? currentYear();
   // Si hay filtro de meses, precomputamos la UNIÓN de semanas ISO que
   // caen en cualquiera de ellos. null/empty = sin filtro de mes (año
@@ -788,6 +807,7 @@ export async function getMapData(
     .is("deleted_at", null);
 
   if (filters.organizationId) contractsQ = contractsQ.eq("organization_id", filters.organizationId);
+  if (mapOrgIds) contractsQ = contractsQ.in("organization_id", mapOrgIds);
   if (filters.contractStatuses && filters.contractStatuses.length > 0) {
     contractsQ = contractsQ.in("status", filters.contractStatuses);
   }
@@ -865,6 +885,7 @@ export async function getMapData(
       .is("deleted_at", null);
 
     if (filters.organizationId) oppsQ = oppsQ.eq("organization_id", filters.organizationId);
+    if (mapOrgIds) oppsQ = oppsQ.in("organization_id", mapOrgIds);
 
     const oppsRes = await oppsQ;
     type OppRow = NonNullable<typeof oppsRes.data>[number];
@@ -953,6 +974,9 @@ export async function getCalendarEvents(
   if (filters.clientId) q = q.eq("client_id", filters.clientId);
   if (filters.varietyId) q = q.eq("variety_id", filters.varietyId);
   if (filters.organizationId) q = q.eq("organization_id", filters.organizationId);
+  // La vista calendar_events arrastra organization_id del contrato/oportunidad.
+  const calendarOrgIds = await scopeOrgIds();
+  if (calendarOrgIds) q = q.in("organization_id", calendarOrgIds);
   if (filters.minProbability != null && filters.minProbability > 0) {
     q = q.or(
       `probability_pct.gte.${filters.minProbability},and(source_type.eq.contract)`,
@@ -1409,6 +1433,17 @@ export async function getDashboardSummary(
   const months = params.months && params.months.length > 0 ? params.months : null;
   const supabase = await createClient();
 
+  const orgIds = await scopeOrgIds();
+  const statusQ = supabase.from("contracts").select("status").is("deleted_at", null);
+  const plantsQ = (deliveryYear: number) => {
+    const q = supabase
+      .from("contract_items")
+      .select("qty_plants, contracts!contract_items_contract_id_fkey!inner(organization_id)")
+      .eq("delivery_year", deliveryYear)
+      .is("deleted_at", null);
+    return orgIds ? q.in("contracts.organization_id", orgIds) : q;
+  };
+
   const [mapData, statusRes, currYearRes, nextYearRes] = await Promise.all([
     // Para el mapa: TODOS los contratos comprometidos (firmados + por firmar),
     // excluyendo solo los cancelados. Los KPIs muestran el desglose por
@@ -1418,20 +1453,9 @@ export async function getDashboardSummary(
       months,
       contractStatuses: [...STATUS_FIRMADOS, ...STATUS_POR_FIRMAR],
     }),
-    supabase
-      .from("contracts")
-      .select("status")
-      .is("deleted_at", null),
-    supabase
-      .from("contract_items")
-      .select("qty_plants")
-      .eq("delivery_year", year)
-      .is("deleted_at", null),
-    supabase
-      .from("contract_items")
-      .select("qty_plants")
-      .eq("delivery_year", year + 1)
-      .is("deleted_at", null),
+    orgIds ? statusQ.in("organization_id", orgIds) : statusQ,
+    plantsQ(year),
+    plantsQ(year + 1),
   ]);
 
   const statusRows = statusRes.data ?? [];
@@ -1504,7 +1528,8 @@ export async function getTopRankings(params: {
   })();
 
   // Traemos contratos con sus items + datos de cliente/país + programas.
-  const { data: contracts } = await supabase
+  const orgIds = await scopeOrgIds();
+  let contractsQ = supabase
     .from("contracts")
     .select(
       `id, total_neto_usd, status, client_id,
@@ -1519,6 +1544,8 @@ export async function getTopRankings(params: {
       "borrador",
       "por_revisar",
     ]);
+  if (orgIds) contractsQ = contractsQ.in("organization_id", orgIds);
+  const { data: contracts } = await contractsQ;
 
   type ClientRel = {
     id: string;

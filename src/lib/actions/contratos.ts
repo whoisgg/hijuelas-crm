@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 import { getFxRates } from "@/lib/actions/fx-rates";
 import type { Database, Json } from "@/lib/database.types";
 import type { ExportCompromisosRow } from "@/lib/export/compromisos";
@@ -91,6 +92,10 @@ export async function listContracts(filters: ContractListFilters = {}) {
 
   if (filters.status) q = q.eq("status", filters.status);
   if (filters.organizationId) q = q.eq("organization_id", filters.organizationId);
+  // Alcance por país de operación (ver lib/scope): acota a las sociedades del
+  // país elegido. Se aplica ADEMÁS del filtro de empresa vendedora.
+  const orgIds = await scopeOrgIds();
+  if (orgIds) q = q.in("organization_id", orgIds);
   if (filters.clientId) q = q.eq("client_id", filters.clientId);
   if (filters.currency) q = q.eq("currency", filters.currency);
   if (filters.year) {

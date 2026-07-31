@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getAccessProfile } from "@/lib/access";
+import { getDataScope } from "@/lib/scope";
 import type { ModuleAccessInfo } from "@/lib/constants";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
@@ -28,9 +29,18 @@ export default async function AppLayout({
     modules: profile.modules,
   };
 
+  // Alcance por país de operación — el switcher vive en el topbar y el filtro
+  // se aplica en el servidor (ver lib/scope).
+  const scope = await getDataScope();
+
   return (
     <div className="min-h-screen bg-background">
-      <Topbar userEmail={profile.email} access={access} />
+      <Topbar
+        userEmail={profile.email}
+        access={access}
+        scopeCountries={scope.countries.map((c) => ({ iso2: c.iso2, name: c.name }))}
+        activeScope={scope.country?.iso2 ?? null}
+      />
       <Sidebar access={access} />
       <BottomNav access={access} />
       {/* Desktop: padding-left para sidebar (w-14). Mobile: padding-bottom

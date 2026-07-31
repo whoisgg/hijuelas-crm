@@ -25,15 +25,25 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { AppLauncher } from "./app-launcher";
 import { GlobalSearch } from "./global-search";
+import { ScopeSwitcher, type ScopeOption } from "./scope-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 type TopbarProps = {
   userEmail: string | null;
   access?: ModuleAccessInfo | null;
+  /** países donde el grupo opera, para el selector de alcance */
+  scopeCountries?: ScopeOption[];
+  /** iso2 del país activo; null = consolidado */
+  activeScope?: string | null;
 };
 
-export function Topbar({ userEmail, access = null }: TopbarProps) {
+export function Topbar({
+  userEmail,
+  access = null,
+  scopeCountries = [],
+  activeScope = null,
+}: TopbarProps) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
 
@@ -46,6 +56,11 @@ export function Topbar({ userEmail, access = null }: TopbarProps) {
   // El logo lleva al home del módulo activo; el switcher cambia de módulo.
   const homeHref = activeApp?.href ?? "/apps";
   const showQuickCreate = activeModule === "comercial";
+  // El alcance por país aplica donde hay dato de país de operación: hoy el CRM
+  // (via la sociedad vendedora). Planner y Bodega todavía no cuelgan de un
+  // sitio con país, así que el selector no se muestra ahí — mejor ausente que
+  // presente y sin efecto.
+  const showScope = activeModule === "comercial";
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
@@ -114,6 +129,10 @@ export function Topbar({ userEmail, access = null }: TopbarProps) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      ) : null}
+
+      {showScope ? (
+        <ScopeSwitcher countries={scopeCountries} active={activeScope} />
       ) : null}
 
       <Button

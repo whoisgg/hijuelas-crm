@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 import type { Database, Json } from "@/lib/database.types";
 
 type CurrencyCode = Database["public"]["Enums"]["currency_code"];
@@ -147,6 +148,9 @@ export async function listOpportunities(input: {
   if (filters.ownerId) query = query.eq("owner_id", filters.ownerId);
   if (filters.organizationId)
     query = query.eq("organization_id", filters.organizationId);
+  // Alcance por país de operación (ver lib/scope).
+  const orgIds = await scopeOrgIds();
+  if (orgIds) query = query.in("organization_id", orgIds);
   if (filters.stageId) query = query.eq("stage_id", filters.stageId);
   if (typeof filters.minValue === "number")
     query = query.gte("estimated_value_usd", filters.minValue);
