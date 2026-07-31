@@ -114,9 +114,14 @@ export function Topbar({
           className={cn(
             buttonVariants({ size: "sm" }),
             "gap-1",
+            // Mobile: alto táctil y algo más de ancho — sobra espacio desde
+            // que la búsqueda salió de la barra. Se usa max-md (override sobre
+            // la base) y no md: así la variante siempre pisa al tamaño del
+            // design system, sin depender del orden de las utilidades.
+            "max-md:h-11 max-md:px-4",
           )}
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 max-md:h-5 max-md:w-5" />
           <span className="hidden sm:inline">Nuevo</span>
           <ChevronDown className="h-3 w-3 opacity-70" />
         </DropdownMenuTrigger>
@@ -167,10 +172,11 @@ export function Topbar({
           aria-label="Menú de usuario"
           className={cn(
             buttonVariants({ variant: "ghost", size: "icon" }),
+            "max-md:size-11",
           )}
         >
-          <Avatar className="h-7 w-7">
-            <AvatarFallback className="text-xs">{initial}</AvatarFallback>
+          <Avatar className="h-7 w-7 max-md:h-9 max-md:w-9">
+            <AvatarFallback className="text-xs max-md:text-sm">{initial}</AvatarFallback>
           </Avatar>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

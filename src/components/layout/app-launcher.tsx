@@ -37,10 +37,17 @@ export function AppLauncher({ access = null }: { access?: ModuleAccessInfo | nul
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
+      {/* Mobile: 44px de área táctil (mínimo de Apple); el size-8 del design
+          system es para puntero, no para el dedo. */}
       <DialogTrigger
         render={
-          <Button variant="ghost" size="icon" aria-label="Cambiar de módulo">
-            <LayoutGrid className="h-4 w-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Cambiar de módulo"
+            className="max-md:size-11"
+          >
+            <LayoutGrid className="h-4 w-4 max-md:h-5 max-md:w-5" />
           </Button>
         }
       />

@@ -56,13 +56,15 @@ export function ScopeSwitcher({
         className={cn(
           buttonVariants({ variant: "ghost", size: "sm" }),
           "gap-1.5 px-2",
+          // Mobile: 44px de alto y más ancho, igual que el resto de la barra.
+          "max-md:h-11 max-md:px-3",
           pending && "opacity-60",
         )}
       >
         {current ? (
           <CountryFlag iso2={current.iso2} name={current.name} showName={false} size="sm" />
         ) : (
-          <Globe className="h-4 w-4 text-muted-foreground" />
+          <Globe className="h-4 w-4 text-muted-foreground max-md:h-5 max-md:w-5" />
         )}
         <span className="hidden text-sm sm:inline">{current?.name ?? "Grupo"}</span>
         <ChevronDown className="h-3 w-3 opacity-70" />
