@@ -38,6 +38,14 @@ import {
   moveScenarioLotPortion,
   pinLotToLocation,
 } from "@/lib/actions/planner-scenarios";
+import {
+  SEAT_GAP,
+  seatColsFor,
+  seatPadFor,
+  seatRowsFor,
+  seatWidthCss,
+  targetAspectFor,
+} from "@/lib/planner/seat-grid";
 import type {
   FillPart,
   SectorLotChip,
@@ -46,7 +54,7 @@ import type {
 
 /**
  * Mesa de trabajo del sector, vista "estadio" única (realidad + plan):
- * cada mesón se expande a sus bandejas ("sillas") sobre la capacidad física.
+ * cada mesón se expande a sus bandejas ("sillas") sobre su cuota de plan.
  * Verde = ocupado hoy, ámbar = el plan lo agrega la semana seleccionada,
  * gris = vacío. Una marca vertical señala la cuota de planificación del
  * mesón. El checkbox "salen esta semana" pinta de violeta las bandejas que hoy
@@ -65,6 +73,42 @@ const SEAT_SELECTED = "#185FA5";
 // Violeta para "sale esta semana": distinto del azul de hover/selección y del
 // rojo (reservado a "sin espacio").
 const SEAT_LEAVE = "#8b5cf6";
+
+/** Tope de sillas dibujadas por mesón: por encima, cada silla agrupa varias
+ *  bandejas (`perCell`) en vez de reventar el DOM. */
+const SEAT_MAX = 320;
+
+type LayoutLoc = SectorWorkspaceData["layout"]["modules"][number]["locations"][number];
+
+/**
+ * Capacidad que dibuja la grilla del mesón: la CUOTA DE PLAN, no la capacidad
+ * física. El área reparte su capacidad de planificación entre sus mesones (ver
+ * layout-data) y esa cuota es la que manda en todo lo operativo — `freeOf`, el
+ * drop de un lote y la timeline miden contra ella. Dibujar la capacidad física
+ * dejaba una cola gris permanente (21% del mesón en Góticos) que se leía como
+ * espacio libre pero rechazaba cualquier lote.
+ *
+ * Si hoy hay MÁS material del que la cuota permite, la grilla se estira hasta
+ * lo real: esconder bandejas que están físicamente ahí sería peor.
+ */
+const gridCapOf = (
+  loc: Pick<LayoutLoc, "capacityTrays" | "planCapacityTrays" | "trays">,
+) => Math.max(loc.planCapacityTrays || loc.capacityTrays || 0, loc.trays);
+const perCellOf = (gridCap: number) =>
+  gridCap > SEAT_MAX ? Math.ceil(gridCap / SEAT_MAX) : 1;
+const seatCountOf = (
+  loc: Pick<LayoutLoc, "capacityTrays" | "planCapacityTrays" | "trays">,
+) => {
+  const cap = gridCapOf(loc);
+  return Math.max(1, Math.round(cap / perCellOf(cap)));
+};
+
+/** Sillas que ocupan `trays` bandejas: cualquier cantidad > 0 pinta al menos
+ *  una silla, aunque no alcance a llenarla. Con mesones grandes (una silla =
+ *  hasta 44 bandejas) el redondeo hacia abajo hacía desaparecer del plano los
+ *  lotes chicos. */
+const seatsOf = (trays: number, perCell: number) =>
+  trays > 0 ? Math.max(1, Math.round(trays / perCell)) : 0;
 
 const lotKey = (lotId: number | null, stage: string | null) =>
   lotId !== null && stage ? `${lotId}:${stage}` : null;
@@ -820,6 +864,17 @@ export function SectorWorkspace({
             ] as string[];
             const hasGeom =
               sides.length > 0 && m.locations.every((l) => l.side && l.rowNum !== null);
+            // Geometría del estadio, decidida a nivel MÓDULO: mismas filas y
+            // mismo ancho de silla para todos sus mesones, así el plano cierra
+            // rectángulos parejos en vez de bloques con la última fila mocha.
+            const seatCounts = m.locations.map(seatCountOf);
+            const seatRows = seatRowsFor(
+              seatCounts,
+              targetAspectFor(hasGeom ? sides.length : 8),
+            );
+            const seatMaxCols = Math.max(
+              ...seatCounts.map((n) => seatColsFor(n, seatRows)),
+            );
             const cells = hasGeom
               ? [...new Set(m.locations.map((l) => l.rowNum))]
                   .sort((a, b) => (a ?? 0) - (b ?? 0))
@@ -832,6 +887,8 @@ export function SectorWorkspace({
                         <MesonCell
                           key={loc.id}
                           loc={loc}
+                          seatRows={seatRows}
+                          seatMaxCols={seatMaxCols}
                           fill={data.fill[loc.id]}
                           week={data.week}
                           soloHoy={soloHoy}
@@ -855,6 +912,8 @@ export function SectorWorkspace({
                   <MesonCell
                     key={loc.id}
                     loc={loc}
+                    seatRows={seatRows}
+                    seatMaxCols={seatMaxCols}
                     fill={data.fill[loc.id]}
                     week={data.week}
                     soloHoy={soloHoy}
@@ -1208,6 +1267,8 @@ export function SectorWorkspace({
 
 function MesonCell({
   loc,
+  seatRows,
+  seatMaxCols,
   fill,
   week,
   soloHoy,
@@ -1222,7 +1283,11 @@ function MesonCell({
   onSelect,
   leaveSlots,
 }: {
-  loc: SectorWorkspaceData["layout"]["modules"][number]["locations"][number];
+  loc: LayoutLoc;
+  /** filas del estadio, iguales para todo el módulo */
+  seatRows: number;
+  /** columnas del mesón más grande del módulo: fija el ancho de silla */
+  seatMaxCols: number;
   fill?: { trays: number; parts: FillPart[] };
   /** semana-campaña que se está mirando: decide qué lotes ya "llegaron" */
   week: number;
@@ -1248,8 +1313,9 @@ function MesonCell({
   const { setNodeRef, isOver } = useDroppable({ id: `loc:${loc.id}` });
   const planCap = loc.planCapacityTrays ?? 0;
   const physCap = loc.capacityTrays ?? planCap;
-  // La grilla es la capacidad física; la cuota de plan queda marcada dentro.
-  const gridCap = Math.max(physCap, planCap);
+  // La grilla es la cuota de plan (ver gridCapOf): mesón lleno = rectángulo
+  // lleno, sin cola de capacidad física que el plan nunca puede usar.
+  const gridCap = gridCapOf(loc);
   const planTrays = fill?.trays ?? 0;
   const realTrays = loc.trays;
   // Diff por totales de mesón: la proyección FIFO no sabe qué lote real es cuál.
@@ -1269,16 +1335,17 @@ function MesonCell({
   const quotaFull = planCap > 0 && planTrays >= planCap;
 
   // Sillas: una por bandeja (escaladas si el mesón es grande).
-  const perCell = gridCap > 320 ? Math.ceil(gridCap / 320) : 1;
+  const perCell = perCellOf(gridCap);
   const totalSeats = Math.max(1, Math.round(gridCap / perCell));
-  const quotaSeat =
-    !soloHoy && planCap > 0 && planCap < gridCap ? Math.round(planCap / perCell) : -1;
+  // Rectángulo del mesón: columnas propias, relleno para cerrar la última fila.
+  const seatCols = seatColsFor(totalSeats, seatRows);
+  const seatPad = seatPadFor(totalSeats, seatRows);
 
   type Seat = { part: FillPart | null; kind: "stay" | "enter" | "leave" | "empty" };
   let seats: Seat[] = [];
   if (soloHoy) {
     for (const s of loc.species) {
-      const n = Math.round(s.trays / perCell);
+      const n = seatsOf(s.trays, perCell);
       const label = s.variety ? `${s.name} ${s.variety}` : s.name;
       for (let i = 0; i < n; i++)
         seats.push({
@@ -1303,7 +1370,7 @@ function MesonCell({
     const stayPartSeats: Seat[] = [];
     const enterPartSeats: Seat[] = [];
     for (const p of parts) {
-      const n = Math.round(p.trays / perCell);
+      const n = seatsOf(p.trays, perCell);
       const kind: "stay" | "enter" = p.arrivalWeek < week ? "stay" : "enter";
       const bucket = kind === "stay" ? stayPartSeats : enterPartSeats;
       for (let i = 0; i < n; i++) bucket.push({ part: p, kind });
@@ -1311,7 +1378,7 @@ function MesonCell({
     // Verde contiguo = ocupación de hoy: primero lo que permanece, luego lo
     // que sale (violeta), y al final lo que el plan agrega (ámbar).
     const leaveSeats: Seat[] = [];
-    for (let i = 0; i < Math.round(leave / perCell); i++)
+    for (let i = 0; i < seatsOf(leave, perCell); i++)
       leaveSeats.push({ part: null, kind: "leave" });
     seats = [...stayPartSeats, ...leaveSeats, ...enterPartSeats];
   }
@@ -1325,7 +1392,7 @@ function MesonCell({
   // a "material con identidad propia" cuando no hay candidato alguno.
   const leaveEntrySeq: LeaveSlot[] = [];
   for (const sl of leaveSlots) {
-    const n = Math.round(sl.trays / perCell);
+    const n = seatsOf(sl.trays, perCell);
     for (let i = 0; i < n; i++) leaveEntrySeq.push(sl);
   }
   let leaveIdx = 0;
@@ -1438,13 +1505,18 @@ function MesonCell({
         <span className="font-medium">{loc.code}</span>
         <span
           className="text-muted-foreground"
-          title={
+          title={[
             soloHoy
-              ? "ocupación real vs capacidad física"
+              ? "ocupación real vs cuota de plan del mesón"
               : marcarSalen && leave > 0
-                ? "hoy → con lo que entra según plan → tras las salidas de la semana, sobre la capacidad física"
-                : "hoy → plan de la semana, ambos sobre la capacidad física"
-          }
+                ? "hoy → con lo que entra según plan → tras las salidas de la semana, sobre la cuota de plan"
+                : "hoy → plan de la semana, ambos sobre la cuota de plan",
+            planCap && physCap && planCap !== physCap
+              ? `cuota: ${planCap.toLocaleString("es-CL")} de ${physCap.toLocaleString("es-CL")} bandejas físicas`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         >
           {!gridCap ? (
             soloHoy ? (
@@ -1475,53 +1547,63 @@ function MesonCell({
         </span>
       </button>
       {expanded ? (
-        <div className="flex flex-wrap items-center gap-[2px]">
+        // Rectángulo cerrado: columnas fijas (no flex-wrap, que dejaba la
+        // última fila mocha) y ancho de silla compartido por el módulo.
+        <div
+          className="grid"
+          style={{
+            gap: `${SEAT_GAP}px`,
+            gridTemplateColumns: `repeat(${seatCols}, ${seatWidthCss(seatMaxCols)})`,
+          }}
+        >
           {seats.map((s, i) => {
             const key = seatKey(s, i);
             return (
-              <React.Fragment key={i}>
-                {i === quotaSeat ? (
-                  <span
-                    title={`cuota de plan: ${planCap.toLocaleString("es-CL")} bandejas`}
-                    className="h-3 w-[2px] rounded-full bg-foreground/40"
-                  />
-                ) : null}
-                <span
-                  onMouseEnter={() => {
-                    onHover(key);
-                    if (mostrarEdad) onAgeHover(seatAge(s, i));
-                  }}
-                  onMouseLeave={() => onHover(null)}
-                  onClick={() => {
-                    if (key && !s.part?.sim) onSelect(key);
-                    if (mostrarEdad) onAgeHover(seatAge(s, i));
-                  }}
-                  title={
-                    mostrarEdad
-                      ? undefined
-                      : s.kind === "leave"
-                        ? (() => {
-                            const e = seatLeaveEntry[i];
-                            const real = e
-                              ? `${e.name}${e.variety ? ` ${e.variety}` : " (sin variedad)"}`
-                              : "ocupado hoy";
-                            return e?.chip
-                              ? `${e.chip.label} · asignación automática (real: ${real})`
-                              : `${real} · material real sin lote llegado en el plan`;
-                          })()
-                        : s.part?.sim
-                          ? `${s.part.label} · simulación`
-                          : (s.part?.label ?? "vacío")
-                  }
-                  className={cn(
-                    "h-3 w-3 rounded-[2px] transition-colors",
-                    (mostrarEdad || key) && "cursor-pointer",
-                  )}
-                  style={seatStyle(s, i)}
-                />
-              </React.Fragment>
+              <span
+                key={i}
+                onMouseEnter={() => {
+                  onHover(key);
+                  if (mostrarEdad) onAgeHover(seatAge(s, i));
+                }}
+                onMouseLeave={() => onHover(null)}
+                onClick={() => {
+                  if (key && !s.part?.sim) onSelect(key);
+                  if (mostrarEdad) onAgeHover(seatAge(s, i));
+                }}
+                title={
+                  mostrarEdad
+                    ? undefined
+                    : s.kind === "leave"
+                      ? (() => {
+                          const e = seatLeaveEntry[i];
+                          const real = e
+                            ? `${e.name}${e.variety ? ` ${e.variety}` : " (sin variedad)"}`
+                            : "ocupado hoy";
+                          return e?.chip
+                            ? `${e.chip.label} · asignación automática (real: ${real})`
+                            : `${real} · material real sin lote llegado en el plan`;
+                        })()
+                      : s.part?.sim
+                        ? `${s.part.label} · simulación`
+                        : (s.part?.label ?? "vacío")
+                }
+                className={cn(
+                  "aspect-square rounded-[2px] transition-colors",
+                  (mostrarEdad || key) && "cursor-pointer",
+                )}
+                style={seatStyle(s, i)}
+              />
             );
           })}
+          {/* Celdas sin capacidad: cierran la última fila cuando la cuota no
+              es múltiplo de las filas del módulo (a lo más filas-1). */}
+          {Array.from({ length: seatPad }, (_, i) => (
+            <span
+              key={`pad-${i}`}
+              title="sin capacidad"
+              className="aspect-square rounded-[2px] bg-foreground/[0.07]"
+            />
+          ))}
         </div>
       ) : (
         <div className="flex h-3.5 overflow-hidden rounded-sm">

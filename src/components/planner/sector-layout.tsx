@@ -13,6 +13,14 @@ import {
 } from "@/components/ui/sheet";
 import { RedistributeButton } from "@/components/planner/redistribute-button";
 import type { SectorLayoutData } from "@/lib/planner/layout-data";
+import {
+  SEAT_GAP,
+  seatColsFor,
+  seatPadFor,
+  seatRowsFor,
+  seatWidthCss,
+  targetAspectFor,
+} from "@/lib/planner/seat-grid";
 
 /**
  * Plano del sector.
@@ -60,10 +68,17 @@ function seatColor(
   return SEAT_FULL;
 }
 
+/** Escala para no dibujar miles de celdas en mesones grandes. */
+const perCellOf = (capacity: number) => (capacity > 320 ? Math.ceil(capacity / 320) : 1);
+const seatCountOf = (capacity: number) =>
+  Math.max(1, Math.round(capacity / perCellOf(capacity)));
+
 /** Barra de asientos de un mesón: cada bandeja es una silla. */
 function SeatGrid({
   capacity,
   parts,
+  rows,
+  maxCols,
   hovered,
   selected,
   onHover,
@@ -71,33 +86,52 @@ function SeatGrid({
 }: {
   capacity: number;
   parts: CellPart[];
+  /** filas del estadio, iguales para todo el módulo */
+  rows: number;
+  /** columnas del mesón más grande del módulo: fija el ancho de silla */
+  maxCols: number;
   hovered: string | null;
   selected: string | null;
   onHover: (label: string | null) => void;
   onSelect: (label: string) => void;
 }) {
-  // Escala para no dibujar miles de celdas en mesones grandes.
-  const perCell = capacity > 320 ? Math.ceil(capacity / 320) : 1;
+  const perCell = perCellOf(capacity);
   const seats: (string | null)[] = [];
   for (const p of parts) {
     const n = Math.round(p.trays / perCell);
     for (let i = 0; i < n; i++) seats.push(p.label);
   }
-  const total = Math.round(capacity / perCell);
+  const total = seatCountOf(capacity);
   while (seats.length < total) seats.push(null);
+  const cols = seatColsFor(total, rows);
+  const pad = seatPadFor(total, rows);
 
   return (
     <div>
-      <div className="flex flex-wrap gap-[2px]">
-        {seats.map((label, i) => (
+      {/* Rectángulo cerrado (ver lib/planner/seat-grid). */}
+      <div
+        className="grid"
+        style={{
+          gap: `${SEAT_GAP}px`,
+          gridTemplateColumns: `repeat(${cols}, ${seatWidthCss(maxCols)})`,
+        }}
+      >
+        {seats.slice(0, total).map((label, i) => (
           <span
             key={i}
             onMouseEnter={() => onHover(label)}
             onMouseLeave={() => onHover(null)}
             onClick={() => label && onSelect(label)}
             title={label ?? "vacío"}
-            className={cn("h-3 w-3 rounded-[2px] transition-colors", label && "cursor-pointer")}
+            className={cn("aspect-square rounded-[2px] transition-colors", label && "cursor-pointer")}
             style={{ backgroundColor: seatColor(label, hovered, selected) }}
+          />
+        ))}
+        {Array.from({ length: pad }, (_, i) => (
+          <span
+            key={`pad-${i}`}
+            title="sin capacidad"
+            className="aspect-square rounded-[2px] bg-foreground/[0.07]"
           />
         ))}
       </div>
@@ -114,6 +148,8 @@ function PlanMeson({
   trays,
   capacity,
   parts,
+  seatRows,
+  seatMaxCols,
   expanded,
   hovered,
   selected,
@@ -125,6 +161,8 @@ function PlanMeson({
   trays: number;
   capacity: number | null;
   parts: CellPart[];
+  seatRows: number;
+  seatMaxCols: number;
   expanded: boolean;
   hovered: string | null;
   selected: string | null;
@@ -157,6 +195,8 @@ function PlanMeson({
         <SeatGrid
           capacity={cap}
           parts={parts}
+          rows={seatRows}
+          maxCols={seatMaxCols}
           hovered={hovered}
           selected={selected}
           onHover={onHover}
@@ -271,6 +311,7 @@ export function SectorLayout({
 
   const renderCell = (
     loc: SectorLayoutData["modules"][number]["locations"][number],
+    geom: { rows: number; maxCols: number },
   ) => {
     const { trays, parts, capacity } = cellData(loc);
     // Mismo estadio para Proyección y Hoy; en Hoy (real) es sólo lectura.
@@ -281,6 +322,8 @@ export function SectorLayout({
         trays={trays}
         capacity={capacity}
         parts={parts}
+        seatRows={geom.rows}
+        seatMaxCols={geom.maxCols}
         expanded={expanded.has(loc.id)}
         hovered={hovered}
         selected={variant === "plan" ? selectedLabel : null}
@@ -314,6 +357,16 @@ export function SectorLayout({
         const sides = [...new Set(m.locations.map((l) => l.side).filter(Boolean))] as string[];
         const hasGeometry =
           sides.length > 0 && m.locations.every((l) => l.side && l.rowNum !== null);
+        // Geometría del estadio a nivel módulo (ver lib/planner/seat-grid).
+        const seatCounts = m.locations.map((l) => seatCountOf(cellData(l).capacity ?? 0));
+        const rows = seatRowsFor(
+          seatCounts,
+          targetAspectFor(hasGeometry ? sides.length : 8),
+        );
+        const geom = {
+          rows,
+          maxCols: Math.max(...seatCounts.map((n) => seatColsFor(n, rows))),
+        };
         return (
           <section key={m.id}>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">{m.name}</h3>
@@ -330,13 +383,13 @@ export function SectorLayout({
                         (l) => l.side === side && l.rowNum === row,
                       );
                       if (!loc) return <div key={`${side}${row}`} className="h-11" />;
-                      return renderCell(loc);
+                      return renderCell(loc, geom);
                     }),
                   )}
               </div>
             ) : (
               <div className="grid grid-cols-4 items-start gap-1.5 sm:grid-cols-6 md:grid-cols-8">
-                {m.locations.map((loc) => renderCell(loc))}
+                {m.locations.map((loc) => renderCell(loc, geom))}
               </div>
             )}
           </section>

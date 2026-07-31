@@ -44,6 +44,10 @@ export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: num
   // efecto de polígonos depende de esto para volver a correr cuando el
   // import async de Leaflet termine, algo que un ref solo no dispara.
   const [ready, setReady] = React.useState(false);
+  // El encuadre se hace UNA vez, con la geometría ya dibujada: si se
+  // reajustara en cada cambio de ocupación, el mapa saltaría solo mientras el
+  // usuario navega.
+  const fittedRef = React.useRef(false);
 
   // Mapa base: se crea UNA vez. La capa satelital de Esri no cambia con los
   // datos, separarla evita recrear los tiles cada vez que cambia ocupación.
@@ -66,8 +70,6 @@ export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: num
         maxZoom: 21,
         maxNativeZoom: 19,
       }).addTo(map);
-      const bounds = L.latLngBounds(toLatLng([...HARDENING]) as unknown as [number, number][]);
-      map.fitBounds(bounds, { padding: [24, 24] });
       layerGroupRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       setReady(true);
@@ -77,6 +79,7 @@ export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: num
       map?.remove();
       mapRef.current = null;
       layerGroupRef.current = null;
+      fittedRef.current = false;
       setReady(false);
     };
   }, []);
@@ -116,6 +119,23 @@ export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: num
         polygon.on("click", () => router.push(`/planner/sector/${a.id}`));
         polygon.addTo(layerGroupRef.current!);
       }
+
+      // Encuadre sobre TODO lo dibujado (Hardening + sectores): antes se
+      // ajustaba sólo al polígono Hardening, así que cualquier sector fuera de
+      // él quedaba cortado y el sitio se veía más chico de lo necesario.
+      if (!fittedRef.current && mapRef.current) {
+        const rings = [HARDENING, ...areas.map((a) => a.geometry).filter(Boolean)];
+        const bounds = L.latLngBounds(
+          rings.flatMap((r) => toLatLng(r as [number, number][])) as unknown as [
+            number,
+            number,
+          ][],
+        );
+        if (bounds.isValid()) {
+          mapRef.current.fitBounds(bounds, { padding: [16, 16] });
+          fittedRef.current = true;
+        }
+      }
     });
     return () => {
       cancelled = true;
@@ -124,9 +144,11 @@ export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: num
 
   return (
     <div className="space-y-3">
+      {/* Alto por viewport: el mapa es el contenido de la página, quedarse en
+          460px fijos dejaba media pantalla en blanco. */}
       <div
         ref={containerRef}
-        className="h-[460px] w-full overflow-hidden rounded-lg border bg-card [&_.leaflet-tooltip.site-map-label]:border-none [&_.leaflet-tooltip.site-map-label]:bg-transparent [&_.leaflet-tooltip.site-map-label]:text-white [&_.leaflet-tooltip.site-map-label]:shadow-none"
+        className="h-[clamp(420px,calc(100vh-15rem),1000px)] w-full overflow-hidden rounded-lg border bg-card [&_.leaflet-tooltip.site-map-label]:border-none [&_.leaflet-tooltip.site-map-label]:bg-transparent [&_.leaflet-tooltip.site-map-label]:text-white [&_.leaflet-tooltip.site-map-label]:shadow-none"
       />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         {HEAT_LEGEND.map((l) => (
