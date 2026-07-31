@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 
 export type ForecastClientRow = {
   client_id: string;
@@ -87,6 +88,9 @@ export async function getForecastByMonth(params: {
     p_country_id: params.country_id ?? null,
     p_kam_id: params.kam_id ?? null,
     p_organization_id: params.organization_id ?? null,
+    // Alcance por país: conjunto de sociedades, distinto de p_organization_id
+    // (un solo id) y de p_country_id (país del CLIENTE, no de la operación).
+    p_org_ids: await scopeOrgIds(),
     p_include_opportunities: params.include_opportunities ?? false,
     p_from_month: params.from_month ?? 1,
   };
@@ -156,6 +160,8 @@ export async function getForecastContractsAnticipos(params: {
     p_country_id: params.country_id ?? null,
     p_kam_id: params.kam_id ?? null,
     p_organization_id: params.organization_id ?? null,
+    // Alcance por país (ver lib/scope) — mismo criterio que el forecast mensual.
+    p_org_ids: await scopeOrgIds(),
     p_from_month: params.from_month ?? 1,
   };
   if (params.status_in && params.status_in.length > 0) {
@@ -179,12 +185,17 @@ export async function listOrganizationsForForecast(): Promise<
   { id: string; name: string; prefix: string | null }[]
 > {
   const supabase = await createClient();
-  const res = await supabase
+  // El filtro de empresa vendedora solo ofrece las del alcance: elegir una de
+  // otro país daría cero filas sin explicar por qué.
+  const orgIds = await scopeOrgIds();
+  let q = supabase
     .from("organizations")
     .select("id, name, contract_prefix")
     .is("deleted_at", null)
     .eq("active", true)
     .order("name");
+  if (orgIds) q = q.in("id", orgIds);
+  const res = await q;
   if (res.error) throw new Error(res.error.message);
   return (res.data ?? []).map((o) => ({
     id: o.id,
