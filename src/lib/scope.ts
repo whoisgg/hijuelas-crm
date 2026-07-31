@@ -96,7 +96,15 @@ export const getDataScope = cache(async (): Promise<DataScope> => {
   };
 });
 
-/** Sociedades del scope, o null si es consolidado. */
+/** Sociedades del scope, o null si es consolidado. Para el CRM, que cuelga de
+ *  `contracts.organization_id` / `opportunities.organization_id`. */
 export async function scopeOrgIds(): Promise<string[] | null> {
   return (await getDataScope()).orgIds;
+}
+
+/** País del scope, o null si es consolidado. Para los módulos operativos, que
+ *  cuelgan del país directo (`planner_areas.country_id`,
+ *  `bodega_bodegas.country_id`) y no de una sociedad vendedora. */
+export async function scopeCountryId(): Promise<string | null> {
+  return (await getDataScope()).country?.id ?? null;
 }

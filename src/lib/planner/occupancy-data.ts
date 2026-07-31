@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
 import { computeOccupancy, occupancyRows } from "@/lib/planner/capacity";
+import { scopeCountryId } from "@/lib/scope";
 
 /**
  * Arma los datos de la línea de tiempo de ocupación: áreas como columnas,
@@ -68,12 +69,18 @@ export async function getTimelineData(
         .limit(10000)
     : null;
 
+  // Alcance por país: los sectores cuelgan del país directo (ver lib/scope).
+  const countryId = await scopeCountryId();
+
   const [areasRes, lotsRes, paramsRes, calendarRes, addRes] = await Promise.all([
-    supabase
-      .from("planner_areas")
-      .select("id, name, stage, capacity_trays, priority, active")
-      .eq("active", true)
-      .order("priority"),
+    (() => {
+      const q = supabase
+        .from("planner_areas")
+        .select("id, name, stage, capacity_trays, priority, active")
+        .eq("active", true)
+        .order("priority");
+      return countryId ? q.eq("country_id", countryId) : q;
+    })(),
     lotsQuery,
     supabase.from("planner_parameters").select("key, value"),
     supabase

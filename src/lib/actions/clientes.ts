@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 import type { Database, Json } from "@/lib/database.types";
 import {
   DEFAULT_PAGE_SIZE,
@@ -96,25 +97,43 @@ export async function listAllClientsForCountryView(): Promise<
   }>
 > {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("clients")
-    .select(
-      `id, name, is_active,
-       country:countries ( id, iso2, name_es )`,
-    )
-    .is("deleted_at", null)
-    .order("name");
+  // Alcance por país: `clients` no tiene organization_id y su country_id es el
+  // país de DESTINO, no el de operación. Bajo este scope un cliente "es" del
+  // país si tiene al menos un contrato de una sociedad de ese país — de ahí el
+  // join !inner contra contracts (ver lib/scope).
+  const orgIds = await scopeOrgIds();
+  const { data, error } = orgIds
+    ? await supabase
+        .from("clients")
+        .select(
+          `id, name, is_active,
+           country:countries ( id, iso2, name_es ),
+           contracts!contracts_client_id_fkey!inner ( organization_id )`,
+        )
+        .is("deleted_at", null)
+        .in("contracts.organization_id", orgIds)
+        .order("name")
+    : await supabase
+        .from("clients")
+        .select(
+          `id, name, is_active,
+           country:countries ( id, iso2, name_es )`,
+        )
+        .is("deleted_at", null)
+        .order("name");
   if (error) throw new Error(error.message);
 
   const ids = (data ?? []).map((c) => c.id);
   const counts = new Map<string, number>();
   if (ids.length > 0) {
-    const { data: contracts } = await supabase
+    let contractsQ = supabase
       .from("contracts")
       .select("client_id, status")
       .is("deleted_at", null)
       .in("client_id", ids)
       .in("status", ["firmado", "en_proceso", "borrador", "por_revisar"]);
+    if (orgIds) contractsQ = contractsQ.in("organization_id", orgIds);
+    const { data: contracts } = await contractsQ;
     for (const c of contracts ?? []) {
       if (!c.client_id) continue;
       counts.set(c.client_id, (counts.get(c.client_id) ?? 0) + 1);
@@ -161,20 +180,41 @@ export async function listClients(
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  let query = supabase
-    .from("clients")
-    .select(
-      `
+  // Alcance por país: cliente con al menos un contrato de una sociedad del
+  // país elegido (ver lib/scope). El select debe ser literal para que el
+  // parser de tipos de Supabase infiera las columnas.
+  const scopeIds = await scopeOrgIds();
+  let query = scopeIds
+    ? supabase
+        .from("clients")
+        .select(
+          `
+        id, name, legal_name, tax_id, giro, region, notes, is_active, source,
+        created_at, updated_at,
+        country:countries ( id, name_es, iso2 ),
+        owner:app_users!clients_account_owner_id_fkey ( id, full_name, email ),
+        contracts!contracts_client_id_fkey!inner ( organization_id )
+      `,
+          { count: "exact" },
+        )
+        .is("deleted_at", null)
+        .in("contracts.organization_id", scopeIds)
+        .order("name", { ascending: true })
+        .range(from, to)
+    : supabase
+        .from("clients")
+        .select(
+          `
         id, name, legal_name, tax_id, giro, region, notes, is_active, source,
         created_at, updated_at,
         country:countries ( id, name_es, iso2 ),
         owner:app_users!clients_account_owner_id_fkey ( id, full_name, email )
       `,
-      { count: "exact" },
-    )
-    .is("deleted_at", null)
-    .order("name", { ascending: true })
-    .range(from, to);
+          { count: "exact" },
+        )
+        .is("deleted_at", null)
+        .order("name", { ascending: true })
+        .range(from, to);
 
   const search = params.search?.trim();
   if (search) {
@@ -201,12 +241,14 @@ export async function listClients(
   const lastActivityByClient: Record<string, string> = {};
 
   if (ids.length > 0) {
-    const { data: contracts } = await supabase
+    let activeQ = supabase
       .from("contracts")
       .select("client_id, status")
       .is("deleted_at", null)
       .in("client_id", ids)
       .in("status", ["firmado", "en_proceso"]);
+    if (scopeIds) activeQ = activeQ.in("organization_id", scopeIds);
+    const { data: contracts } = await activeQ;
 
     for (const c of contracts ?? []) {
       if (!c.client_id) continue;
@@ -283,6 +325,8 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
   }
   if (!client) return null;
 
+  const detailScope = await scopeOrgIds();
+
   const [
     { data: contacts },
     { data: addresses },
@@ -307,22 +351,30 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
       .eq("client_id", id)
       .is("deleted_at", null)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("contracts")
-      .select(
-        "id, number, status, total_neto, total_neto_usd, currency, signed_at, created_at",
-      )
-      .eq("client_id", id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("opportunities")
-      .select(
-        "id, name, stage_id, estimated_value, estimated_value_usd, expected_close_date, probability_pct, currency, created_at",
-      )
-      .eq("client_id", id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }),
+    // Ficha del cliente acotada al alcance: si la lista muestra 3 contratos de
+    // Perú, la ficha no puede mostrar 5 (ver lib/scope).
+    (() => {
+      const q = supabase
+        .from("contracts")
+        .select(
+          "id, number, status, total_neto, total_neto_usd, currency, signed_at, created_at",
+        )
+        .eq("client_id", id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      return detailScope ? q.in("organization_id", detailScope) : q;
+    })(),
+    (() => {
+      const q = supabase
+        .from("opportunities")
+        .select(
+          "id, name, stage_id, estimated_value, estimated_value_usd, expected_close_date, probability_pct, currency, created_at",
+        )
+        .eq("client_id", id)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      return detailScope ? q.in("organization_id", detailScope) : q;
+    })(),
     supabase
       .from("activity_log")
       .select("*")
@@ -330,16 +382,22 @@ export async function getClient(id: string): Promise<ClientDetail | null> {
       .eq("entity_id", id)
       .order("created_at", { ascending: false })
       .limit(20),
-    supabase
-      .from("contracts")
-      .select("id", { count: "exact", head: true })
-      .eq("client_id", id)
-      .is("deleted_at", null),
-    supabase
-      .from("opportunities")
-      .select("id", { count: "exact", head: true })
-      .eq("client_id", id)
-      .is("deleted_at", null),
+    (() => {
+      const q = supabase
+        .from("contracts")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", id)
+        .is("deleted_at", null);
+      return detailScope ? q.in("organization_id", detailScope) : q;
+    })(),
+    (() => {
+      const q = supabase
+        .from("opportunities")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", id)
+        .is("deleted_at", null);
+      return detailScope ? q.in("organization_id", detailScope) : q;
+    })(),
     supabase
       .from("client_contacts")
       .select("id", { count: "exact", head: true })

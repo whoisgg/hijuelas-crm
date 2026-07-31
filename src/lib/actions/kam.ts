@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeOrgIds } from "@/lib/scope";
 import {
   isInPeriod,
   resolveKamPeriod,
@@ -53,11 +54,15 @@ export async function listKAMs(
   const users = usersRes.data ?? [];
 
   // 2) Pull contracts with kam_id + their items
-  const contractsRes = await supabase
+  const orgIds = await scopeOrgIds();
+  let contractsQ = supabase
     .from("contracts")
     .select("id, kam_id, status, condition, total_neto_usd, signed_at, created_at, items:contract_items(qty_plants)")
     .is("deleted_at", null)
     .not("kam_id", "is", null);
+  // Alcance por país de operación (ver lib/scope).
+  if (orgIds) contractsQ = contractsQ.in("organization_id", orgIds);
+  const contractsRes = await contractsQ;
 
   if (contractsRes.error) throw new Error(contractsRes.error.message);
   type ItemLite = { qty_plants: number | string | null };
@@ -196,7 +201,8 @@ export async function getKAMDetail(
     .single();
   if (userRes.error) throw new Error(userRes.error.message);
 
-  const contractsRes = await supabase
+  const detailOrgIds = await scopeOrgIds();
+  let detailQ = supabase
     .from("contracts")
     .select(
       `id, number, status, condition, doc_type, signed_at, created_at, total_neto_usd,
@@ -213,6 +219,8 @@ export async function getKAMDetail(
     .eq("kam_id", id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
+  if (detailOrgIds) detailQ = detailQ.in("organization_id", detailOrgIds);
+  const contractsRes = await detailQ;
 
   if (contractsRes.error) throw new Error(contractsRes.error.message);
 

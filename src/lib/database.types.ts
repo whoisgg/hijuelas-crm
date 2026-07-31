@@ -173,6 +173,7 @@ export type Database = {
       bodega_bodegas: {
         Row: {
           activo: boolean
+          country_id: string | null
           created_at: string
           id: string
           nombre: string
@@ -180,6 +181,7 @@ export type Database = {
         }
         Insert: {
           activo?: boolean
+          country_id?: string | null
           created_at?: string
           id?: string
           nombre: string
@@ -187,12 +189,21 @@ export type Database = {
         }
         Update: {
           activo?: boolean
+          country_id?: string | null
           created_at?: string
           id?: string
           nombre?: string
           sucursal?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bodega_bodegas_country_id_fkey"
+            columns: ["country_id"]
+            isOneToOne: false
+            referencedRelation: "countries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       bodega_ingresos: {
         Row: {
@@ -2248,6 +2259,7 @@ export type Database = {
         Row: {
           active: boolean
           capacity_trays: number
+          country_id: string | null
           created_at: string
           geometry: Json | null
           id: number
@@ -2260,6 +2272,7 @@ export type Database = {
         Insert: {
           active?: boolean
           capacity_trays?: number
+          country_id?: string | null
           created_at?: string
           geometry?: Json | null
           id?: number
@@ -2272,6 +2285,7 @@ export type Database = {
         Update: {
           active?: boolean
           capacity_trays?: number
+          country_id?: string | null
           created_at?: string
           geometry?: Json | null
           id?: number
@@ -2281,7 +2295,15 @@ export type Database = {
           type?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "planner_areas_country_id_fkey"
+            columns: ["country_id"]
+            isOneToOne: false
+            referencedRelation: "countries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       planner_calendar_weeks: {
         Row: {

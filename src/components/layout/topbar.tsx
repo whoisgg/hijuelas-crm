@@ -56,11 +56,12 @@ export function Topbar({
   // El logo lleva al home del módulo activo; el switcher cambia de módulo.
   const homeHref = activeApp?.href ?? "/apps";
   const showQuickCreate = activeModule === "comercial";
-  // El alcance por país aplica donde hay dato de país de operación: hoy el CRM
-  // (via la sociedad vendedora). Planner y Bodega todavía no cuelgan de un
-  // sitio con país, así que el selector no se muestra ahí — mejor ausente que
-  // presente y sin efecto.
-  const showScope = activeModule === "comercial";
+  // El alcance por país se muestra donde el filtro REALMENTE corre: CRM (vía
+  // la sociedad vendedora) y Planner (vía planner_areas.country_id). Bodega
+  // queda fuera hasta que sus vistas de stock arrastren la bodega —
+  // bodega_stock_disponible agrega sobre todas—; un selector sin efecto miente
+  // más de lo que ayuda.
+  const showScope = activeModule === "comercial" || activeModule === "produccion";
 
   const handleSignOut = async () => {
     const { error } = await supabase.auth.signOut();
