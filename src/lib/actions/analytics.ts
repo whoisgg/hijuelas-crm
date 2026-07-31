@@ -1138,13 +1138,19 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
   if (!variety.data) return null;
 
   // Contract items por año (incluye country del cliente para topCountries)
-  const itemsRes = await supabase
+  // Alcance por país: el item cuelga del contrato, que es quien tiene la
+  // sociedad vendedora (ver lib/scope).
+  const catalogOrgIds = await scopeOrgIds();
+  const itemsQ = supabase
     .from("contract_items")
     .select(
-      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts(client_id, clients!contracts_client_id_fkey(id, name, country:countries(iso2, name_es)), total_neto_usd)",
+      "qty_plants, qty_delivered, delivery_year, unit_price, currency, contract_id, contracts!contract_items_contract_id_fkey!inner(organization_id, client_id, clients!contracts_client_id_fkey(id, name, country:countries(iso2, name_es)), total_neto_usd)",
     )
     .eq("variety_id", varietyId)
     .is("deleted_at", null);
+  const itemsRes = await (catalogOrgIds
+    ? itemsQ.in("contracts.organization_id", catalogOrgIds)
+    : itemsQ);
 
   type ItemRow = NonNullable<typeof itemsRes.data>[number];
   type CountryRel = { iso2: string | null; name_es: string };
@@ -1204,13 +1210,16 @@ export async function getCatalogStats(varietyId: string): Promise<CatalogStats |
   }
 
   // Pipeline ponderado
-  const oppItemsRes = await supabase
+  const oppItemsQ = supabase
     .from("opportunity_items")
     .select(
-      "qty_plants_est, expected_delivery_year, opportunities(probability_pct, opportunity_stages!opportunities_stage_id_fkey(is_won, is_lost))",
+      "qty_plants_est, expected_delivery_year, opportunities!opportunity_items_opportunity_id_fkey!inner(organization_id, probability_pct, opportunity_stages!opportunities_stage_id_fkey(is_won, is_lost))",
     )
     .eq("variety_id", varietyId)
     .is("deleted_at", null);
+  const oppItemsRes = await (catalogOrgIds
+    ? oppItemsQ.in("opportunities.organization_id", catalogOrgIds)
+    : oppItemsQ);
 
   type OppItemRow = NonNullable<typeof oppItemsRes.data>[number];
   type OppRel = {
@@ -1701,12 +1710,18 @@ export async function getCatalogOverview(): Promise<CatalogOverview> {
     supabase.from("varieties").select("id", { count: "exact", head: true }).is("deleted_at", null),
   ]);
 
-  // Items del año por variedad
-  const itemsRes = await supabase
+  // Items del año por variedad — acotados al alcance por país (ver lib/scope).
+  const overviewOrgIds = await scopeOrgIds();
+  const overviewQ = supabase
     .from("contract_items")
-    .select("qty_plants, delivery_year, variety_id, varieties(id, name, species(name))")
+    .select(
+      "qty_plants, delivery_year, variety_id, varieties(id, name, species(name)), contracts!contract_items_contract_id_fkey!inner(organization_id)",
+    )
     .eq("delivery_year", year)
     .is("deleted_at", null);
+  const itemsRes = await (overviewOrgIds
+    ? overviewQ.in("contracts.organization_id", overviewOrgIds)
+    : overviewQ);
 
   type ItemRow = NonNullable<typeof itemsRes.data>[number];
   type VarietyRel = {

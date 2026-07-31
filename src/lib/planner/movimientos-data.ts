@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
 import { getLotPlanHistory, type LotPlanChangeEvent } from "@/lib/planner/lot-plan-history";
+import { scopeCountryId } from "@/lib/scope";
 
 /**
  * Movimientos PLANIFICADOS del vivero: se derivan del plan vigente (no son el
@@ -99,6 +100,10 @@ const WEEK_TOLERANCE = 2;
 export async function getPlannedMovesData(
   supabase: SupabaseClient<Database>,
 ): Promise<PlannedMovesData | null> {
+  // Alcance por país: los sectores cuelgan del país y los lotes de los
+  // sectores, así que se acotan las áreas y luego los lotes que las usan.
+  const countryId = await scopeCountryId();
+
   const [lotsRes, areasRes, calendarRes, changesByLot] = await Promise.all([
     supabase
       .from("planner_lots")
@@ -107,7 +112,10 @@ export async function getPlannedMovesData(
       )
       .eq("status", "ACTIVO")
       .limit(10000),
-    supabase.from("planner_areas").select("id, name"),
+    (() => {
+      const q = supabase.from("planner_areas").select("id, name");
+      return countryId ? q.eq("country_id", countryId) : q;
+    })(),
     supabase
       .from("planner_calendar_weeks")
       .select("campaign_week, year, week, start_date, end_date")
@@ -115,10 +123,19 @@ export async function getPlannedMovesData(
     getLotPlanHistory(supabase),
   ]);
 
-  const lots = (lotsRes.data ?? []) as unknown as LotRow[];
-  if (!lots.length) return null;
-
   const areaName = new Map((areasRes.data ?? []).map((a) => [a.id, a.name]));
+
+  const allLots = (lotsRes.data ?? []) as unknown as LotRow[];
+  // Con alcance de país, solo los lotes que pasan por algún sector del país.
+  const lots = countryId
+    ? allLots.filter(
+        (l) =>
+          (l.rooting_area_id != null && areaName.has(l.rooting_area_id)) ||
+          (l.maturation_area_id != null && areaName.has(l.maturation_area_id)) ||
+          (l.predispatch_area_id != null && areaName.has(l.predispatch_area_id)),
+      )
+    : allLots;
+  if (!lots.length) return null;
   const calendar = (calendarRes.data ?? []).filter((c) => c.campaign_week !== null);
   const byCampaign = new Map(calendar.map((c) => [c.campaign_week as number, c]));
 

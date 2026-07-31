@@ -138,12 +138,21 @@ export async function getSectorPlanFill(
 export async function getSectorLayout(
   supabase: SupabaseClient<Database>,
   areaId: number,
+  /** Alcance por país: un sector fuera del alcance se comporta como
+   *  inexistente (la página hace notFound) en vez de abrirse por URL directa.
+   *  Llega como parámetro y no se lee acá: este módulo lo importa un
+   *  componente cliente (AGE_MAX_BUCKET), y tocar cookies lo arrastraría al
+   *  bundle del navegador. */
+  countryId: string | null = null,
 ): Promise<SectorLayoutData | null> {
-  const { data: area } = await supabase
+  const areaQ = supabase
     .from("planner_areas")
     .select("id, name, stage, capacity_trays")
-    .eq("id", areaId)
-    .maybeSingle();
+    .eq("id", areaId);
+  const { data: area } = await (countryId
+    ? areaQ.eq("country_id", countryId)
+    : areaQ
+  ).maybeSingle();
   if (!area) return null;
 
   const { data: modules } = await supabase

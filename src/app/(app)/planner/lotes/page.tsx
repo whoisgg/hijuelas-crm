@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeCountryId } from "@/lib/scope";
 import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
@@ -24,17 +25,22 @@ export default async function LotesPage() {
   }
 
   const today = new Date().toISOString().slice(0, 10);
-  const [{ data: lots }, programByVarietyId, { data: currentWeekRow }] = await Promise.all([
-    supabase
-      .from("planner_lots")
-      .select(
-        `id, lot_code, year, start_week, end_week, plants, trays, status, plant_code, plant_index, planner_species(name), planner_varieties(id, name),
+  // Alcance por país: el lote pertenece al país por su sector de enraizamiento
+  // (el primero de su recorrido) — ver lib/scope.
+  const countryId = await scopeCountryId();
+  const lotsQ = supabase
+    .from("planner_lots")
+    .select(
+      `id, lot_code, year, start_week, end_week, plants, trays, status, plant_code, plant_index, planner_species(name), planner_varieties(id, name),
         rooting_start_week, rooting_end_week, maturation_start_week, maturation_end_week, predispatch_start_week, predispatch_end_week,
-        rooting:planner_areas!planner_lots_rooting_area_id_fkey(name), maturation:planner_areas!planner_lots_maturation_area_id_fkey(name), predispatch:planner_areas!planner_lots_predispatch_area_id_fkey(name)`,
-      )
-      .order("start_week")
-      .order("lot_code")
-      .limit(2000),
+        rooting:planner_areas!planner_lots_rooting_area_id_fkey!inner(name, country_id), maturation:planner_areas!planner_lots_maturation_area_id_fkey(name), predispatch:planner_areas!planner_lots_predispatch_area_id_fkey(name)`,
+    )
+    .order("start_week")
+    .order("lot_code")
+    .limit(2000);
+
+  const [{ data: lots }, programByVarietyId, { data: currentWeekRow }] = await Promise.all([
+    countryId ? lotsQ.eq("rooting.country_id", countryId) : lotsQ,
     getProgramByPlannerVarietyId(supabase),
     supabase
       .from("planner_calendar_weeks")

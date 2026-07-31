@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
+import { scopeCountryId } from "@/lib/scope";
 import { getAccessProfile, hasModuleAccess } from "@/lib/access";
 import { AppShell } from "@/components/layout/app-shell";
 import { PageHeader } from "@/components/page-header";
@@ -44,8 +45,10 @@ export default async function SectorPage({
   const areaId = Number((await params).areaId);
   if (!Number.isFinite(areaId)) notFound();
 
+  // Alcance por país: se resuelve acá (server component) y baja como
+  // parámetro — ver el comentario en getSectorLayout.
   const [layout, timeline] = await Promise.all([
-    getSectorLayout(supabase, areaId),
+    getSectorLayout(supabase, areaId, await scopeCountryId()),
     getTimelineData(supabase),
   ]);
   if (!layout) notFound();
