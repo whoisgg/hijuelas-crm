@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
-import { getTimelineData } from "@/lib/planner/occupancy-data";
+import type { TimelineData } from "@/lib/planner/occupancy-data";
 
 /**
- * Datos de la vista georreferenciada (/planner/mapa): geometría real del
- * KMZ V.H.Hardening.kmz (migración 00067) + ocupación de la semana vigente,
- * mismo dato que ya usa la timeline de Ocupación — un solo modelo mental
- * entre las dos vistas.
+ * Datos de la vista Mapa (tab dentro de /planner/ocupacion): geometría real
+ * del KMZ V.H.Hardening.kmz (migración 00067) sobre la MISMA TimelineData
+ * que ya usa la timeline — respeta lo que el usuario esté viendo (mesa de
+ * trabajo, plan vigente, o + simulaciones), sin una segunda query.
  */
 
 export type SiteMapArea = {
@@ -28,38 +28,45 @@ export type SiteMapData = {
   weekLabel: string | null;
 };
 
-export async function getSiteMapData(
+/** Geometría por área (solo lo nuevo de la migración 00067) — liviano,
+ *  nombre/capacidad ya vienen en TimelineData. */
+export async function getAreaGeometry(
   supabase: SupabaseClient<Database>,
-): Promise<SiteMapData | null> {
-  const [{ data: areaRows }, timeline] = await Promise.all([
-    supabase
-      .from("planner_areas")
-      .select("id, name, capacity_trays, geometry")
-      .eq("active", true)
-      .order("priority"),
-    getTimelineData(supabase),
-  ]);
-  if (!areaRows) return null;
+): Promise<Map<number, [number, number][]>> {
+  const { data } = await supabase
+    .from("planner_areas")
+    .select("id, geometry")
+    .not("geometry", "is", null);
+  const map = new Map<number, [number, number][]>();
+  for (const a of data ?? []) {
+    if (a.geometry) map.set(a.id, a.geometry as [number, number][]);
+  }
+  return map;
+}
 
-  const current = timeline?.weeks.find((w) => w.isCurrent) ?? null;
+export function buildSiteMapData(
+  timeline: TimelineData,
+  geometryById: Map<number, [number, number][]>,
+): SiteMapData {
+  const current = timeline.weeks.find((w) => w.isCurrent) ?? timeline.weeks[0] ?? null;
   const occupiedByArea = current?.occupied ?? {};
 
-  const all: SiteMapArea[] = areaRows.map((a) => {
+  const all: SiteMapArea[] = timeline.areas.map((a) => {
     const occupied = occupiedByArea[String(a.id)] ?? 0;
     return {
       id: a.id,
       name: a.name,
-      geometry: (a.geometry as [number, number][] | null) ?? null,
-      capacityTrays: a.capacity_trays,
+      geometry: geometryById.get(a.id) ?? null,
+      capacityTrays: a.capacityTrays,
       occupiedTrays: occupied,
-      pct: a.capacity_trays ? (occupied / a.capacity_trays) * 100 : 0,
+      pct: a.capacityTrays ? (occupied / a.capacityTrays) * 100 : 0,
     };
   });
 
   return {
     areas: all.filter((a) => a.geometry !== null),
     undelimited: all.filter((a) => a.geometry === null),
-    alertAt: timeline?.maxUtilization ?? 0.95,
+    alertAt: timeline.maxUtilization,
     weekLabel: current ? `S${current.week} · ${current.year}` : null,
   };
 }
