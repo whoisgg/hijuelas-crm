@@ -7,11 +7,13 @@ import { getAccessProfile } from "@/lib/access";
 import {
   APP_NAME,
   MODULE_GROUPS,
+  moduleHref,
   modulesForAccess,
+  modulesForGroup,
   type AppModule,
+  type ModuleGroup,
 } from "@/lib/constants";
 import { listCustomModules } from "@/lib/custom/data";
-import { ProposeModuleCard } from "@/components/layout/propose-module";
 
 export const metadata = { title: "Módulos" };
 export const dynamic = "force-dynamic";
@@ -57,7 +59,7 @@ export default async function AppsPage() {
           </h1>
           <div className="mt-6 space-y-6 pb-8">
             {MODULE_GROUPS.map((group) => {
-              const items = modules.filter((m) => m.group === group.key);
+              const items = modulesForGroup(modules, group.key);
               if (!items.length) return null;
               return (
                 <section key={group.key}>
@@ -66,7 +68,9 @@ export default async function AppsPage() {
                   </h2>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {items.map((m) => (
-                      <ModuleCard key={m.key} module={m} />
+                      // Un módulo con contexto sale una vez por cada uno: la
+                      // key lleva el grupo para no repetirla entre secciones.
+                      <ModuleCard key={`${group.key}:${m.key}`} module={m} group={group.key} />
                     ))}
                   </div>
                 </section>
@@ -107,14 +111,9 @@ export default async function AppsPage() {
               </section>
             ) : null}
 
-            <section>
-              <h2 className="mb-2.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Crecer
-              </h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <ProposeModuleCard isBuilder={isBuilder} />
-              </div>
-            </section>
+            {/* "Crecer" (proponer módulo en un sandbox) queda fuera del
+                selector por ahora — el componente sigue en
+                components/layout/propose-module para volver a colgarlo. */}
           </div>
         </div>
       </main>
@@ -122,8 +121,15 @@ export default async function AppsPage() {
   );
 }
 
-function ModuleCard({ module: m }: { module: AppModule }) {
+function ModuleCard({
+  module: m,
+  group,
+}: {
+  module: AppModule;
+  group: ModuleGroup;
+}) {
   const Icon = m.icon;
+  const href = moduleHref(m, group);
   const inner = (
     <>
       <div className="flex items-start justify-between">
@@ -147,9 +153,9 @@ function ModuleCard({ module: m }: { module: AppModule }) {
 
   const base = "flex min-h-[132px] flex-col rounded-xl border bg-card p-5 text-left transition-colors";
 
-  if (m.status === "live" && m.href) {
+  if (m.status === "live" && href) {
     return (
-      <Link href={m.href} className={`${base} hover:border-primary/40 hover:bg-accent`}>
+      <Link href={href} className={`${base} hover:border-primary/40 hover:bg-accent`}>
         {inner}
       </Link>
     );

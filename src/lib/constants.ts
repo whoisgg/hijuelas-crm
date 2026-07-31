@@ -12,8 +12,11 @@ import {
   CalendarRange,
   FileUp,
   FlaskConical,
+  Flower2,
   Layers,
   Package,
+  PackageCheck,
+  Wheat,
   Settings,
   Shield,
   SprayCan,
@@ -69,8 +72,32 @@ export const NAV_ITEMS: NavItem[] = [
  * Flujo: login → /apps (selector) → módulo nativo con su nav, enlace externo
  * en pestaña nueva, o "próximamente" deshabilitado.
  */
-export type ModuleGroup = "comercial" | "agricola" | "plataforma";
+export type ModuleGroup =
+  | "comercial"
+  | "vivero"
+  | "agricola"
+  | "recursos"
+  | "plataforma";
 export type ModuleStatus = "live" | "soon" | "external";
+
+/**
+ * Unidad de negocio. Riego, Fitosanitario y Mano de Obra son UN módulo cada
+ * uno pero se trabajan distinto en el vivero que en el campo, así que el
+ * contexto es una dimensión del módulo (una card por contexto en el selector,
+ * `?ctx=` en la ruta, switcher adentro) y no un módulo duplicado: un permiso,
+ * un código, dos vistas.
+ *
+ * OJO: el contexto define QUÉ VISTA, no QUÉ DATOS. El alcance de datos (país,
+ * sitio, sucursal) es otra dimensión, con consolidado y filtro en la base —
+ * no se mezcla acá. Acotar contextos por usuario está pendiente: hoy
+ * `module_access` solo guarda level y module_role.
+ */
+export type AppContext = "vivero" | "agricola";
+
+export const CONTEXT_LABELS: Record<AppContext, string> = {
+  vivero: "Vivero",
+  agricola: "Agrícola",
+};
 
 export type AppModule = {
   key: string;
@@ -87,13 +114,22 @@ export type AppModule = {
   roles: string[] | "all";
   /** módulo de nav interno (para nativos con sidebar propio) */
   navModule?: NavModule;
+  /** unidades de negocio en las que se usa; el selector lo muestra en el
+   *  grupo de cada una. Sin esto, el módulo vive solo en su `group`. */
+  contexts?: AppContext[];
 };
 
 export const MODULE_GROUPS: { key: ModuleGroup; label: string }[] = [
   { key: "comercial", label: "Comercial" },
-  { key: "agricola", label: "Operaciones agrícolas" },
+  { key: "vivero", label: "Vivero" },
+  { key: "agricola", label: "Agrícola" },
+  { key: "recursos", label: "Recursos" },
   { key: "plataforma", label: "Plataforma" },
 ];
+
+/** Grupos de operación — los "próximamente" se muestran a quien ya trabaja en
+ *  alguno de ellos, no a un usuario solo comercial. */
+const OPERATIONAL_GROUPS: ModuleGroup[] = ["vivero", "agricola", "recursos"];
 
 // Maestros en dos niveles: los COMPARTIDOS (especies, variedades, programas,
 // organizaciones, usuarios) viven en Administración a nivel plataforma; cada
@@ -116,18 +152,46 @@ export const MODULES: AppModule[] = [
     label: "Planner",
     description: "Planificación y ocupación del vivero.",
     icon: CalendarRange,
-    group: "agricola",
+    group: "vivero",
     status: "live",
     href: "/planner",
     roles: ["admin", "produccion"],
     navModule: "produccion",
   },
   {
+    key: "floracion",
+    label: "Floración",
+    description: "Seguimiento de floración y cuaja por cuartel.",
+    icon: Flower2,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
+  },
+  {
+    key: "cosecha",
+    label: "Cosecha",
+    description: "Órdenes de cosecha, avance diario y rendimiento por cuartel.",
+    icon: Wheat,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
+  },
+  {
+    key: "postcosecha",
+    label: "Postcosecha",
+    description: "Recepción, proceso, calidad y despacho.",
+    icon: PackageCheck,
+    group: "agricola",
+    status: "soon",
+    roles: ["admin", "produccion"],
+  },
+  {
     key: "riego",
     label: "Riego",
     description: "Programación y órdenes de riego por cuartel.",
     icon: Droplets,
-    group: "agricola",
+    group: "recursos",
+    contexts: ["vivero", "agricola"],
     status: "soon",
     roles: ["admin", "produccion"],
   },
@@ -136,7 +200,8 @@ export const MODULES: AppModule[] = [
     label: "Mano de Obra",
     description: "Asistencia, dotación, asignación a labores y centros de costo.",
     icon: Users,
-    group: "agricola",
+    group: "recursos",
+    contexts: ["vivero", "agricola"],
     status: "soon",
     roles: ["admin", "produccion"],
   },
@@ -145,7 +210,8 @@ export const MODULES: AppModule[] = [
     label: "Fitosanitario",
     description: "Aplicaciones, fertilización, carencias y registro SAG.",
     icon: SprayCan,
-    group: "agricola",
+    group: "recursos",
+    contexts: ["vivero", "agricola"],
     status: "soon",
     roles: ["admin", "produccion"],
   },
@@ -154,7 +220,9 @@ export const MODULES: AppModule[] = [
     label: "Bodega e Insumos",
     description: "Inventario de insumos, ingresos y salidas, stock por bodega.",
     icon: Warehouse,
-    group: "agricola",
+    // Recurso sin contexto: la bodega es la misma para vivero y campo; lo que
+    // la parte es la sucursal/bodega, no la unidad de negocio.
+    group: "recursos",
     status: "live",
     href: "/bodega",
     roles: ["admin", "produccion"],
@@ -223,13 +291,41 @@ export function accessCanSeeModule(
   if (access?.isPlatformAdmin) return true;
   if (m.key === "admin") return false; // Administración: solo platform admin
   if (m.status === "soon") {
-    // Los "próximamente" se muestran a quien ya tiene un módulo del grupo.
+    // Los "próximamente" son un teaser sin datos: se muestran a quien ya
+    // trabaja en operaciones, no a un usuario solo comercial.
     return MODULES.some(
       (x) =>
-        x.group === m.group && x.status !== "soon" && !!access?.modules[x.key],
+        x.status === "live" &&
+        OPERATIONAL_GROUPS.includes(x.group) &&
+        !!access?.modules[x.key],
     );
   }
   return !!access?.modules[m.key];
+}
+
+/**
+ * Módulos que le tocan a un grupo del selector. Un módulo con `contexts` se
+ * muestra en el grupo de CADA contexto (Riego aparece en Vivero y en
+ * Agrícola), no en Recursos — ahí solo quedan los que no se parten por unidad
+ * de negocio, como Bodega.
+ */
+export function modulesForGroup(
+  modules: AppModule[],
+  group: ModuleGroup,
+): AppModule[] {
+  if (group === "vivero" || group === "agricola") {
+    return modules.filter(
+      (m) => m.group === group || m.contexts?.includes(group),
+    );
+  }
+  return modules.filter((m) => m.group === group && !m.contexts?.length);
+}
+
+/** Ruta del módulo dentro de un grupo: los que tienen contexto lo llevan. */
+export function moduleHref(m: AppModule, group: ModuleGroup): string | undefined {
+  if (!m.href) return undefined;
+  const ctx = m.contexts?.find((c) => c === group);
+  return ctx ? `${m.href}?ctx=${ctx}` : m.href;
 }
 
 /** Módulos visibles para el acceso (todos los estados). */

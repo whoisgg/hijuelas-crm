@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Building2, CircleHelp, Database, Shield } from "lucide-react";
@@ -10,12 +11,6 @@ import {
   type ModuleAccessInfo,
   type NavItem,
 } from "@/lib/constants";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 const ADMIN_NAV: NavItem[] = [
   { label: "Usuarios", href: "/admin/usuarios", icon: Shield, module: "comercial" },
@@ -35,6 +30,11 @@ const ADMIN_NAV: NavItem[] = [
 
 export function Sidebar({ access = null }: { access?: ModuleAccessInfo | null }) {
   const pathname = usePathname();
+  // Expandido por estado, no por :hover, y sin tooltips: el popup vivía en un
+  // portal fuera del <aside>, así que no se podía ocultar al expandir (salía
+  // encima de la etiqueta) y quedaba pegado al volver del click, porque el
+  // link conserva el foco tras navegar.
+  const [expanded, setExpanded] = React.useState(false);
   const appItems = navItemsFor(access, pathname);
   // Administración es módulo de plataforma: sus entradas viven SOLO dentro
   // de /admin (se llega por la card Administración del selector), no en el
@@ -44,88 +44,83 @@ export function Sidebar({ access = null }: { access?: ModuleAccessInfo | null })
     inAdmin && access?.isPlatformAdmin ? ADMIN_NAV : appItems;
 
   return (
-    <TooltipProvider delay={200}>
-      <aside
-        className={cn(
-          // Mobile usa <BottomNav> tipo iOS, sidebar oculto.
-          "group/sidebar fixed inset-y-0 left-0 z-30 hidden md:flex flex-col",
-          "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-          "w-14 hover:w-56 transition-[width,box-shadow] duration-200 ease-out",
-          // Expandido flota SOBRE el contenido: la sombra lo separa de la página
-          // para que no parezca que el layout quedó cortado.
-          "hover:shadow-[8px_0_32px_-8px_rgba(0,0,0,0.25)]",
-          "pt-14",
-        )}
-      >
-        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3">
-          <ul className="flex flex-col gap-1 px-2">
-            {items.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                pathname.startsWith(`${item.href}/`);
+    <aside
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+      // Con teclado también abre: es la única forma de leer la etiqueta.
+      onFocusCapture={() => setExpanded(true)}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setExpanded(false);
+      }}
+      className={cn(
+        // Mobile usa <BottomNav> tipo iOS, sidebar oculto.
+        "fixed inset-y-0 left-0 z-30 hidden md:flex flex-col",
+        "border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "transition-[width,box-shadow] duration-200 ease-out",
+        // Expandido flota SOBRE el contenido: la sombra lo separa de la página
+        // para que no parezca que el layout quedó cortado.
+        expanded ? "w-56 shadow-[8px_0_32px_-8px_rgba(0,0,0,0.25)]" : "w-14",
+        "pt-14",
+      )}
+    >
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-3">
+        <ul className="flex flex-col gap-1 px-2">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const isActive =
+              pathname === item.href ||
+              pathname.startsWith(`${item.href}/`);
 
-              return (
-                <li key={item.href}>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Link
-                          href={item.href}
-                          className={cn(
-                            "flex h-10 items-center gap-3 rounded-md px-2.5 text-sm font-medium",
-                            "transition-colors",
-                            isActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <span className="truncate opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                            {item.label}
-                          </span>
-                        </Link>
-                      }
-                    />
-                    <TooltipContent
-                      side="right"
-                      className="group-hover/sidebar:hidden"
-                    >
-                      {item.label}
-                    </TooltipContent>
-                  </Tooltip>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-        <div className="border-t border-sidebar-border px-2 py-3">
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  title={expanded ? undefined : item.label}
                   className={cn(
-                    "flex h-10 w-full items-center gap-3 rounded-md px-2.5 text-sm",
-                    "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                    "flex h-10 items-center gap-3 rounded-md px-2.5 text-sm font-medium",
+                    "transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                   )}
                 >
-                  <CircleHelp className="h-4 w-4 shrink-0" />
-                  <span className="truncate opacity-0 transition-opacity duration-150 group-hover/sidebar:opacity-100">
-                    Ayuda
+                  <Icon className="h-4 w-4 shrink-0" />
+                  {/* min-w-0: sin esto el flex item no encoge y la etiqueta se
+                      corta contra el borde en vez de elidir. */}
+                  <span
+                    className={cn(
+                      "min-w-0 truncate transition-opacity duration-150",
+                      expanded ? "opacity-100" : "opacity-0",
+                    )}
+                  >
+                    {item.label}
                   </span>
-                </button>
-              }
-            />
-            <TooltipContent
-              side="right"
-              className="group-hover/sidebar:hidden"
-            >
-              Ayuda
-            </TooltipContent>
-          </Tooltip>
-        </div>
-      </aside>
-    </TooltipProvider>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      <div className="border-t border-sidebar-border px-2 py-3">
+        <button
+          type="button"
+          title={expanded ? undefined : "Ayuda"}
+          className={cn(
+            "flex h-10 w-full items-center gap-3 rounded-md px-2.5 text-sm",
+            "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+          )}
+        >
+          <CircleHelp className="h-4 w-4 shrink-0" />
+          <span
+            className={cn(
+              "min-w-0 truncate transition-opacity duration-150",
+              expanded ? "opacity-100" : "opacity-0",
+            )}
+          >
+            Ayuda
+          </span>
+        </button>
+      </div>
+    </aside>
   );
 }
