@@ -685,10 +685,10 @@ export function SectorWorkspace({
           ) : null}
           <div
             className="flex items-center gap-1.5"
-            title="Lotes planificados de la semana vs capacidad de planificación."
+            title="Neto de la semana: Hoy + Ingresos − Salidas, contra capacidad de planificación."
           >
             <span className="h-2 w-2 shrink-0 rounded-full border border-muted-foreground/50" />
-            <span className="text-muted-foreground">Plan</span>
+            <span className="text-muted-foreground">Neto</span>
             <span className="font-semibold tabular-nums">
               {bar.planTrays.toLocaleString("es-CL")}
             </span>

@@ -76,7 +76,7 @@ export function toLotPlanSnapshot(
   };
 }
 
-type FieldKey = keyof LotPlanSnapshot;
+export type FieldKey = keyof LotPlanSnapshot;
 
 const WEEK_FIELDS = new Set<FieldKey>([
   "start_week",
@@ -129,6 +129,43 @@ function formatValue(field: FieldKey, v: string | number | null): string {
   if (WEEK_FIELDS.has(field)) return `S${v}`;
   if (field === "plants" || field === "trays") return Number(v).toLocaleString("es-CL");
   return String(v);
+}
+
+/** Nombre de la columna cruda en planner_lots para cada campo del snapshot
+ *  (las 3 áreas viven como *_area_id, resueltas a nombre solo para mostrar). */
+export const RAW_COLUMN: Record<FieldKey, string> = {
+  status: "status",
+  plants: "plants",
+  trays: "trays",
+  start_week: "start_week",
+  end_week: "end_week",
+  rooting_area: "rooting_area_id",
+  rooting_start_week: "rooting_start_week",
+  rooting_end_week: "rooting_end_week",
+  maturation_area: "maturation_area_id",
+  maturation_start_week: "maturation_start_week",
+  maturation_end_week: "maturation_end_week",
+  predispatch_area: "predispatch_area_id",
+  predispatch_start_week: "predispatch_start_week",
+  predispatch_end_week: "predispatch_end_week",
+};
+
+const AREA_FIELDS = new Set<FieldKey>(["rooting_area", "maturation_area", "predispatch_area"]);
+
+/** Inverso de formatValue: recupera el valor crudo para escribir de vuelta a
+ *  planner_lots al revertir un cambio. Los campos de área necesitan mapear
+ *  nombre → id (areaIdByName); si el área no existe más, revierte a null en
+ *  vez de fallar — mejor una silla sin área que un revert que no aplica. */
+export function parseValue(
+  field: FieldKey,
+  formatted: string,
+  areaIdByName: Map<string, number>,
+): string | number | null {
+  if (formatted === "—") return null;
+  if (WEEK_FIELDS.has(field)) return Number(formatted.replace(/^S/, ""));
+  if (field === "plants" || field === "trays") return Number(formatted.replace(/\./g, ""));
+  if (AREA_FIELDS.has(field)) return areaIdByName.get(formatted) ?? null;
+  return formatted;
 }
 
 export type PlanFieldDiff = {
@@ -233,4 +270,26 @@ export async function getLotPlanHistory(supabase: Supa): Promise<Map<string, Lot
     );
   }
   return result;
+}
+
+export type PlanChangeLogEntry = LotPlanChangeEvent & {
+  lotCode: string;
+  /** el batch más reciente de SU lote — solo ese es reversible (LIFO, sin
+   *  reescribir historia a mitad de camino) */
+  isLatestForLot: boolean;
+};
+
+/** Historial global, más reciente primero — para la pestaña "Historial" de
+ *  Movimientos (a diferencia de getLotPlanHistory, que lo agrupa por lote
+ *  para el chevron dentro de cada fila). */
+export async function getPlanChangeLog(supabase: Supa, limit = 300): Promise<PlanChangeLogEntry[]> {
+  const byLot = await getLotPlanHistory(supabase);
+  const flat: PlanChangeLogEntry[] = [];
+  for (const [lotCode, events] of byLot) {
+    events.forEach((event, i) => {
+      flat.push({ ...event, lotCode, isLatestForLot: i === 0 });
+    });
+  }
+  flat.sort((a, b) => (a.changedAt < b.changedAt ? 1 : -1));
+  return flat.slice(0, limit);
 }
