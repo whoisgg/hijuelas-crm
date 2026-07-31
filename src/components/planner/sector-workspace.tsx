@@ -40,6 +40,7 @@ import {
 } from "@/lib/actions/planner-scenarios";
 import {
   SEAT_GAP,
+  mesonBoxWidthPx,
   seatColsFor,
   seatPadFor,
   seatRowsFor,
@@ -73,6 +74,29 @@ const SEAT_SELECTED = "#185FA5";
 // Violeta para "sale esta semana": distinto del azul de hover/selección y del
 // rojo (reservado a "sin espacio").
 const SEAT_LEAVE = "#8b5cf6";
+
+/**
+ * Punto de rotación en el encabezado de un mesón.
+ *
+ * El porcentaje muestra el NETO, que es lo correcto para leer ocupación, pero
+ * una semana en que sale un lote y entra otro se ve casi plana. Este punto marca
+ * la dirección que el neto NO alcanza a mostrar, reusando el color que la
+ * leyenda ya definió (ámbar = entra, violeta = sale): no hay símbolo nuevo que
+ * el usuario tenga que aprender, y el detalle en bandejas está en el tooltip.
+ */
+function RotationDots({ colors }: { colors: readonly string[] }) {
+  return (
+    <span aria-hidden className="inline-flex gap-px align-middle">
+      {colors.map((c) => (
+        <span
+          key={c}
+          className="size-1 rounded-full"
+          style={{ backgroundColor: c }}
+        />
+      ))}
+    </span>
+  );
+}
 
 /** Tope de sillas dibujadas por mesón: por encima, cada silla agrupa varias
  *  bandejas (`perCell`) en vez de reventar el DOM. */
@@ -939,7 +963,13 @@ export function SectorWorkspace({
                   )}
                   style={
                     hasGeom
-                      ? { gridTemplateColumns: `repeat(${sides.length}, minmax(0,1fr))` }
+                      ? {
+                          // Tope al ancho que el mesón realmente ocupa: con las
+                          // sillas topadas en 12px, `1fr` dejaba media card
+                          // vacía a la derecha. Sigue siendo `minmax(0, …)` para
+                          // que en pantallas angostas la columna encoja.
+                          gridTemplateColumns: `repeat(${sides.length}, minmax(0,${mesonBoxWidthPx(seatMaxCols)}px))`,
+                        }
                       : undefined
                   }
                 >
@@ -1321,6 +1351,11 @@ function MesonCell({
   // Diff por totales de mesón: la proyección FIFO no sabe qué lote real es cuál.
   const stay = Math.min(realTrays, planTrays);
   const leave = Math.max(0, realTrays - planTrays);
+  // Un mesón se mueve en UNA dirección: `enter` y `leave` salen del mismo diff
+  // de totales con signo opuesto, así que nunca son ambos > 0. Por eso el
+  // encabezado muestra `hoy ±delta → neto` y no una cadena de tres (el término
+  // del medio repetía siempre el primero).
+  const delta = planTrays - realTrays;
   const free = Math.max(0, planCap - planTrays);
   const parts = fill?.parts ?? [];
   const hasSelected =
@@ -1332,6 +1367,28 @@ function MesonCell({
           : matKey(sl.name, sl.variety)) === selectedKey,
     );
   const pctOf = (n: number) => (gridCap ? Math.round((n / gridCap) * 100) : 0);
+  // El delta se saca de los extremos YA redondeados, no de las bandejas: así
+  // `hoy ± delta = neto` cierra siempre en pantalla. Redondear cada término por
+  // separado dejaba casos donde la resta no daba (50% −20 → 31%).
+  const pctDelta = pctOf(planTrays) - pctOf(realTrays);
+
+  // Flujo BRUTO del mesón. `leave`/`enter` de arriba son un diff de totales, así
+  // que se anulan entre sí y una semana con rotación (sale un lote y entra otro)
+  // se lee como si casi nada se moviera. Los lotes del plan sí traen su semana
+  // de llegada, así que lo que ENTRA se puede separar de lo que se QUEDA, y de
+  // ahí sale lo que realmente tiene que salir.
+  const planEnterTrays = parts.reduce(
+    (s, p) => (p.arrivalWeek >= week ? s + p.trays : s),
+    0,
+  );
+  const planStayTrays = parts.reduce(
+    (s, p) => (p.arrivalWeek < week ? s + p.trays : s),
+    0,
+  );
+  const grossOut = Math.max(0, realTrays - planStayTrays);
+  // El encabezado sigue mostrando el NETO (es lo correcto para ocupación); esto
+  // solo marca que el neto esconde movimiento en los dos sentidos.
+  const rotates = !soloHoy && planEnterTrays > 0 && grossOut > 0;
   const quotaFull = planCap > 0 && planTrays >= planCap;
 
   // Sillas: una por bandeja (escaladas si el mesón es grande).
@@ -1506,11 +1563,19 @@ function MesonCell({
         <span
           className="text-muted-foreground"
           title={[
+            // El tooltip va en BANDEJAS y se ramifica por el movimiento real,
+            // no por el redondeado: un delta que en pantalla queda en 0 pp
+            // igual se explica acá.
             soloHoy
-              ? "ocupación real vs cuota de plan del mesón"
-              : marcarSalen && leave > 0
-                ? "hoy → con lo que entra según plan → tras las salidas de la semana, sobre la cuota de plan"
-                : "hoy → plan de la semana, ambos sobre la cuota de plan",
+              ? `hoy ${realTrays.toLocaleString("es-CL")} bandejas sobre la cuota de plan del mesón`
+              : rotates
+                ? // Rotación: el neto solo no alcanza, hay que decir las dos patas.
+                  `hoy ${realTrays.toLocaleString("es-CL")} · según el plan salen ${grossOut.toLocaleString("es-CL")} y entran ${planEnterTrays.toLocaleString("es-CL")} → ${planTrays.toLocaleString("es-CL")} bandejas`
+                : delta > 0
+                  ? `hoy ${realTrays.toLocaleString("es-CL")} + entran ${delta.toLocaleString("es-CL")} según plan → ${planTrays.toLocaleString("es-CL")} bandejas`
+                  : delta < 0
+                    ? `hoy ${realTrays.toLocaleString("es-CL")} − salen ${(-delta).toLocaleString("es-CL")} esta semana → ${planTrays.toLocaleString("es-CL")} bandejas`
+                    : "el plan de la semana deja el mesón igual que hoy",
             planCap && physCap && planCap !== physCap
               ? `cuota: ${planCap.toLocaleString("es-CL")} de ${physCap.toLocaleString("es-CL")} bandejas físicas`
               : null,
@@ -1524,24 +1589,37 @@ function MesonCell({
             ) : (
               planTrays
             )
-          ) : soloHoy ? (
-            `${pctOf(realTrays)}%`
+          ) : soloHoy || pctDelta === 0 ? (
+            // Sin movimiento visible no hay cadena: un solo número, el de hoy.
+            // (Un delta que redondea a 0 pp igual se explica en el tooltip.)
+            // Con rotación de neto cero van los dos puntos: el mesón se movió en
+            // ambos sentidos aunque el porcentaje quede igual.
+            <>
+              {rotates ? (
+                <>
+                  <RotationDots colors={[SEAT_ENTER, SEAT_LEAVE]} />{" "}
+                </>
+              ) : null}
+              {pctOf(realTrays)}%
+            </>
           ) : (
             <>
-              {/* La cadena de tres (…→tras salidas) solo con el filtro Salidas activo. */}
-              {marcarSalen && leave > 0 ? (
+              {pctOf(realTrays)}%{" "}
+              {rotates ? (
                 <>
-                  {pctOf(realTrays)}→{pctOf(realTrays + enter)}→
-                  <span className="font-medium" style={{ color: SEAT_LEAVE }}>
-                    {pctOf(planTrays)}
-                  </span>
+                  <RotationDots
+                    colors={[pctDelta > 0 ? SEAT_LEAVE : SEAT_ENTER]}
+                  />{" "}
                 </>
-              ) : (
-                <>
-                  {pctOf(realTrays)}→{pctOf(planTrays)}
-                </>
-              )}
-              %
+              ) : null}
+              <span
+                className="font-medium"
+                style={{ color: pctDelta > 0 ? SEAT_ENTER : SEAT_LEAVE }}
+              >
+                {pctDelta > 0 ? "+" : "−"}
+                {Math.abs(pctDelta)}
+              </span>{" "}
+              → {pctOf(planTrays)}%
             </>
           )}
         </span>

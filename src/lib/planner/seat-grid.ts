@@ -74,6 +74,24 @@ export const SEAT_GAP = 1;
  *  columnas infla las sillas hasta parecer otra cosa. */
 const SEAT_MAX_PX = 12;
 
+/** Padding + borde de la card del mesón (`p-1.5` + `border`), en px. */
+const MESON_CHROME_PX = 6 * 2 + 1 * 2;
+
+/**
+ * Ancho que necesita la CARD de un mesón para contener su bloque de sillas sin
+ * sobrar. Con las sillas topadas en `SEAT_MAX_PX`, el bloque deja de crecer y
+ * una columna de ancho libre le dejaba media card vacía a la derecha (reporte
+ * del usuario: "los rectángulos podrían ser menos anchos").
+ *
+ * Se usa como TOPE (`minmax(0, …)`), no como ancho fijo: en pantallas angostas
+ * la columna sigue pudiendo encoger y `seatWidthCss` achica las sillas como
+ * antes.
+ */
+export function mesonBoxWidthPx(maxCols: number) {
+  const cols = Math.max(1, maxCols);
+  return cols * (SEAT_MAX_PX + SEAT_GAP) - SEAT_GAP + MESON_CHROME_PX;
+}
+
 /**
  * Ancho de silla como fracción del ancho de la card, fijado por el mesón más
  * grande del módulo (`maxCols`) para que todas las sillas midan igual.
