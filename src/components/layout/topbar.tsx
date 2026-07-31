@@ -3,7 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Plus, Sprout, User } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Moon, Plus, Sprout, Sun, User } from "lucide-react";
+import { useTheme } from "next-themes";
 import { toast } from "sonner";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -46,6 +47,13 @@ export function Topbar({
 }: TopbarProps) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
+  const { setTheme, resolvedTheme } = useTheme();
+  // Evita el mismatch de hidratación: en el servidor no se sabe el tema.
+  const mounted = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const initial = (userEmail?.[0] ?? "U").toUpperCase();
   const pathname = usePathname();
@@ -90,9 +98,12 @@ export function Topbar({
         </span>
       </Link>
 
-      <div className="ml-4 flex-1">
+      {/* Mobile: la barra queda con lo esencial (+, país, perfil). La búsqueda
+          se abre desde el ⌘K / la lupa de cada vista; acá solo comía ancho. */}
+      <div className="ml-4 hidden flex-1 md:block">
         <GlobalSearch access={access} />
       </div>
+      <div className="flex-1 md:hidden" />
 
       {/* Nuevo dropdown — trigger estilizado directo (no render={<Button>})
           para evitar nested-button hydration bug de base-ui. Solo módulo
@@ -136,16 +147,19 @@ export function Topbar({
         <ScopeSwitcher countries={scopeCountries} active={activeScope} />
       ) : null}
 
+      {/* Notificaciones y tema: en mobile viven dentro del menú de perfil. */}
       <Button
         variant="ghost"
         size="icon"
         aria-label="Notificaciones"
-        className="relative"
+        className="relative hidden md:inline-flex"
       >
         <Bell className="h-4 w-4" />
       </Button>
 
-      <ThemeToggle />
+      <div className="hidden md:block">
+        <ThemeToggle />
+      </div>
 
       {/* Avatar menu — mismo patrón sin render={<Button>}. */}
       <DropdownMenu>
@@ -174,6 +188,29 @@ export function Topbar({
             <User className="h-4 w-4" />
             Perfil
           </DropdownMenuItem>
+
+          {/* Solo mobile: lo que se sacó de la barra para dejarla con +,
+              país y perfil. En desktop siguen como iconos propios. */}
+          <DropdownMenuItem className="gap-2 md:hidden">
+            <Bell className="h-4 w-4" />
+            Notificaciones
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={(e: React.MouseEvent) => {
+              // No cerrar el menú: el usuario suele probar claro/oscuro.
+              e.preventDefault();
+              setTheme(resolvedTheme === "dark" ? "light" : "dark");
+            }}
+            className="gap-2 md:hidden"
+          >
+            {mounted && resolvedTheme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+            {mounted && resolvedTheme === "dark" ? "Modo claro" : "Modo oscuro"}
+          </DropdownMenuItem>
+
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut} className="gap-2">
             <LogOut className="h-4 w-4" />
