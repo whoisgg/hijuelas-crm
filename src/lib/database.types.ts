@@ -2249,6 +2249,7 @@ export type Database = {
           active: boolean
           capacity_trays: number
           created_at: string
+          geometry: Json | null
           id: number
           name: string
           priority: number
@@ -2260,6 +2261,7 @@ export type Database = {
           active?: boolean
           capacity_trays?: number
           created_at?: string
+          geometry?: Json | null
           id?: number
           name: string
           priority?: number
@@ -2271,6 +2273,7 @@ export type Database = {
           active?: boolean
           capacity_trays?: number
           created_at?: string
+          geometry?: Json | null
           id?: number
           name?: string
           priority?: number
@@ -2573,6 +2576,64 @@ export type Database = {
           },
         ]
       }
+      planner_lot_weeks: {
+        Row: {
+          area_id: number | null
+          campaign_week: number
+          created_at: string
+          id: number
+          lot_id: number
+          source: string
+          stage: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          area_id?: number | null
+          campaign_week: number
+          created_at?: string
+          id?: never
+          lot_id: number
+          source?: string
+          stage: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          area_id?: number | null
+          campaign_week?: number
+          created_at?: string
+          id?: never
+          lot_id?: number
+          source?: string
+          stage?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planner_lot_weeks_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "planner_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planner_lot_weeks_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lot_ledger"
+            referencedColumns: ["lot_id"]
+          },
+          {
+            foreignKeyName: "planner_lot_weeks_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "planner_lots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planner_lots: {
         Row: {
           end_week: number | null
@@ -2584,6 +2645,8 @@ export type Database = {
           maturation_weeks: number
           origen: string
           parent_lot_id: number | null
+          plant_code: string | null
+          plant_index: string | null
           plants: number
           predispatch_area_id: number | null
           predispatch_end_week: number | null
@@ -2612,6 +2675,8 @@ export type Database = {
           maturation_weeks?: number
           origen?: string
           parent_lot_id?: number | null
+          plant_code?: string | null
+          plant_index?: string | null
           plants: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -2640,6 +2705,8 @@ export type Database = {
           maturation_weeks?: number
           origen?: string
           parent_lot_id?: number | null
+          plant_code?: string | null
+          plant_index?: string | null
           plants?: number
           predispatch_area_id?: number | null
           predispatch_end_week?: number | null
@@ -3759,6 +3826,31 @@ export type Database = {
       }
       _bodega_can_manage: { Args: never; Returns: boolean }
       _bodega_can_read: { Args: never; Returns: boolean }
+      _forecast_by_month_core: {
+        Args: {
+          p_country_id?: string
+          p_from_month?: number
+          p_include_opportunities?: boolean
+          p_kam_id?: string
+          p_organization_id?: string
+          p_status_in?: string[]
+          p_user_id: string
+          p_year: number
+        }
+        Returns: Json
+      }
+      _forecast_contracts_anticipos_core: {
+        Args: {
+          p_country_id?: string
+          p_from_month?: number
+          p_kam_id?: string
+          p_organization_id?: string
+          p_status_in?: string[]
+          p_user_id: string
+          p_year: number
+        }
+        Returns: Json
+      }
       _mcp_contract_status_match: {
         Args: { p_filter: string; p_status: string }
         Returns: boolean
@@ -3843,6 +3935,29 @@ export type Database = {
           p_role: Database["public"]["Enums"]["user_role"]
         }
         Returns: undefined
+      }
+      app_forecast_by_month: {
+        Args: {
+          p_country_id?: string
+          p_from_month?: number
+          p_include_opportunities?: boolean
+          p_kam_id?: string
+          p_organization_id?: string
+          p_status_in?: string[]
+          p_year: number
+        }
+        Returns: Json
+      }
+      app_forecast_contracts_anticipos: {
+        Args: {
+          p_country_id?: string
+          p_from_month?: number
+          p_kam_id?: string
+          p_organization_id?: string
+          p_status_in?: string[]
+          p_year: number
+        }
+        Returns: Json
       }
       bodega_registrar_traspaso: {
         Args: {

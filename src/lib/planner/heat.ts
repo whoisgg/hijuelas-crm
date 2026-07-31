@@ -23,6 +23,23 @@ export function heatTone(pct: number, alertAt: number): string {
   return "bg-muted/30 text-muted-foreground/40";
 }
 
+/** Misma escala que heatTone(), como color plano en vez de clase Tailwind —
+ *  para SVG (fill) u otros contextos que no aceptan bg-[...]. */
+export function heatFill(pct: number, alertAt: number): string {
+  if (pct >= alertAt * 100) return "#d03b3b";
+  if (pct >= 85) return "#1f6b24";
+  if (pct >= 60) return "#6cbb70";
+  if (pct > 0) return "#bfe0bf";
+  return "#e2e2e2";
+}
+
+/** Color de texto legible sobre heatFill() — blanco en los tramos oscuros
+ *  (alerta, ≥85%), igual que heatTone() en modo claro. */
+export function heatTextOn(pct: number, alertAt: number): string {
+  if (pct >= alertAt * 100 || pct >= 85) return "#ffffff";
+  return "#0d3a10";
+}
+
 export const HEAT_LEGEND = [
   { label: "<60%", swatch: "bg-[#bfe0bf] dark:bg-[#0d3a10]" },
   { label: "60–85%", swatch: "bg-[#6cbb70] dark:bg-[#1f7a26]" },
