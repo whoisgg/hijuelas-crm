@@ -8,6 +8,7 @@ import {
   recordLotPlanChanges,
   toLotPlanSnapshot,
 } from "@/lib/planner/lot-plan-history";
+import { LOT_COLUMNS, signature, type LotRow } from "@/lib/planner/workspace-diff";
 
 /**
  * Edición manual de lotes (E2.6): cambiar plantas, semana de inicio o
@@ -103,6 +104,48 @@ export async function updateLot(input: UpdateLotInput): Promise<{ ok: boolean; e
           source: w.source,
         })),
       );
+    }
+  }
+
+  // Fast-forward a las mesas de trabajo: si la copia de ESTE lote en una
+  // mesa sigue idéntica al plan de ANTES de este edit (el usuario no la
+  // tocó ahí), se actualiza junto con el plan — así una corrección no le
+  // genera un "cambio sin aprobar" fantasma a nadie. Si la mesa ya
+  // divergía (el usuario sí movió/mermó ese lote), se deja intacta: es una
+  // decisión real suya que debe seguir pasando por "Aprobar al plan".
+  // Ambigua (lot_code duplicado, más de una fila) → se salta, sin adivinar.
+  const { data: workingScenarios } = await supabase
+    .from("planner_scenarios")
+    .select("id")
+    .eq("is_working", true);
+  if (workingScenarios?.length) {
+    const oldSig = signature(lot as unknown as LotRow);
+    const mesaNext = {
+      plants: next.plants,
+      trays: next.trays,
+      status: next.status,
+      start_week: next.start_week,
+      end_week: next.end_week,
+      rooting_start_week: next.rooting_start_week,
+      rooting_end_week: next.rooting_end_week,
+      maturation_start_week: next.maturation_start_week,
+      maturation_end_week: next.maturation_end_week,
+      predispatch_start_week: next.predispatch_start_week,
+      predispatch_end_week: next.predispatch_end_week,
+    };
+    for (const ws of workingScenarios) {
+      const { data: mesaRows } = await supabase
+        .from("planner_scenario_lots")
+        .select(LOT_COLUMNS)
+        .eq("scenario_id", ws.id)
+        .eq("lot_code", lot.lot_code);
+      if (mesaRows?.length === 1 && signature(mesaRows[0] as unknown as LotRow) === oldSig) {
+        await supabase
+          .from("planner_scenario_lots")
+          .update(mesaNext)
+          .eq("scenario_id", ws.id)
+          .eq("lot_code", lot.lot_code);
+      }
     }
   }
 

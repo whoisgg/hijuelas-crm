@@ -24,10 +24,10 @@ export type WorkspaceDiff = {
   changes: WorkspaceChange[];
 };
 
-const LOT_COLUMNS =
+export const LOT_COLUMNS =
   "lot_code, species_id, variety_id, year, start_week, plants, tray_format, trays, rooting_area_id, rooting_weeks, rooting_start_week, rooting_end_week, maturation_area_id, maturation_weeks, maturation_start_week, maturation_end_week, predispatch_area_id, predispatch_weeks, predispatch_start_week, predispatch_end_week, end_week, status";
 
-type LotRow = {
+export type LotRow = {
   lot_code: string;
   trays: number | null;
   rooting_area_id: number | null;
@@ -35,9 +35,9 @@ type LotRow = {
   predispatch_area_id: number | null;
 } & Record<string, unknown>;
 
-const SIGNATURE_FIELDS = LOT_COLUMNS.split(", ");
+export const SIGNATURE_FIELDS = LOT_COLUMNS.split(", ");
 
-function signature(row: LotRow): string {
+export function signature(row: LotRow): string {
   return SIGNATURE_FIELDS.map((f) => String(row[f] ?? "∅")).join("|");
 }
 

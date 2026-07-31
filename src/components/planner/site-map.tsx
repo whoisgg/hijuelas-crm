@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import "leaflet/dist/leaflet.css";
 
-import { HEAT_LEGEND, heatFill, heatTextOn } from "@/lib/planner/heat";
+import { HEAT_LEGEND, heatFill } from "@/lib/planner/heat";
 import type { SiteMapArea } from "@/lib/planner/site-map-data";
 
 /**
  * "Hardening" del KMZ: NO es un área productiva, contiene Zona Clara y Zona
  * Oscura (verificado por ray-casting, ver vault § El KMZ) — capa de
  * agrupación puramente visual, por eso vive como constante acá y no en
- * planner_areas.
+ * planner_areas. [lng, lat] igual que el resto del KMZ — se invierte a
+ * [lat, lng] recién al pasarlo a Leaflet.
  */
 const HARDENING: [number, number][] = [
   [-71.12472646036794, -32.83068404077287],
@@ -24,108 +26,108 @@ const HARDENING: [number, number][] = [
   [-71.12472646036794, -32.83068404077287],
 ];
 
-const WIDTH = 760;
-const HEIGHT = 560;
-const PADDING = 32;
+const toLatLng = (ring: [number, number][]) => ring.map(([lng, lat]) => [lat, lng] as const);
 
-/** Proyección local plana: corrige el aspecto por latitud (1° de longitud
- *  pesa menos que 1° de latitud fuera del ecuador) — suficiente en un sitio
- *  de ~500x600m, no hace falta Mercator real. */
-function buildProjection(points: [number, number][]) {
-  const lngs = points.map((p) => p[0]);
-  const lats = points.map((p) => p[1]);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const cosLat = Math.cos(((minLat + maxLat) / 2) * (Math.PI / 180));
-  const spanX = (maxLng - minLng) * cosLat || 1;
-  const spanY = maxLat - minLat || 1;
-  const scale = Math.min((WIDTH - PADDING * 2) / spanX, (HEIGHT - PADDING * 2) / spanY);
-  return (p: [number, number]): [number, number] => [
-    (p[0] - minLng) * cosLat * scale + PADDING,
-    (maxLat - p[1]) * scale + PADDING,
-  ];
-}
+/** Imágenes satelitales reales de Esri (World Imagery) — gratis, sin API
+ *  key, atribución obligatoria incluida vía el control de Leaflet. */
+const SATELLITE_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const SATELLITE_ATTRIBUTION =
+  "Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community";
 
 export function SiteMap({ areas, alertAt }: { areas: SiteMapArea[]; alertAt: number }) {
   const router = useRouter();
-  const [hovered, setHovered] = React.useState<number | null>(null);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const mapRef = React.useRef<import("leaflet").Map | null>(null);
+  const layerGroupRef = React.useRef<import("leaflet").LayerGroup | null>(null);
+  // Señal de React (no solo un ref) de que el mapa base ya existe — el
+  // efecto de polígonos depende de esto para volver a correr cuando el
+  // import async de Leaflet termine, algo que un ref solo no dispara.
+  const [ready, setReady] = React.useState(false);
 
-  const project = React.useMemo(
-    () => buildProjection([...HARDENING, ...areas.flatMap((a) => a.geometry ?? [])]),
-    [areas],
-  );
+  // Mapa base: se crea UNA vez. La capa satelital de Esri no cambia con los
+  // datos, separarla evita recrear los tiles cada vez que cambia ocupación.
+  // `destroyed` es local a CADA invocación del efecto — en StrictMode (dev)
+  // un efecto async se monta/desmonta/remonta antes de resolver, y sin este
+  // flag por-invocación la resolución vieja podía pisar el mapa nuevo.
+  React.useEffect(() => {
+    if (!containerRef.current) return;
+    let destroyed = false;
+    let map: import("leaflet").Map | null = null;
+    import("leaflet").then((L) => {
+      if (destroyed || !containerRef.current) return;
+      map = L.map(containerRef.current, {
+        attributionControl: true,
+        minZoom: 15,
+        maxZoom: 21,
+      });
+      L.tileLayer(SATELLITE_URL, {
+        attribution: SATELLITE_ATTRIBUTION,
+        maxZoom: 21,
+        maxNativeZoom: 19,
+      }).addTo(map);
+      const bounds = L.latLngBounds(toLatLng([...HARDENING]) as unknown as [number, number][]);
+      map.fitBounds(bounds, { padding: [24, 24] });
+      layerGroupRef.current = L.layerGroup().addTo(map);
+      mapRef.current = map;
+      setReady(true);
+    });
+    return () => {
+      destroyed = true;
+      map?.remove();
+      mapRef.current = null;
+      layerGroupRef.current = null;
+      setReady(false);
+    };
+  }, []);
 
-  const toPath = (ring: [number, number][]) =>
-    ring.map((p) => project(p).join(",")).join(" ");
+  // Polígonos: se redibujan cuando el mapa queda listo o cambian las
+  // áreas/ocupación, sin tocar el mapa base ni los tiles.
+  React.useEffect(() => {
+    if (!ready || !layerGroupRef.current) return;
+    let cancelled = false;
+    import("leaflet").then((L) => {
+      if (cancelled || !layerGroupRef.current) return;
+      layerGroupRef.current.clearLayers();
+
+      L.polygon(toLatLng(HARDENING) as unknown as [number, number][], {
+        fill: false,
+        color: "#e2e2e2",
+        weight: 2,
+        dashArray: "6 5",
+      })
+        .bindTooltip("Hardening", { permanent: true, direction: "center", className: "site-map-label" })
+        .addTo(layerGroupRef.current);
+
+      for (const a of areas) {
+        if (!a.geometry) continue;
+        const polygon = L.polygon(toLatLng(a.geometry) as unknown as [number, number][], {
+          fillColor: heatFill(a.pct, alertAt),
+          fillOpacity: 0.6,
+          color: "#1e1e1e",
+          weight: 1.5,
+        });
+        polygon.bindTooltip(
+          `${a.name} · ${Math.round(a.pct)}% (${a.occupiedTrays.toLocaleString("es-CL")}/${a.capacityTrays.toLocaleString("es-CL")} band.)`,
+          { sticky: true },
+        );
+        polygon.on("mouseover", () => polygon.setStyle({ color: "#185FA5", weight: 3 }));
+        polygon.on("mouseout", () => polygon.setStyle({ color: "#1e1e1e", weight: 1.5 }));
+        polygon.on("click", () => router.push(`/planner/sector/${a.id}`));
+        polygon.addTo(layerGroupRef.current!);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, areas, alertAt, router]);
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <svg
-          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-          className="w-full"
-          style={{ minWidth: 480 }}
-        >
-          <polygon
-            points={toPath(HARDENING)}
-            fill="none"
-            stroke="currentColor"
-            strokeDasharray="4 3"
-            className="text-muted-foreground/50"
-          />
-          <text
-            x={project(HARDENING[0])[0] + 4}
-            y={project(HARDENING[0])[1] - 6}
-            className="fill-muted-foreground text-[10px]"
-          >
-            Hardening
-          </text>
-          {areas.map((a) => {
-            if (!a.geometry) return null;
-            const isHovered = hovered === a.id;
-            return (
-              <g key={a.id}>
-                <polygon
-                  points={toPath(a.geometry)}
-                  fill={heatFill(a.pct, alertAt)}
-                  stroke={isHovered ? "#185FA5" : "#1e1e1e"}
-                  strokeWidth={isHovered ? 2.5 : 1}
-                  className="cursor-pointer transition-[stroke-width]"
-                  onMouseEnter={() => setHovered(a.id)}
-                  onMouseLeave={() => setHovered((h) => (h === a.id ? null : h))}
-                  onClick={() => router.push(`/planner/sector/${a.id}`)}
-                >
-                  <title>
-                    {a.name} · {Math.round(a.pct)}% ({a.occupiedTrays.toLocaleString("es-CL")}/
-                    {a.capacityTrays.toLocaleString("es-CL")} band.)
-                  </title>
-                </polygon>
-              </g>
-            );
-          })}
-          {areas.map((a) => {
-            if (!a.geometry) return null;
-            const cx =
-              a.geometry.reduce((s, p) => s + project(p)[0], 0) / a.geometry.length;
-            const cy =
-              a.geometry.reduce((s, p) => s + project(p)[1], 0) / a.geometry.length;
-            return (
-              <text
-                key={a.id}
-                x={cx}
-                y={cy}
-                textAnchor="middle"
-                fill={heatTextOn(a.pct, alertAt)}
-                className="pointer-events-none select-none text-[11px] font-medium"
-              >
-                {a.name}
-              </text>
-            );
-          })}
-        </svg>
-      </div>
+      <div
+        ref={containerRef}
+        className="h-[460px] w-full overflow-hidden rounded-lg border bg-card [&_.leaflet-tooltip.site-map-label]:border-none [&_.leaflet-tooltip.site-map-label]:bg-transparent [&_.leaflet-tooltip.site-map-label]:text-white [&_.leaflet-tooltip.site-map-label]:shadow-none"
+      />
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
         {HEAT_LEGEND.map((l) => (
           <span key={l.label} className="flex items-center gap-1.5">
