@@ -25,6 +25,9 @@ export type SiteMapArea = {
  *  servidor: son ~64 semanas × 8 áreas, nada de peso. */
 export type SiteMapWeek = {
   campaignWeek: number;
+  /** semana ISO y año reales — la barra delimita los tramos por año */
+  week: number;
+  year: number;
   /** "S32 · 2026" */
   label: string;
   /** "agosto 2026" */
@@ -75,6 +78,8 @@ export function buildSiteMapData(
 
   const weeks: SiteMapWeek[] = timeline.weeks.map((w) => ({
     campaignWeek: w.campaignWeek,
+    week: w.week,
+    year: w.year,
     label: `S${w.week} · ${w.year}`,
     monthLabel: w.monthLabel,
     isCurrent: w.isCurrent,

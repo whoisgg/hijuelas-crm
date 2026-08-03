@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import "leaflet/dist/leaflet.css";
 
+import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { HEAT_LEGEND, heatFill } from "@/lib/planner/heat";
 import {
@@ -279,6 +280,25 @@ export function SiteMap({
   }, [areas, undelimited, weeks]);
   const collapseNow = collapseByIndex.get(weekIdx) ?? null;
 
+  /** Posición de un índice en la pista, en %. */
+  const posOf = React.useCallback(
+    (i: number) => (weeks.length > 1 ? (i / (weeks.length - 1)) * 100 : 0),
+    [weeks.length],
+  );
+
+  // Tramos por año: la barra se lee como el eje de la timeline, con el año
+  // rotulado y una divisoria donde cambia. Sin esto, arrastrar hasta la S3 no
+  // deja claro que ya se saltó a 2027.
+  const yearSpans = React.useMemo(() => {
+    const spans: { year: number; startIdx: number }[] = [];
+    weeks.forEach((w, i) => {
+      if (!spans.length || spans[spans.length - 1].year !== w.year) {
+        spans.push({ year: w.year, startIdx: i });
+      }
+    });
+    return spans;
+  }, [weeks]);
+
   // Ficha del sector elegido, toda derivada de la serie que ya está en el
   // cliente: ocupación de la semana, cambio respecto de la anterior, peak del
   // horizonte y semanas en que el plan no cabe.
@@ -371,9 +391,11 @@ export function SiteMap({
         {weeks.length > 1 && week ? (
           <div className="rounded-lg border bg-card px-4 py-2.5">
             <div className="flex items-center gap-4">
-              <div className="w-[124px] shrink-0">
+              <div className="w-[104px] shrink-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-semibold tabular-nums">{week.label}</span>
+                  <span className="text-sm font-semibold tabular-nums">
+                    S{week.week}
+                  </span>
                   {week.isCurrent ? (
                     <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
                       hoy
@@ -385,6 +407,34 @@ export function SiteMap({
                 </div>
               </div>
               <div className="relative flex-1">
+                {/* Tramos por año, ANTES del slider en el DOM para que la
+                    pista y el pulgar queden encima de la divisoria. */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 h-11">
+                  {yearSpans.map((s, i) => (
+                    <React.Fragment key={s.year}>
+                      {i > 0 ? (
+                        <span
+                          className="absolute top-1 h-8 w-px bg-border"
+                          style={{ left: `${posOf(s.startIdx)}%` }}
+                        />
+                      ) : null}
+                      <span
+                        className={cn(
+                          "absolute top-0 text-[10px] font-medium tabular-nums",
+                          s.year === week.year
+                            ? "text-foreground"
+                            : "text-muted-foreground/60",
+                        )}
+                        style={{
+                          left: `${posOf(s.startIdx)}%`,
+                          marginLeft: i > 0 ? 4 : 0,
+                        }}
+                      >
+                        {s.year}
+                      </span>
+                    </React.Fragment>
+                  ))}
+                </div>
                 {/* Alto de 44px: el área táctil manda, la pista sigue siendo fina. */}
                 <Slider
                   min={0}
@@ -398,12 +448,12 @@ export function SiteMap({
                 {/* Marcas de colapso sobre la pista: dicen DÓNDE está el
                     problema sin tener que recorrer las 64 semanas a mano.
                     Sin eventos de puntero para no pelear con el slider. */}
-                <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-1.5 h-2">
+                <div className="pointer-events-none absolute inset-x-0 top-1/2 mt-2 h-2">
                   {[...collapseByIndex.keys()].map((i) => (
                     <span
                       key={i}
                       className="absolute top-0 h-2 w-[3px] -translate-x-1/2 rounded-full bg-red-500"
-                      style={{ left: `${(i / (weeks.length - 1)) * 100}%` }}
+                      style={{ left: `${posOf(i)}%` }}
                     />
                   ))}
                 </div>
