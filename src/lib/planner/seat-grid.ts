@@ -21,11 +21,22 @@ const ROW_CANDIDATES = [3, 4, 5, 6, 7, 8, 9, 10];
 /** Castigo por cada mesón que no cierra exacto con ese número de filas. */
 const PAD_PENALTY = 0.15;
 
-/** Proporción (columnas por fila / filas) que se busca según cuántas cards
- *  entran a lo ancho del módulo: mientras más cards por fila, más angosta
- *  cada una y menos columnas caben. */
-export function targetAspectFor(cardsPerRow: number) {
-  return 14 / Math.max(1, cardsPerRow);
+/**
+ * Proporción (columnas por fila / filas) que se busca según cuántas cards
+ * entran a lo ancho del módulo: mientras más cards por fila, más angosta cada
+ * una y menos columnas caben.
+ *
+ * `wide` sube el objetivo para el caso de **pocas cards por fila** (Góticos:
+ * 2 lados), donde cada card es enorme y con la proporción normal el mesón
+ * quedaba en 6 filas dejando media fila del plano vacía. Con 22 da 4 filas: se
+ * estira, llena el ancho que tiene y se parece más a un mesón real.
+ *
+ * Las zonas con muchas cards por fila (TunelTek con 6 lados, o la grilla
+ * genérica de 8) NO usan `wide`: ahí la card ya es angosta, no sobra espacio y
+ * estaban bien como estaban.
+ */
+export function targetAspectFor(cardsPerRow: number, wide = false) {
+  return (wide ? 22 : 14) / Math.max(1, cardsPerRow);
 }
 
 function median(nums: number[]) {
@@ -36,7 +47,7 @@ function median(nums: number[]) {
 
 /**
  * Filas del módulo: la proporción manda (que un mesón se vea mesón, largo y
- * angosto) y la divisibilidad exacta desempata. En Góticos da 6 filas.
+ * angosto) y la divisibilidad exacta desempata. En Góticos da 4 filas.
  */
 export function seatRowsFor(seatCounts: number[], targetAspect: number): number {
   const counts = seatCounts.filter((n) => n > 0);

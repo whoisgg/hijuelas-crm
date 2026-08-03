@@ -127,6 +127,16 @@ const seatCountOf = (
   return Math.max(1, Math.round(cap / perCellOf(cap)));
 };
 
+type LayoutModule = SectorWorkspaceData["layout"]["modules"][number];
+
+/** Lados presentes en el módulo (A/B en Góticos, C/D en el 2, …). */
+const sidesOf = (m: LayoutModule) =>
+  [...new Set(m.locations.map((l) => l.side).filter(Boolean))] as string[];
+
+/** El módulo tiene geometría real (lado + fila) y se dibuja como plano. */
+const isGeom = (m: LayoutModule) =>
+  sidesOf(m).length > 0 && m.locations.every((l) => l.side && l.rowNum !== null);
+
 /** Sillas que ocupan `trays` bandejas: cualquier cantidad > 0 pinta al menos
  *  una silla, aunque no alcance a llenarla. Con mesones grandes (una silla =
  *  hasta 44 bandejas) el redondeo hacia abajo hacía desaparecer del plano los
@@ -237,6 +247,43 @@ export function SectorWorkspace({
       })
     : null;
   const allLocIds = React.useMemo(() => allLocs.map((l) => l.id), [allLocs]);
+
+  /**
+   * Geometría del estadio, decidida una vez para TODO EL SECTOR.
+   *
+   * Antes se calculaba por módulo y cada uno elegía sus propias filas y su
+   * propio ancho de silla: Gótico 1 quedaba en cards de ~830px, Gótico 3 en
+   * ~930 y Gótico 4 en ~710, con el pasillo variando para compensar. El plano
+   * se leía desparejo de arriba a abajo (reporte del usuario). Con una sola
+   * geometría todos los mesones del sector miden igual y las filas se alinean.
+   *
+   * Un mesón con menos cuota dibuja MENOS columnas dentro de esa card —
+   * rectángulo más corto, sillas del mismo tamaño— que es la lectura correcta:
+   * el tamaño del bloque es la capacidad, no el tamaño de la card.
+   */
+  const sectorGeom = React.useMemo(() => {
+    const modules = data.layout.modules;
+    const counts = allLocs.map(seatCountOf);
+    const geom = modules.every(isGeom);
+    const maxSides = Math.max(1, ...modules.map((m) => sidesOf(m).length));
+    // Cuántas cards entran a lo ancho: los lados solo cuando el sector se
+    // dibuja como rejilla lado × fila (Góticos, 2 lados). Con más lados
+    // (TunelTek) el plano se agrupa por letra sobre la grilla genérica de 8,
+    // así que el ancho de card —y con él la geometría de las sillas— es el
+    // mismo de las zonas sin geometría.
+    const cardsPerRow = geom && maxSides <= 2 ? maxSides : 8;
+    // Con pocas cards por fila cada una es enorme y el tope de 12px por silla
+    // deja media card vacía — el caso de Góticos (2 lados), que es el que hubo
+    // que arreglar. Con la grilla de 8 la card ya es angosta y el tope no
+    // muerde: esas zonas quedan como estaban.
+    const wideCards = geom && cardsPerRow <= 2;
+    const seatRows = seatRowsFor(counts, targetAspectFor(cardsPerRow, wideCards));
+    const seatMaxCols = Math.max(
+      1,
+      ...counts.map((n) => seatColsFor(n, seatRows)),
+    );
+    return { seatRows, seatMaxCols, wideCards };
+  }, [data.layout.modules, allLocs]);
 
   // Salidas/Ingresos totales del sector esta semana — alimentan el KPI del
   // header (el detalle por mesón sigue viviendo en cada MesonCell).
@@ -883,22 +930,69 @@ export function SectorWorkspace({
           ) : null}
 
           {data.layout.modules.map((m) => {
-            const sides = [
-              ...new Set(m.locations.map((l) => l.side).filter(Boolean)),
-            ] as string[];
-            const hasGeom =
-              sides.length > 0 && m.locations.every((l) => l.side && l.rowNum !== null);
-            // Geometría del estadio, decidida a nivel MÓDULO: mismas filas y
-            // mismo ancho de silla para todos sus mesones, así el plano cierra
-            // rectángulos parejos en vez de bloques con la última fila mocha.
-            const seatCounts = m.locations.map(seatCountOf);
-            const seatRows = seatRowsFor(
-              seatCounts,
-              targetAspectFor(hasGeom ? sides.length : 8),
+            const sides = sidesOf(m);
+            const hasGeom = isGeom(m);
+            const { seatRows, seatMaxCols } = sectorGeom;
+            const cell = (loc: LayoutLoc) => (
+              <MesonCell
+                key={loc.id}
+                loc={loc}
+                seatRows={seatRows}
+                seatMaxCols={seatMaxCols}
+                wideCards={sectorGeom.wideCards}
+                fill={data.fill[loc.id]}
+                week={data.week}
+                soloHoy={soloHoy}
+                marcarSalen={marcarSalen}
+                mostrarEdad={mostrarEdad}
+                onAgeHover={setAgeHover}
+                expanded={expanded.has(loc.id)}
+                hoveredKey={hoveredKey}
+                selectedKey={selectedKey}
+                onToggle={() => toggleExpand(loc.id)}
+                onHover={setHoveredKey}
+                onSelect={selectLot}
+                leaveSlots={leaveSlotsByLoc.get(loc.id) ?? []}
+              />
             );
-            const seatMaxCols = Math.max(
-              ...seatCounts.map((n) => seatColsFor(n, seatRows)),
-            );
+
+            // Muchos lados (TunelTek: K…P): un bloque por letra en vez de una
+            // rejilla lado × fila. Las filas no existen parejas en todos los
+            // lados (K parte en la 3, O tiene 2 mesones, P uno solo), así que
+            // la rejilla rectangular dejaba 22 de 60 celdas vacías. Con dos
+            // lados (Góticos) la rejilla sí cierra y se conserva.
+            if (hasGeom && !sectorGeom.wideCards) {
+              return (
+                <section key={m.id}>
+                  <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+                    {m.name}
+                  </h3>
+                  <div className="space-y-3">
+                    {sides.map((side) => {
+                      // `locations` ya viene ordenado por lado y luego por el
+                      // número del código (ver `getSectorLayout`).
+                      const locs = m.locations.filter((l) => l.side === side);
+                      if (!locs.length) return null;
+                      return (
+                        <div key={side}>
+                          <div className="mb-1 flex items-baseline gap-2">
+                            <span className="text-xs font-semibold">{side}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {locs.length}{" "}
+                              {locs.length === 1 ? "mesón" : "mesones"}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-4 items-start gap-1.5 sm:grid-cols-6 md:grid-cols-8">
+                            {locs.map(cell)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            }
+
             const cells = hasGeom
               ? [...new Set(m.locations.map((l) => l.rowNum))]
                   .sort((a, b) => (a ?? 0) - (b ?? 0))
@@ -908,51 +1002,13 @@ export function SectorWorkspace({
                         (l) => l.side === side && l.rowNum === row,
                       );
                       return loc ? (
-                        <MesonCell
-                          key={loc.id}
-                          loc={loc}
-                          seatRows={seatRows}
-                          seatMaxCols={seatMaxCols}
-                          fill={data.fill[loc.id]}
-                          week={data.week}
-                          soloHoy={soloHoy}
-                          marcarSalen={marcarSalen}
-                          mostrarEdad={mostrarEdad}
-                          onAgeHover={setAgeHover}
-                          expanded={expanded.has(loc.id)}
-                          hoveredKey={hoveredKey}
-                          selectedKey={selectedKey}
-                          onToggle={() => toggleExpand(loc.id)}
-                          onHover={setHoveredKey}
-                          onSelect={selectLot}
-                          leaveSlots={leaveSlotsByLoc.get(loc.id) ?? []}
-                        />
+                        cell(loc)
                       ) : (
                         <div key={`${side}${row}`} className="h-12" />
                       );
                     }),
                   )
-              : m.locations.map((loc) => (
-                  <MesonCell
-                    key={loc.id}
-                    loc={loc}
-                    seatRows={seatRows}
-                    seatMaxCols={seatMaxCols}
-                    fill={data.fill[loc.id]}
-                    week={data.week}
-                    soloHoy={soloHoy}
-                    marcarSalen={marcarSalen}
-                    mostrarEdad={mostrarEdad}
-                    onAgeHover={setAgeHover}
-                    expanded={expanded.has(loc.id)}
-                    hoveredKey={hoveredKey}
-                    selectedKey={selectedKey}
-                    onToggle={() => toggleExpand(loc.id)}
-                    onHover={setHoveredKey}
-                    onSelect={selectLot}
-                    leaveSlots={leaveSlotsByLoc.get(loc.id) ?? []}
-                  />
-                ));
+              : m.locations.map(cell);
             return (
               <section key={m.id}>
                 <h3 className="mb-2 text-sm font-medium text-muted-foreground">{m.name}</h3>
@@ -964,11 +1020,16 @@ export function SectorWorkspace({
                   style={
                     hasGeom
                       ? {
-                          // Tope al ancho que el mesón realmente ocupa: con las
-                          // sillas topadas en 12px, `1fr` dejaba media card
-                          // vacía a la derecha. Sigue siendo `minmax(0, …)` para
-                          // que en pantallas angostas la columna encoja.
+                          // Tope al ancho que el mesón realmente ocupa: con
+                          // las sillas topadas en 12px, `1fr` dejaba media
+                          // card vacía a la derecha. Sigue siendo
+                          // `minmax(0, …)` para que en pantallas angostas la
+                          // columna encoja.
                           gridTemplateColumns: `repeat(${sides.length}, minmax(0,${mesonBoxWidthPx(seatMaxCols)}px))`,
+                          // Lo que sobra se vuelve el pasillo entre lados, en
+                          // vez de un hueco muerto al final de la fila. El
+                          // primer lado queda alineado con el título.
+                          justifyContent: "space-between",
                         }
                       : undefined
                   }
@@ -1060,8 +1121,24 @@ export function SectorWorkspace({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold">{selectedChip.species}</p>
+                    {/* El título ya dice la especie: acá solo variedad y código
+                     *  de lote (el `label` del chip repite la especie). El
+                     *  código lleva a la ficha del lote — por código, no por
+                     *  id: estos chips son de `planner_scenario_lots` (mesa de
+                     *  trabajo) y su id no es el de `planner_lots`. Las órdenes
+                     *  simuladas no tienen ficha real. */}
                     <p className="truncate text-[11px] text-muted-foreground">
-                      {selectedChip.label}
+                      {selectedChip.variety ? `${selectedChip.variety} · ` : ""}
+                      {selectedChip.sim ? (
+                        selectedChip.lotCode
+                      ) : (
+                        <Link
+                          href={`/planner/lotes/${encodeURIComponent(selectedChip.lotCode)}`}
+                          className="font-medium text-[#185FA5] underline-offset-2 hover:underline"
+                        >
+                          {selectedChip.lotCode}
+                        </Link>
+                      )}
                     </p>
                   </div>
                   <button
@@ -1299,6 +1376,7 @@ function MesonCell({
   loc,
   seatRows,
   seatMaxCols,
+  wideCards,
   fill,
   week,
   soloHoy,
@@ -1314,10 +1392,17 @@ function MesonCell({
   leaveSlots,
 }: {
   loc: LayoutLoc;
-  /** filas del estadio, iguales para todo el módulo */
+  /** filas del estadio, iguales para todo el sector (solo si `wideCards`) */
   seatRows: number;
-  /** columnas del mesón más grande del módulo: fija el ancho de silla */
+  /** columnas del mesón más grande del sector: fija el ancho de silla */
   seatMaxCols: number;
+  /**
+   * Sector de pocas cards por fila (Góticos): el estadio se dibuja como un
+   * rectángulo cerrado de columnas calculadas. En el resto se mantiene el
+   * flujo original —sillas de 12px que envuelven según el ancho de la card—,
+   * que en cards angostas da mesones altos y es como estaban.
+   */
+  wideCards: boolean;
   fill?: { trays: number; parts: FillPart[] };
   /** semana-campaña que se está mirando: decide qué lotes ya "llegaron" */
   week: number;
@@ -1625,14 +1710,23 @@ function MesonCell({
         </span>
       </button>
       {expanded ? (
-        // Rectángulo cerrado: columnas fijas (no flex-wrap, que dejaba la
-        // última fila mocha) y ancho de silla compartido por el módulo.
+        // Dos geometrías, según cuánto espacio tiene la card:
+        //  · `wideCards` (Góticos, 2 lados): rectángulo cerrado de columnas
+        //    calculadas, que es lo que había que arreglar ahí.
+        //  · el resto (TunelTek, Zona Oscura, Zona Clara, Módulos): el flujo
+        //    original — sillas de 12px que envuelven según el ancho de la card.
+        //    En cards angostas eso da mesones ALTOS, que es como estaban y como
+        //    el usuario los quiere.
         <div
-          className="grid"
-          style={{
-            gap: `${SEAT_GAP}px`,
-            gridTemplateColumns: `repeat(${seatCols}, ${seatWidthCss(seatMaxCols)})`,
-          }}
+          className={wideCards ? "grid" : "flex flex-wrap items-center gap-[2px]"}
+          style={
+            wideCards
+              ? {
+                  gap: `${SEAT_GAP}px`,
+                  gridTemplateColumns: `repeat(${seatCols}, ${seatWidthCss(seatMaxCols)})`,
+                }
+              : undefined
+          }
         >
           {seats.map((s, i) => {
             const key = seatKey(s, i);
@@ -1666,22 +1760,29 @@ function MesonCell({
                         : (s.part?.label ?? "vacío")
                 }
                 className={cn(
-                  "aspect-square rounded-[2px] transition-colors",
+                  "rounded-[2px] transition-colors",
+                  // En grilla el ancho lo da la columna; envolviendo, la silla
+                  // mide 12px fijos y son las columnas las que salen del ancho
+                  // disponible.
+                  wideCards ? "aspect-square" : "h-3 w-3 shrink-0",
                   (mostrarEdad || key) && "cursor-pointer",
                 )}
                 style={seatStyle(s, i)}
               />
             );
           })}
-          {/* Celdas sin capacidad: cierran la última fila cuando la cuota no
-              es múltiplo de las filas del módulo (a lo más filas-1). */}
-          {Array.from({ length: seatPad }, (_, i) => (
-            <span
-              key={`pad-${i}`}
-              title="sin capacidad"
-              className="aspect-square rounded-[2px] bg-foreground/[0.07]"
-            />
-          ))}
+          {/* Celdas sin capacidad: cierran la última fila cuando la cuota no es
+              múltiplo de las filas (a lo más filas-1). Solo en el rectángulo
+              cerrado — envolviendo, la última fila queda corta y así estaba. */}
+          {wideCards
+            ? Array.from({ length: seatPad }, (_, i) => (
+                <span
+                  key={`pad-${i}`}
+                  title="sin capacidad"
+                  className="aspect-square rounded-[2px] bg-foreground/[0.07]"
+                />
+              ))
+            : null}
         </div>
       ) : (
         <div className="flex h-3.5 overflow-hidden rounded-sm">

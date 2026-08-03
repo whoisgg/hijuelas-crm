@@ -19,6 +19,9 @@ export type SectorLotChip = {
   label: string;
   species: string;
   variety: string | null;
+  /** código del lote suelto: el `label` ya lo trae, pero pegado a la especie;
+   *  quien muestra la especie aparte lo necesita sin repetirla */
+  lotCode: string;
   trays: number;
   /** semana en que el lote inicia esta etapa según el plan — material real
    *  nunca se atribuye a un lote que aún no llega (sería mezclar lo
@@ -322,6 +325,7 @@ export async function getScenarioWorkspace(
       label: `${row.planner_species?.name ?? "¿?"}${row.planner_varieties?.name ? ` ${row.planner_varieties.name}` : ""} · ${row.lot_code}`,
       species: row.planner_species?.name ?? "",
       variety: row.planner_varieties?.name ?? null,
+      lotCode: row.lot_code,
       trays: row.trays ?? 0,
       arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
       overflowTrays: overflowByLot.get(row.id) ?? 0,
@@ -353,6 +357,7 @@ export async function getScenarioWorkspace(
       label: `${row.planner_species?.name ?? "¿?"}${row.planner_varieties?.name ? ` ${row.planner_varieties.name}` : ""} · ${row.lot_code}`,
       species: row.planner_species?.name ?? "",
       variety: row.planner_varieties?.name ?? null,
+      lotCode: row.lot_code,
       trays: row.trays ?? 0,
       arrivalWeek: (row[`${stage}_start_week`] as number | null) ?? week,
       overflowTrays: 0,

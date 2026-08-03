@@ -14,14 +14,73 @@ import { currentLotLocation } from "@/lib/planner/lot-location";
 
 export const dynamic = "force-dynamic";
 
+type LotCodeMatch = {
+  id: number;
+  lot_code: string;
+  status: string;
+  start_week: number;
+  end_week: number | null;
+  plants: number;
+  trays: number | null;
+  planner_species: unknown;
+  planner_varieties: unknown;
+};
+
+/** Varias remesas comparten el código: se listan para que el usuario elija. */
+function LotCodePicker({ code, matches }: { code: string; matches: LotCodeMatch[] }) {
+  const nameOf = (rel: unknown) => (rel as { name: string } | null)?.name ?? null;
+  return (
+    <AppShell>
+      <PageHeader
+        title={code}
+        description={`${matches.length} lotes comparten este código — elige cuál quieres ver`}
+        actions={
+          <Link
+            href="/planner/lotes"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Lotes
+          </Link>
+        }
+      />
+      <ul className="divide-y overflow-hidden rounded-lg border bg-card">
+        {matches.map((m) => (
+          <li key={m.id}>
+            <Link
+              href={`/planner/lotes/${m.id}`}
+              className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 text-sm hover:bg-muted/50"
+            >
+              <span className="font-medium">
+                {nameOf(m.planner_species) ?? "—"}
+                {nameOf(m.planner_varieties) ? ` · ${nameOf(m.planner_varieties)}` : ""}
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                S{m.start_week}
+                {m.end_week !== null ? ` → S${m.end_week}` : ""}
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {m.plants.toLocaleString("es-CL")} pl
+              </span>
+              <span className="tabular-nums text-muted-foreground">
+                {m.trays?.toLocaleString("es-CL") ?? "—"} band.
+              </span>
+              <Badge variant="outline" className="text-[10px]">
+                {m.status}
+              </Badge>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </AppShell>
+  );
+}
+
 export default async function LotDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id: idParam } = await params;
-  const id = Number(idParam);
-  if (!Number.isFinite(id)) notFound();
 
   const supabase = await createClient();
   const {
@@ -34,6 +93,31 @@ export default async function LotDetailPage({
     redirect("/apps");
   }
   const canEdit = hasModuleAccess(profile, "planner", "admin");
+
+  // El segmento acepta el id numérico O el código del lote. Quien llega desde
+  // el plano de sector solo tiene el código: ese plano corre sobre
+  // `planner_scenario_lots` (copia del plan con ids propios) y lo único que
+  // comparte con `planner_lots` es `lot_code`.
+  //
+  // El código NO es único (314 lotes / 252 códigos): un mismo código puede
+  // cubrir varias remesas. Con más de un candidato se muestra el listado en
+  // vez de elegir uno — mandar a la ficha equivocada es peor que un clic más.
+  let id: number;
+  if (/^\d+$/.test(idParam)) {
+    id = Number(idParam);
+  } else {
+    const code = decodeURIComponent(idParam);
+    const { data: matches } = await supabase
+      .from("planner_lots")
+      .select(
+        "id, lot_code, status, start_week, end_week, plants, trays, planner_species(name), planner_varieties(name)",
+      )
+      .eq("lot_code", code)
+      .order("id");
+    if (!matches?.length) notFound();
+    if (matches.length === 1) redirect(`/planner/lotes/${matches[0].id}`);
+    return <LotCodePicker code={code} matches={matches} />;
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   const [
