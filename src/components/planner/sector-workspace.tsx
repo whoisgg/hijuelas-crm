@@ -887,9 +887,11 @@ export function SectorWorkspace({
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_EMPTY }} />
               vacío
             </span>
+            {/* Azul = TODAS las sillas del lote apuntado o seleccionado, no un
+                estado del cursor: la leyenda nombra el lote, no el hover. */}
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: SEAT_HOVER }} />
-              hover
+              lote
             </span>
           </>
         )}
